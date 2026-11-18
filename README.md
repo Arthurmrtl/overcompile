@@ -39,7 +39,7 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## Content (v0.2.2)
+## Content (v0.2.4)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (1 000 cr, buys the cheapest upgrade every 2 s)
@@ -53,6 +53,7 @@ scripts/sim.ts     pacing simulation
 - Challenges (after 3 releases): Single-core, Debug build, Friday deploy, No cache — each grants a
   permanent bonus
 - Progressive reveal: stars, the tree (with fog of war), optimizations and challenges — and their terminal commands — appear as they are unlocked
+- Terminal: a short build stream + live status line on top, a readable journal below (commands, events, one summary per minute, income records); 3 log levels
 - 29 achievements (+2% rewards each), stats, EN/FR, standard/scientific notation
 - v0.1 saves are migrated (old autobuyers become the Auto-Scaling talents)
 

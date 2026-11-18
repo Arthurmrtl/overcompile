@@ -7,6 +7,7 @@ export const AUTO: Seg = ["[AUTO]", "c-violet"];
 export const STAR: Seg = ["[ ⭐ ]", "c-amber"];
 
 const MAX_LINES = 1500;
+const STREAM_LINES = 5;
 
 export interface TerminalHooks {
   onCommand: (line: string) => void;
@@ -14,8 +15,16 @@ export interface TerminalHooks {
   complete: (line: string) => string[];
 }
 
+/**
+ * Two zones: a short "build stream" on top (decorative cargo output + one live
+ * status line, never pushing anything), and the scrolling journal below
+ * (commands, purchases, events) where only what matters is written.
+ */
 export class Terminal {
   readonly root: HTMLElement;
+  private body: HTMLElement;
+  private stream: HTMLElement;
+  private status: HTMLElement;
   private out: HTMLElement;
   private input: HTMLInputElement;
   private ps1: HTMLElement;
@@ -29,6 +38,15 @@ export class Terminal {
   constructor(private hooks: TerminalHooks) {
     this.root = document.createElement("div");
     this.root.className = "term";
+    const top = document.createElement("div");
+    top.className = "term-top";
+    this.stream = document.createElement("div");
+    this.stream.className = "term-stream";
+    this.status = document.createElement("div");
+    this.status.className = "term-status";
+    top.append(this.stream, this.status);
+    this.body = document.createElement("div");
+    this.body.className = "term-body";
     this.out = document.createElement("div");
     this.out.className = "term-out";
     const row = document.createElement("label");
@@ -41,11 +59,12 @@ export class Terminal {
     this.input.setAttribute("spellcheck", "false");
     this.input.setAttribute("aria-label", "terminal input");
     row.append(this.ps1, this.input);
-    this.root.append(this.out, row);
+    this.body.append(this.out, row);
+    this.root.append(top, this.body);
     this.renderPrompt();
 
-    this.root.addEventListener("scroll", () => {
-      this.stickToBottom = this.root.scrollTop + this.root.clientHeight >= this.root.scrollHeight - 40;
+    this.body.addEventListener("scroll", () => {
+      this.stickToBottom = this.body.scrollTop + this.body.clientHeight >= this.body.scrollHeight - 40;
     });
     this.root.addEventListener("mouseup", () => {
       if (!String(window.getSelection())) this.focus();
@@ -62,7 +81,32 @@ export class Terminal {
 
   scrollToEnd() {
     this.stickToBottom = true;
-    this.root.scrollTop = this.root.scrollHeight;
+    this.body.scrollTop = this.body.scrollHeight;
+  }
+
+  /** Decorative build output: a few lines that scroll in place. */
+  streamLine(...segs: Seg[]) {
+    const d = document.createElement("div");
+    d.className = "l";
+    d.append(...this.segsToNodes(segs));
+    this.stream.append(d);
+    while (this.stream.childElementCount > STREAM_LINES) this.stream.firstElementChild?.remove();
+  }
+
+  clearStream() {
+    this.stream.replaceChildren();
+  }
+
+  /** The live status line, updated in place. */
+  setStatus(...segs: Seg[]) {
+    this.status.replaceChildren(...this.segsToNodes(segs));
+  }
+
+  /** Framed line for big moments (release, challenge…). */
+  banner(text: string, cls = "c-amber") {
+    const d = this.println([` ${text} `, cls + " c-bold"]);
+    d.classList.add("banner");
+    return d;
   }
 
   focus() {
@@ -86,13 +130,13 @@ export class Terminal {
     this.out.append(d);
     let extra = this.out.childElementCount - MAX_LINES;
     while (extra-- > 0) this.out.firstElementChild?.remove();
-    if (this.stickToBottom) this.root.scrollTop = this.root.scrollHeight;
+    if (this.stickToBottom) this.body.scrollTop = this.body.scrollHeight;
     return d;
   }
 
-  /** Echo a command line as if it had been typed. */
+  /** Echo a command line as if it had been typed (spaced from what precedes). */
   echo(line: string) {
-    this.println(...this.promptSegs(), line);
+    this.println(...this.promptSegs(), line).classList.add("cmd");
   }
 
   clear() {
@@ -113,7 +157,7 @@ export class Terminal {
     } else if (e.ctrlKey && key.toLowerCase() === "c") {
       if (this.input.selectionStart !== this.input.selectionEnd) return; // let the browser copy
       e.preventDefault();
-      this.println(...this.promptSegs(), this.input.value + "^C");
+      this.println(...this.promptSegs(), this.input.value + "^C").classList.add("cmd");
       this.input.value = "";
       this.hooks.onCtrlC();
     } else if (e.ctrlKey && key.toLowerCase() === "l") {

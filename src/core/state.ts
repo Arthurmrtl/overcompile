@@ -50,7 +50,7 @@ export interface GameState {
     bestStreak: number;
     fastestRelease: number | null;
   };
-  settings: { lang: Lang; notation: Notation; verbose: boolean; buyAmount: BuyAmount };
+  settings: { lang: Lang; notation: Notation; logLevel: "full" | "reduced" | "minimal"; buyAmount: BuyAmount };
   lastSeen: number;
   createdAt: number;
 }
@@ -91,7 +91,7 @@ export function newState(): GameState {
     objClaimed: [],
     achievements: [],
     stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null },
-    settings: { lang: browserLang(), notation: "standard", verbose: true, buyAmount: 1 },
+    settings: { lang: browserLang(), notation: "standard", logLevel: "reduced", buyAmount: 1 },
     lastSeen: now,
     createdAt: now,
   };
@@ -125,6 +125,8 @@ export function deserialize(json: string): GameState {
   s.upgrades = { ...(raw.upgrades ?? {}) };
   s.challengesDone = [...(raw.challengesDone ?? [])];
   s.seen = [...(raw.seen ?? [])];
+  if (raw.settings?.verbose === false && !raw.settings?.logLevel) s.settings.logLevel = "minimal";
+  delete (s.settings as Record<string, unknown>).verbose;
   s.objectives = [...(raw.objectives ?? [])];
   // v0.2.2 credited objectives automatically: those count as claimed
   s.objClaimed = [...(raw.objClaimed ?? s.objectives)];

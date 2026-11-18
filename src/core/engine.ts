@@ -432,7 +432,7 @@ export class Engine {
     const eff = offlineEfficiency(s);
     const counted = Math.min(beyond, offlineCapSeconds(s));
     const simulated = grace + counted * eff;
-    const before = { credits: s.credits, builds: s.stats.builds, fails: s.stats.fails, cpu: s.hw.cpu, ram: s.hw.ram, disk: s.hw.disk, jobs: s.hw.jobs, releases: s.releases, stars: s.lifetimeStars };
+    const before = { credits: s.totalEarned, builds: s.stats.builds, fails: s.stats.fails, cpu: s.hw.cpu, ram: s.hw.ram, disk: s.hw.disk, jobs: s.hw.jobs, releases: s.releases, stars: s.lifetimeStars };
     const steps = Math.min(2000, Math.ceil(simulated));
     const dt = simulated / steps;
     const newAchievements: string[] = [];
@@ -451,7 +451,7 @@ export class Engine {
       unlocked: eff > 0,
       capped: beyond > counted,
       simulated,
-      credits: s.credits.sub(before.credits).max(0),
+      credits: s.totalEarned.sub(before.credits).max(0), // earned, not balance (Auto-Scaling spends it)
       builds: s.stats.builds - before.builds,
       fails: s.stats.fails - before.fails,
       upgrades: (s.hw.cpu - before.cpu) + (s.hw.ram - before.ram) + (s.hw.disk - before.disk) + (s.hw.jobs - before.jobs),

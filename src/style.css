@@ -146,7 +146,19 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 /* ---------- Terminal ---------- */
 .term-card { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 0; }
 .term-host { flex: 1; min-height: 0; margin: 0 -12px; }
-.term { height: 100%; overflow-y: auto; padding: 0 12px 12px; cursor: text; background: var(--panel); }
+.term { height: 100%; display: flex; flex-direction: column; cursor: text; background: var(--panel); }
+.term-top { flex: none; padding: 0 12px 6px; border-bottom: 1px dashed var(--border); }
+.term-stream { height: calc(5 * 1.45em); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; color: var(--dim); opacity: .75; font-size: 12px; }
+.term-stream .l { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.term-status { white-space: pre; overflow: hidden; text-overflow: ellipsis; min-height: 1.45em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.term[data-log=reduced] .term-stream { height: calc(3 * 1.45em); }
+.term[data-log=minimal] .term-stream { display: none; }
+.term-body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 12px 12px; }
+.term .l.cmd { margin-top: 8px; }
+.term .l.summary { color: var(--fg); }
+.term .l.banner { margin: 8px 0 4px; display: flex; align-items: center; gap: 8px; }
+.term .l.banner::before, .term .l.banner::after { content: ""; flex: 1; border-top: 3px double var(--amber); opacity: .7; }
+.term .l.banner span { flex: none; }
 .term .l { white-space: pre-wrap; word-break: break-word; min-height: 1.45em; }
 .term-row { display: flex; white-space: pre; }
 .term-input { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; border-radius: 0; outline: none; caret-color: var(--green); }
@@ -280,6 +292,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
   .mnav button span { font-size: 10px; }
   .mnav button.on { color: var(--fg); background: var(--panel-2); }
   .term .l { font-size: 12px; }
+  .term-stream, .term[data-log=reduced] .term-stream { height: calc(2 * 1.45em); }
 }
 
 /* ---------- v0.2: optimizations ---------- */

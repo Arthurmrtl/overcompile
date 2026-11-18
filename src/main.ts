@@ -15,9 +15,9 @@ import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import { LOGO, autoScaleInfo, challengeName, createCommands, fakeCargoLine, upgradeNow, version } from "./commands";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
-import { AUTO, FAIL, INFO, OK, STAR, Terminal } from "./ui/terminal";
+import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal } from "./ui/terminal";
 
-const GAME_VERSION = "0.2.3";
+const GAME_VERSION = "0.2.4";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -28,7 +28,7 @@ let halted = false;
 const term = new Terminal({
   onCommand: line => {
     if (halted) return void boot();
-    cmd.run(line);
+    cmd.run(line, true);
   },
   onCtrlC: () => {
     if (halted) return;
@@ -46,13 +46,6 @@ const ctx = {
   save: () => engine.save(),
 };
 const cmd = createCommands(ctx);
-// Keep command output readable: pause the fake build log for a moment after each command
-let quietUntil = 0;
-const rawRun = cmd.run;
-cmd.run = (line: string, echo = false) => {
-  quietUntil = performance.now() + 5000;
-  rawRun(line, echo);
-};
 
 /* ================= DOM helpers ================= */
 const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector<T>(sel)!;
@@ -194,6 +187,7 @@ function buildLayout() {
   <div class="modal" data-r="modal" hidden><div class="modal-box" data-r="modalBox"></div></div>`;
 
   $("[data-r=termHost]").append(term.root);
+  term.root.dataset.log = engine.s.settings.logLevel;
   buildHardware();
   buildPerks();
   buildTree();
@@ -752,9 +746,15 @@ function openSettings() {
     h("option", { value: "scientific" }, t("set.notation.scientific"))) as HTMLSelectElement;
   notSel.value = s.settings.notation;
   notSel.addEventListener("change", () => cmd.run(`notation ${notSel.value}`, true));
-  const verbose = h("input", { type: "checkbox" }) as HTMLInputElement;
-  verbose.checked = s.settings.verbose;
-  verbose.addEventListener("change", () => { s.settings.verbose = verbose.checked; });
+  const logSel = h("select", {},
+    h("option", { value: "full" }, t("set.log.full")),
+    h("option", { value: "reduced" }, t("set.log.reduced")),
+    h("option", { value: "minimal" }, t("set.log.minimal"))) as HTMLSelectElement;
+  logSel.value = s.settings.logLevel;
+  logSel.addEventListener("change", () => {
+    s.settings.logLevel = logSel.value as LogLevel;
+    term.root.dataset.log = s.settings.logLevel;
+  });
 
   const area = h("textarea", { rows: "4", placeholder: t("set.import.placeholder") }) as HTMLTextAreaElement;
   const msg = h("div", { class: "small muted" });
@@ -801,7 +801,7 @@ function openSettings() {
     h("h2", {}, t("settings")),
     h("label", { class: "field" }, h("span", {}, t("set.lang")), langSel),
     h("label", { class: "field" }, h("span", {}, t("set.notation")), notSel),
-    h("label", { class: "field check" }, verbose, h("span", {}, t("set.verbose"))),
+    h("label", { class: "field" }, h("span", {}, t("set.log")), logSel),
     h("hr"),
     area,
     h("div", { class: "row" }, exportBtn, importBtn),
@@ -834,30 +834,32 @@ function showOffline(rep: NonNullable<ReturnType<Engine["simulateOffline"]>>) {
 }
 
 /* ================= Game events → terminal ================= */
-let batch = { ok: 0, fail: 0, credits: new Decimal(0) };
+// The journal only gets what matters. Builds feed the live status line (top of
+// the terminal) and a summary line every minute.
+type LogLevel = "full" | "reduced" | "minimal";
+const logLevel = (): LogLevel => engine.s.settings.logLevel;
+let minute = { ok: 0, fail: 0, credits: new Decimal(0), time: 0 };
+let runCount = { ok: 0, fail: 0 };
+let lastMinuteRate = 0;
 let autobuys: Partial<Record<HwKey, number>> = {};
-let flushTimer = 0;
+let autobuyTimer = 0;
+let bestDecade = Number.NEGATIVE_INFINITY;
 
 engine.on((e: GameEvent) => {
   switch (e.t) {
-    case "builds": {
-      const single = buildTime(engine.s) >= 1.5 && e.ok + e.fail <= 2;
-      if (single) {
+    case "builds":
+      minute.ok += e.ok;
+      minute.fail += e.fail;
+      minute.credits = minute.credits.add(e.credits);
+      runCount.ok += e.ok;
+      runCount.fail += e.fail;
+      // Manual mode (no CI/CD): every build is a decision, so its result is worth a line
+      if (!engine.ciActive) {
         for (let i = 0; i < e.fail; i++) term.println(FAIL, " " + t("term.build_fail"));
-        if (e.ok) term.println(INFO, " " + t("term.build_ok", { x: fmt(e.credits) }));
-      } else {
-        batch.ok += e.ok;
-        batch.fail += e.fail;
-        batch.credits = batch.credits.add(e.credits);
+        if (e.ok) term.println(OK, " " + t("log.build_ok", { x: fmt(e.credits) }));
       }
       break;
-    }
-    case "pipeline_done":
-      flushLogs();
-      term.println(INFO, " " + t("term.done"));
-      break;
     case "interrupted":
-      flushLogs();
       term.println(INFO, " " + t("term.interrupted"));
       break;
     case "autobuy":
@@ -868,8 +870,11 @@ engine.on((e: GameEvent) => {
       toast(t("ach.unlocked"), `🏆 ${t(`a.${e.id}`)}`);
       break;
     case "release": {
-      flushLogs();
+      flushMinute(true);
+      runCount = { ok: 0, fail: 0 };
+      lastMinuteRate = 0;
       const v = `${engine.s.releases}.0.0`;
+      term.banner(`🚀 v${v} · +${fmt(e.stars)} ★`);
       if (e.auto) term.println(STAR, " " + t("term.release_auto", { v, n: fmt(e.stars) }));
       else term.println(STAR, " " + t("term.release_ok", { v, n: fmt(e.stars), b: fmt(starMultiplier(engine.s)) }));
       toast("🚀 Release", `v${v} · +${fmt(e.stars)} ⭐`);
@@ -885,12 +890,13 @@ engine.on((e: GameEvent) => {
       break;
     }
     case "challenge_start":
-      flushLogs();
+      flushMinute(true);
+      runCount = { ok: 0, fail: 0 };
       term.println(["[ CH ]", "c-amber"], " " + t("term.ch_started", { c: challengeName(e.id), x: fmt(challengeGoal(engine.s)) }));
       toast("Challenge", challengeName(e.id));
       break;
     case "challenge_done":
-      flushLogs();
+      term.banner(`✓ ${t("ch.done")} · ${challengeName(e.id)}`, "c-green");
       term.println(["[ CH ]", "c-green"], " " + t("term.ch_done", { c: challengeName(e.id), r: t(`ch.${e.id}.reward`) }));
       toast(t("ch.done"), `${challengeName(e.id)} · ${t(`ch.${e.id}.reward`)}`);
       engine.save();
@@ -903,25 +909,71 @@ engine.on((e: GameEvent) => {
       toast(t("obj.title"), `${t(`obj.${e.id}`)} · ${t("obj.claim")} +${fmt(e.reward)} cr`);
       break;
     case "pipeline_start":
+    case "pipeline_done":
       break;
   }
 });
 
-function flushLogs() {
-  if (batch.ok + batch.fail > 0) {
-    term.println(batch.fail && !batch.ok ? FAIL : INFO, " " + t("term.batch", { n: fmtInt(batch.ok + batch.fail), f: fmtInt(batch.fail), x: fmt(batch.credits) }));
-    batch = { ok: 0, fail: 0, credits: new Decimal(0) };
-  }
+function autobuyText(): string {
   const entries = Object.entries(autobuys).filter(([, n]) => n! > 0);
-  if (entries.length) {
-    term.println(AUTO, " " + t("term.autobuy", { list: entries.map(([k, n]) => `${t(`hw.${k}`)} +${n}`).join(", ") }));
-    autobuys = {};
+  autobuys = {};
+  return entries.map(([k, n]) => `${t(`hw.${k}`)} +${n}`).join(", ");
+}
+
+/** "── 1 min · 2 340 builds (52 failed) · +4.8K cr · 80.4/s (+12%) ──" */
+function flushMinute(force = false) {
+  const m = minute;
+  minute = { ok: 0, fail: 0, credits: new Decimal(0), time: 0 };
+  const n = m.ok + m.fail;
+  if (n === 0 || m.time < (force ? 5 : 1) || logLevel() === "minimal") return;
+  const rate = m.credits.div(m.time).toNumber();
+  const segs: Seg[] = [["── ", "c-dim"], [fmtTime(m.time), "c-dim"], " · ",
+    t("log.summary", { n: fmtInt(n), f: fmtInt(m.fail), x: fmt(m.credits) }), " · ", [`${fmt(rate)}/s`, "c-green"]];
+  if (lastMinuteRate > 0 && !force) {
+    const delta = (rate / lastMinuteRate - 1) * 100;
+    if (Math.abs(delta) >= 1) segs.push(" ", [`(${delta > 0 ? "+" : ""}${delta.toFixed(0)} %)`, delta > 0 ? "c-green" : "c-red"]);
   }
+  if (logLevel() === "reduced") {
+    const auto = autobuyText();
+    if (auto) segs.push(" · ", ["auto: " + auto, "c-violet"]);
+  }
+  segs.push([" ──", "c-dim"]);
+  term.println(...segs).classList.add("summary");
+  if (!force) lastMinuteRate = rate;
+}
+
+function flushAutobuys() {
+  const auto = autobuyText();
+  if (auto && logLevel() === "full") term.println(AUTO, " " + t("term.autobuy", { list: auto }));
+}
+
+const SPIN = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+let spin = 0;
+function renderStatus() {
+  const s = engine.s;
+  if (!s.pipeline) {
+    term.setStatus(["■ ", "c-dim"], [t("log.idle"), "c-dim"]);
+    return;
+  }
+  spin = (spin + 1) % SPIN.length;
+  const T = buildTime(s);
+  const width = 20;
+  const fast = T < 0.4;
+  const progress = fast ? 1 : Math.max(0, ...s.slots.map(sl => (sl.running ? sl.progress : 0)));
+  const fill = Math.round(progress * width);
+  term.setStatus(
+    [SPIN[spin] + " ", "c-green"], ["Building ", "c-bold"],
+    "[", [fast ? "▓".repeat(width) : "█".repeat(fill), "c-green"], fast ? "" : ["░".repeat(width - fill), "c-dim"], "] ",
+    fast ? [t("pipe.continuous").padEnd(4), "c-dim"] : `${String(Math.floor(progress * 100)).padStart(3)}%`,
+    "  ", ["✓ " + fmtInt(runCount.ok), "c-green"], "  ", ["✗ " + fmtInt(runCount.fail), "c-red"],
+    "  ", ["+" + fmt(s.runEarned) + " cr", "c-amber"], "  ", [fmt(expectedRate(s)) + "/s", "c-dim"],
+  );
 }
 
 /* ================= Main loop ================= */
 let last = performance.now();
 let saveTimer = 0;
+let recordTimer = 0;
 
 function loop() {
   const now = performance.now();
@@ -933,8 +985,10 @@ function loop() {
     // The tab was asleep (laptop lid closed, throttled tab…): treat as offline time
     const rep = engine.simulateOffline(dt);
     if (rep) showOffline(rep);
+    minute = { ok: 0, fail: 0, credits: new Decimal(0), time: 0 };
     dt = 0;
   }
+  if (engine.s.pipeline) minute.time += dt;
   // Split long frames so that slots and autobuyers behave consistently
   while (dt > 0) {
     const step = Math.min(dt, 1);
@@ -942,17 +996,31 @@ function loop() {
     dt -= step;
   }
 
-  flushTimer += 0.1;
-  if (flushTimer >= 4) { flushTimer = 0; flushLogs(); }
+  const summaryEvery = logLevel() === "minimal" ? 300 : 60;
+  if (minute.time >= summaryEvery) flushMinute();
+  autobuyTimer += 0.1;
+  if (autobuyTimer >= 30) { autobuyTimer = 0; flushAutobuys(); }
+  // Records: announce each new power of ten of income
+  recordTimer += 0.1;
+  if (recordTimer >= 1) {
+    recordTimer = 0;
+    const rate = expectedRate(engine.s).toNumber();
+    const decade = rate > 0 ? Math.floor(Math.log10(rate)) : Number.NEGATIVE_INFINITY;
+    if (engine.s.pipeline && engine.ciActive && decade > bestDecade && decade >= 1) {
+      if (bestDecade !== Number.NEGATIVE_INFINITY) term.println(["[ REC ]", "c-amber"], " " + t("log.record", { r: fmt(Math.pow(10, decade)) }));
+      bestDecade = decade;
+    }
+  }
   saveTimer += 0.1;
   if (saveTimer >= 15) { saveTimer = 0; engine.save(); }
 
   render();
+  renderStatus();
 }
 
-// Fake build log on its own timer (rate scales with CPU, capped)
+// Decorative build output in the stream zone (rate scales with CPU, capped)
 function cargoTick() {
-  if (!halted && engine.s.pipeline && engine.s.settings.verbose && performance.now() > quietUntil) term.println(...fakeCargoLine());
+  if (!halted && engine.s.pipeline && logLevel() !== "minimal") term.streamLine(...fakeCargoLine());
   const speed = Math.ceil(engine.s.hw.cpu / 10);
   const delay = Math.max(250, (200 + Math.random() * 700) / speed);
   setTimeout(cargoTick, delay);
@@ -978,7 +1046,7 @@ async function boot() {
 }
 
 async function halt() {
-  flushLogs();
+  flushMinute(true);
   engine.interrupt();
   engine.save();
   const steps: [typeof OK, string, number][] = [
