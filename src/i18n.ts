@@ -185,6 +185,7 @@ const en: Dict = {
 
   // Terminal messages
   "term.welcome": "Type 'help' to see available commands. Everything you click is also a command.",
+  "term.tap": "tap to type",
   "term.invalid": "bash: {c}: command not found",
   "term.invalid2": "Type 'help' to see available commands",
   "term.not_enough": "Not enough credits!",
@@ -575,6 +576,7 @@ const fr: Dict = {
   "off.nothing": "Ton pipeline ne tournait pas avec la CI/CD, il ne s'est rien passé. Débloque la CI/CD pour progresser hors ligne !",
 
   "term.welcome": "Tape 'help' pour voir les commandes. Tout ce que tu cliques est aussi une commande.",
+  "term.tap": "touche pour écrire",
   "term.invalid": "bash: {c}: command not found",
   "term.invalid2": "Tape 'help' pour voir les commandes disponibles",
   "term.not_enough": "Pas assez de crédits !",

@@ -58,7 +58,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.2.6)
+## Mécaniques actuelles (v0.2.7)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -101,6 +101,8 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - un seul onglet Succès : « À récupérer », « En cours » (barres de progression, triés par proximité), « Tous ». Pas d'affichage en double.
 
 **Console.** Elle doit être avant tout **satisfaisante et informative, pas verbeuse**. On a en haut un flux de build décoratif (lignes façon `cargo`, 5 max) et une ligne de statut en direct. En bas, un journal lisible : résumés par minute, records, bannières. Trois niveaux de verbosité dans les paramètres. Les toasts sont limités à 3 à la fois.
+
+**Mobile.** Sur écran tactile, le jeu ne place jamais le curseur dans le terminal tout seul : le clavier ne s'ouvre que si on touche la ligne du prompt. Pendant la saisie, la barre d'onglets et le bloc Pipeline sont masqués pour laisser toute la hauteur au terminal. La hauteur suit la zone réellement visible (`100dvh` + `visualViewport`), y compris avec la zone du geste d'accueil sur iPhone.
 
 **Terminal / CLI.** **Tranché :** on ne change rien pour le moment. On a douté que les joueurs tapent vraiment des commandes, mais le terminal fait l'identité du jeu, et tout reste faisable à la souris.
 

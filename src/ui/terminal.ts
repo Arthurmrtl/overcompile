@@ -7,6 +7,9 @@ export const AUTO: Seg = ["[AUTO]", "c-violet"];
 export const STAR: Seg = ["[ ⭐ ]", "c-amber"];
 
 const MAX_LINES = 1500;
+
+/** Phones and tablets: the on-screen keyboard must only open when the player asks for it. */
+export const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 const STREAM_LINES = 5;
 
 export interface TerminalHooks {
@@ -58,6 +61,7 @@ export class Terminal {
     this.input.setAttribute("autocapitalize", "off");
     this.input.setAttribute("spellcheck", "false");
     this.input.setAttribute("aria-label", "terminal input");
+    this.input.setAttribute("enterkeyhint", "send");
     row.append(this.ps1, this.input);
     this.body.append(this.out, row);
     this.root.append(top, this.body);
@@ -66,9 +70,20 @@ export class Terminal {
     this.body.addEventListener("scroll", () => {
       this.stickToBottom = this.body.scrollTop + this.body.clientHeight >= this.body.scrollHeight - 40;
     });
-    this.root.addEventListener("mouseup", () => {
-      if (!String(window.getSelection())) this.focus();
+    // Desktop: clicking anywhere in the terminal focuses the prompt.
+    // Touch: only the prompt row does (it is a <label>), so reading or scrolling never pops the keyboard.
+    if (!TOUCH) {
+      this.root.addEventListener("mouseup", () => {
+        if (!String(window.getSelection())) this.focus();
+      });
+    }
+    this.input.addEventListener("focus", () => {
+      if (!TOUCH) return;
+      document.documentElement.classList.add("kbd");
+      // wait for the keyboard to finish opening, then keep the prompt in view
+      setTimeout(() => this.scrollToEnd(), 300);
     });
+    this.input.addEventListener("blur", () => document.documentElement.classList.remove("kbd"));
     this.input.addEventListener("keydown", e => this.onKey(e));
   }
 
@@ -109,8 +124,14 @@ export class Terminal {
     return d;
   }
 
+  /** Automatic focus (boot, after a modal…): skipped on touch screens. */
   focus() {
+    if (TOUCH) return;
     this.input.focus({ preventScroll: true });
+  }
+
+  setPlaceholder(text: string) {
+    this.input.placeholder = text;
   }
 
   private segsToNodes(segs: Seg[]): Node[] {
