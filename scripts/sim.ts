@@ -5,9 +5,11 @@ import { PERK_PRICE, price, starsOnRelease, expectedRate, releaseBase } from "..
 import { TALENTS } from "../src/core/talents";
 import { UPGRADES, upgradePrice } from "../src/core/upgrades";
 import { CHALLENGES } from "../src/core/challenges";
+import { ADV, ReleaseAdvisor } from "../src/core/advisor";
 
 import { BAL } from "../src/core/formulas";
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("BAL_")) (BAL as any)[k.slice(4)] = Number(v);
+for (const [k, v] of Object.entries(process.env)) if (k.startsWith("ADV_")) (ADV as any)[k.slice(4)] = Number(v);
 const e = new Engine();
 const s = e.s;
 const fmt = (t: number) => `${Math.floor(t / 3600)}h${String(Math.floor((t % 3600) / 60)).padStart(2, "0")}`;
@@ -16,6 +18,7 @@ const dt = 0.25;
 let t = 0;
 let firstStarLogged = false;
 const milestones: string[] = [];
+const advisor = new ReleaseAdvisor();
 
 function spendStars() {
   for (;;) {
@@ -50,10 +53,10 @@ while (t < H * 3600) {
   }
   if (s.challenge && s.stats.runTime > 20 * 60) { milestones.push(`${fmt(t)} gave up ${s.challenge}`); e.exitChallenge(); }
 
-  // Release when the gain adds a good chunk to lifetime stars (or the run drags on)
-  const gain = starsOnRelease(s).toNumber();
-  const target = Math.max(1, Math.floor(0.35 * s.lifetimeStars.toNumber()));
-  if (gain >= target || (gain >= 1 && s.stats.runTime > 40 * 60)) {
+  // Release when the in-game advisor says so (what a player following the hint does)
+  const adv = advisor.update(s);
+  const gain = adv.pending.toNumber();
+  if (adv.advised) {
     const rt = s.stats.runTime;
     e.release();
     console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/14, next base ${releaseBase(s).toExponential(1)})`);

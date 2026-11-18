@@ -1,5 +1,6 @@
 import Decimal from "break_eternity.js";
 import type { GameState } from "./state";
+import { BAL } from "./formulas";
 
 // Optimizations: infinite (or long) upgrade lines bought with Stars.
 // Price of the next level = base × ratio^level.
@@ -26,7 +27,9 @@ export const level = (s: GameState, id: string) => s.upgrades[id] ?? 0;
 
 export function upgradePrice(s: GameState, id: string): Decimal {
   const u = UPGRADE_BY_ID[id];
-  return Decimal.pow(u.ratio, level(s, id)).mul(u.base).floor();
+  // Infinite lines use the shared, tunable ratio (BAL.optCostRatio)
+  const ratio = u.max === undefined ? BAL.optCostRatio : u.ratio;
+  return Decimal.pow(ratio, level(s, id)).mul(u.base).floor();
 }
 
 export function upgradeMaxed(s: GameState, id: string): boolean {
@@ -35,7 +38,7 @@ export function upgradeMaxed(s: GameState, id: string): boolean {
 }
 
 /* ---- effects ---- */
-export const optRewardMult = (s: GameState) => Decimal.pow(1.25, level(s, "opt_reward"));
+export const optRewardMult = (s: GameState) => Decimal.pow(BAL.optReward, level(s, "opt_reward"));
 export const optSpeedMult = (s: GameState) => Math.pow(0.9, level(s, "opt_speed"));
 /** Warm start: every run begins with this many extra CPU/RAM/Disk levels. */
 export const optBootLevels = (s: GameState) => 3 * level(s, "opt_boot");

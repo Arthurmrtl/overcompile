@@ -31,7 +31,8 @@ src/
     formulas.ts      toutes les formules (prix, temps de build, échecs, gains, étoiles) + BAL
     engine.ts        Engine : tick, compile, autoScale, achats, release, challenges, hors ligne ; émet des événements
     talents.ts       arbre de release (14 talents, payés en étoiles)
-    upgrades.ts      optimisations rachetables à l'infini (étoiles, coût ×2 par niveau)
+    upgrades.ts      optimisations rachetables à l'infini (étoiles, coût ×3 par niveau)
+    advisor.ts       conseiller de release (étoiles/min, bon moment pour publier)
     challenges.ts    4 challenges (releases sous contrainte → bonus permanent)
     achievements.ts  54 succès, avec récompense à récupérer
   ui/terminal.ts   widget terminal (flux de build, ligne de statut, journal, prompt, historique, Tab)
@@ -58,7 +59,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.2.7)
+## Mécaniques actuelles (v0.2.8)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -71,8 +72,10 @@ Perks de boutique :
 - **Auto-Scaling** à 1 000 crédits : achète automatiquement le matériel le moins cher.
 
 **Release (prestige).** Le seuil de base est de 20 000 crédits gagnés dans la run, multiplié par 1,2 à chaque release. Étoiles gagnées :
-`floor(max(1 + log2(ratio), ratio^0.36) × multiplicateurs)`, où `ratio = gagné / seuil`.
-La courbe est volontairement généreuse au début : la 2e étoile est atteinte à ×2 le seuil. Les étoiles gagnées au total donnent aussi un bonus permanent de gains (`1 + 0,25·√total`).
+`floor(max(1 + 1,5·log2(ratio), ratio^0.36) × multiplicateurs)`, où `ratio = gagné / seuil`.
+La courbe est volontairement généreuse au début : 2★ à ×1,6 le seuil, 3★ à ×2,5, 4★ à ×4. Les étoiles gagnées au total donnent aussi un bonus permanent de gains (`1 + 0,25·total^0,35` ; c'était `√total` avant la v0.2.8, ce qui faisait exploser la fin de partie).
+
+**Conseiller de release** (`src/core/advisor.ts`, v0.2.8). Constat d'Arthur à 6 h 19 de jeu : il s'ennuyait, ses runs duraient ~1 h et il n'avait jamais fait de challenge. Les étoiles d'une release montent de plus en plus lentement, donc garder une run trop longtemps fait perdre du temps, et le jeu ne le disait pas. Le conseiller calcule les étoiles par minute de la run (sur 5 min minimum) et conseille de publier quand ce rythme retombe sous 90 % de son meilleur niveau, ou quand la release ajoute au moins 50 % des étoiles déjà gagnées. Le bouton Release ne clignote plus que dans ce cas ; il y a aussi un badge sur l'onglet, un point sur mobile et une ligne dans le journal. La simulation suit ce conseiller : c'est le rythme d'un joueur qui écoute le jeu. Un encart signale aussi les challenges pas encore faits.
 
 **Tranché :** la monnaie de prestige reste les « étoiles ». Ne pas la renommer.
 
@@ -88,7 +91,7 @@ Branche Auto-Scaling :
 
 Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doublon avec l'Auto-Scaling.
 
-**Optimisations** (étoiles, coût qui double à chaque niveau, rachetables à l'infini) : gains, vitesse, boot (+3 niveaux de matériel au début de chaque run), efficacité hors ligne, durée hors ligne. Elles existent parce qu'après l'arbre, les étoiles s'accumulaient sans rien sur quoi les dépenser.
+**Optimisations** (étoiles, coût ×3 à chaque niveau depuis la v0.2.8, rachetables à l'infini) : gains, vitesse, boot (+3 niveaux de matériel au début de chaque run), efficacité hors ligne, durée hors ligne. Elles existent parce qu'après l'arbre, les étoiles s'accumulaient sans rien sur quoi les dépenser.
 
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
@@ -109,17 +112,20 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 ## Équilibrage : comment travailler
 
 - Tous les réglages sont dans `formulas.ts` (objet `BAL`, prix, courbes). Ne change pas un chiffre au hasard : **lance la simulation avant et après**.
-- `npm run sim -- <heures>` simule un joueur (achats, claims, releases, challenges). Options :
+- `npm run sim -- <heures>` simule un joueur (achats, claims, challenges, releases quand le conseiller le dit). Options :
   - `BAL_<clé>=valeur` pour tester un réglage sans toucher au code ;
+  - `ADV_<clé>=valeur` pour régler le conseiller (`peakDrop`, `lifetimeShare`, `minWindowMin`) ;
   - `NOCHAL=1` pour désactiver les challenges.
 - Rythme visé, et validé par Arthur en jouant :
   - 1re étoile en ~20–35 min. Arthur trouve ce début « vraiment bien ».
   - Ensuite, des releases rapprochées au début, puis des runs de 15–20 min en milieu de partie.
-  - Arbre complet en ~4–6 h.
+  - Arbre complet en ~3 h 30–4 h pour un joueur qui suit le conseiller (simulation v0.2.8 : 3 h 42).
+  - Fin de partie : croissance maîtrisée (environ ×1,5 d'étoiles par demi-heure, runs de 20–30 min), pas d'explosion.
   - Après l'arbre, place aux optimisations infinies.
 - Retours de jeu à garder en tête :
   - v0.1 : arbre fini en 1 h 38 avec 310 étoiles. C'était trop rapide après la 1re étoile, d'où le seuil qui monte à chaque release.
   - v0.2.2 : 1re étoile en 21 min 53.
+  - v0.2.7 : à 6 h 19, 6 releases, 22 étoiles, 0 challenge, « on s'ennuie fort ». Cause : runs d'une heure, aucune indication du bon moment pour publier, challenges passés inaperçus → v0.2.8.
   - Un creux d'attente avant la 1re étoile, quand il n'y a plus rien à acheter, décourage le joueur : il faut toujours un prochain objectif visible.
 
 ## Workflow Git et déploiement
