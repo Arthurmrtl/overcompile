@@ -18,9 +18,9 @@ import {
 import { achProgress } from "./core/achievements";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
-import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal } from "./ui/terminal";
+import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 
-const GAME_VERSION = "0.2.6";
+const GAME_VERSION = "0.2.7";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -129,7 +129,7 @@ function buildLayout() {
         </div>
       </div>
       <div class="card term-card">
-        <div class="card-h"><span>${t("panel.terminal")}</span><span class="hint">Tab · ↑↓ · Ctrl+C · Ctrl+L</span></div>
+        <div class="card-h"><span>${t("panel.terminal")}</span><span class="hint kb-only">Tab · ↑↓ · Ctrl+C · Ctrl+L</span></div>
         <div class="term-host" data-r="termHost"></div>
       </div>
     </section>
@@ -193,6 +193,7 @@ function buildLayout() {
   <div class="modal" data-r="modal" hidden><div class="modal-box" data-r="modalBox"></div></div>`;
 
   $("[data-r=termHost]").append(term.root);
+  if (TOUCH) term.setPlaceholder(t("term.tap"));
   term.root.dataset.log = engine.s.settings.logLevel;
   buildHardware();
   buildPerks();
@@ -1089,6 +1090,16 @@ boot().then(() => {
   if (rep && !rep.unlocked && away > 300) term.println(INFO, " " + t("off.locked"));
 });
 setInterval(loop, 100);
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const fit = () => {
+    document.documentElement.style.setProperty("--app-h", vv.height + "px");
+    if (vv.offsetTop) window.scrollTo(0, 0);
+  };
+  vv.addEventListener("resize", fit);
+  vv.addEventListener("scroll", fit);
+  fit();
+}
 cargoTick();
 window.addEventListener("beforeunload", () => engine.save());
 document.addEventListener("visibilitychange", () => { if (document.hidden) engine.save(); });
