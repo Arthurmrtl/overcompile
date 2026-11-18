@@ -60,6 +60,11 @@ export class Terminal {
     this.ps1.replaceChildren(...this.segsToNodes(this.promptSegs()));
   }
 
+  scrollToEnd() {
+    this.stickToBottom = true;
+    this.root.scrollTop = this.root.scrollHeight;
+  }
+
   focus() {
     this.input.focus({ preventScroll: true });
   }

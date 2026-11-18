@@ -1,9 +1,11 @@
 import type { Engine } from "./core/engine";
 import { ACHIEVEMENTS } from "./core/achievements";
+import { CHALLENGES } from "./core/challenges";
 import {
-  HW, PERK_PRICE, bulkPrice, buildTime, expectedRate, failProbability, has, maxAffordable,
-  reward, rewardMultiplier, RELEASE_BASE,
+  HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
+  maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier,
 } from "./core/formulas";
+import { UPGRADES, UPGRADE_BY_ID, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { type HwKey, HW_KEYS, PERK_KEYS, type PerkKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
@@ -34,9 +36,36 @@ export function perkState(e: Engine, k: PerkKey) {
   return !p.unlocked ? t("perk.locked") : p.enabled ? t("perk.enabled") : t("perk.disabled");
 }
 
+/** Auto-Scaling level (1–5) from the perk and the four talents of its branch. */
+export function autoScaleLevel(e: Engine) {
+  return 1 + ["as_perm", "as_fast", "as_ctrl", "as_jobs"].filter(id => on(e.s, id)).length;
+}
+
+/** e.g. "lvl 3 · every 0.25s · CPU RAM Disk" */
+export function autoScaleInfo(e: Engine) {
+  const keys = HW_KEYS.filter(k => e.autoAllowed(k)).map(k => t(`hw.${k}`));
+  return `${t("as.level", { n: autoScaleLevel(e) })} · ${t("as.every", { i: fmtTime(autoScaleInterval(e.s)) })} · ${keys.join(" ")}`;
+}
+
+/** Text of an optimization's current effect. */
+export function upgradeNow(e: Engine, id: string): string {
+  const s = e.s;
+  const n = level(s, id);
+  switch (id) {
+    case "opt_reward": return `×${fmt(Math.pow(1.25, n))}`;
+    case "opt_speed": return `×${Math.pow(0.9, n).toFixed(2)}`;
+    case "opt_boot": return `+${3 * n}`;
+    case "off_eff": return `${Math.round(Math.min(1, 0.1 + 0.1 * n) * 100)}%`;
+    case "off_dur": return `${offlineCapHours(s)} h`;
+  }
+  return String(n);
+}
+
+export const challengeName = (id: string) => t(`ch.${id}`);
+
 export function printStatus(c: GameCtx) {
   const { s } = c.engine;
-  const p = (a: string, b: string) => c.term.println(pad(a, 22) + b);
+  const p = (a: string, b: string) => c.term.println(pad(a, 26) + b);
   c.term.println(["[RESOURCES]", "c-bold"]);
   for (const k of HW_KEYS) p(t(`hw.${k}`), `${s.hw[k]} ${hwUnit(k)}`);
   p(t("credits").toUpperCase(), fmt(s.credits));
@@ -50,6 +79,16 @@ export function printStatus(c: GameCtx) {
   p(t("pipe.reward"), fmt(reward(s)));
   p(t("pipe.fail"), `${(failProbability(s) * 100).toFixed(1)}%`);
   p(t("pipe.rate"), `${fmt(expectedRate(s))}${t("per_sec")}`);
+  p(t("st.offline"), offlineUnlocked(s)
+    ? t("st.offline.val", { p: Math.round(offlineEfficiency(s) * 100), h: offlineCapHours(s) })
+    : t("st.offline.locked"));
+  if (s.perks.auto_scaling.unlocked) p(t("perk.auto_scaling"), autoScaleInfo(c.engine));
+  if (s.challenge) {
+    c.term.println("");
+    c.term.println(["[CHALLENGE]", "c-bold"], " ", [challengeName(s.challenge), "c-amber"]);
+    p(t("ch.rule"), t(`ch.${s.challenge}.rule`));
+    p("goal", `${fmt(s.runEarned)} / ${fmt(challengeGoal(s))}`);
+  }
 }
 
 function hwDisplayName(k: HwKey) {
@@ -75,7 +114,7 @@ export function createCommands(c: GameCtx) {
         ["compile", t("help.compile")], ["stop", t("help.stop")], ["buy", t("help.buy")],
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
         ["status", t("help.status")], ["release", t("help.release")], ["tree", t("help.tree")],
-        ["talent", t("help.talent")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
+        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
       ];
@@ -106,6 +145,7 @@ export function createCommands(c: GameCtx) {
       const r = e().buyHw(key, amount as 1);
       if (r.ok) say(OK, " " + t("term.upgraded", { r: hwDisplayName(key), n: r.n, lvl: `${e().s.hw[key]} ${hwUnit(key)}` }));
       else if (r.reason === "max") say(t("term.max", { r: hwDisplayName(key) }));
+      else if (r.reason === "locked") say(FAIL, " " + t("term.hw_locked", { r: hwDisplayName(key) }));
       else say(FAIL, " " + t("term.not_enough"));
     },
     shop() {
@@ -148,11 +188,11 @@ export function createCommands(c: GameCtx) {
         else say(INFO, " " + t("term.perk_toggled", { p: name, s: perkState(en, what as PerkKey) }));
         return;
       }
-      const m = /^autobuy_(cpu|ram|disk|jobs)$/.exec(what ?? "");
-      if (m && has(en.s, what)) {
+      const m = /^auto_(cpu|ram|disk|jobs)$/.exec(what ?? "");
+      if (m && on(en.s, "as_ctrl") && (m[1] !== "jobs" || on(en.s, "as_jobs"))) {
         const k = m[1] as HwKey;
         en.s.autobuy[k] = !en.s.autobuy[k];
-        say(INFO, " " + t("term.perk_toggled", { p: t(`t.${what}`), s: en.s.autobuy[k] ? t("perk.enabled") : t("perk.disabled") }));
+        say(INFO, " " + t("term.perk_toggled", { p: `Auto-Scaling ${t(`hw.${k}`)}`, s: en.s.autobuy[k] ? t("perk.enabled") : t("perk.disabled") }));
         return;
       }
       if (what === "release_bot" && has(en.s, what)) {
@@ -165,10 +205,63 @@ export function createCommands(c: GameCtx) {
     release() {
       // On success, the "release" event handler prints the result.
       const en = e();
+      if (en.s.challenge) return void say(INFO, " " + t("rel.challenge"));
       if (!en.release()) {
-        const hint = en.s.runEarned.lt(RELEASE_BASE) ? t("rel.locked", { x: fmt(RELEASE_BASE) }) : "";
+        const base = releaseBase(en.s);
+        const hint = en.s.runEarned.lt(base) ? t("rel.locked", { x: `${fmt(en.s.runEarned)} / ${fmt(base)}` }) : "";
         say(INFO, " " + t("term.release_no", { hint }));
       }
+    },
+    optimize(args) {
+      const en = e();
+      const id = args[0];
+      if (!id) {
+        say(["[OPTIMIZATIONS]", "c-bold"], `  ★ ${fmt(en.s.stars)}`);
+        say(["  " + t("opt.desc"), "c-dim"]);
+        for (const u of UPGRADES) {
+          if (u.req && !has(en.s, u.req)) continue;
+          const maxed = upgradeMaxed(en.s, u.id);
+          say([pad(u.id, 12), "c-green"], pad(t(`opt.${u.id}`), 26), pad(t("opt.level", { n: level(en.s, u.id) }), 9),
+            pad(upgradeNow(en, u.id), 10), [maxed ? t("opt.max") : `${fmt(upgradePrice(en.s, u.id))}★`, "c-amber"]);
+          say(["    " + t(`opt.${u.id}.desc`), "c-dim"]);
+        }
+        say(["optimize <id>", "c-dim"]);
+        return;
+      }
+      const u = UPGRADE_BY_ID[id];
+      if (!u) return void say(t("term.opt_unknown"));
+      const r = en.buyUpgrade(id);
+      if (r.ok) say(STAR, " " + t("term.opt_ok", { o: t(`opt.${id}`), n: level(en.s, id) }));
+      else if (r.reason === "locked") say(FAIL, " " + t("term.opt_locked", { t: u.req ?? "" }));
+      else if (r.reason === "max") say(t("term.opt_max"));
+      else say(FAIL, " " + t("term.talent_stars"));
+    },
+    challenge(args) {
+      const en = e();
+      const arg = args[0];
+      if (!arg) {
+        say(["[CHALLENGES]", "c-bold"]);
+        if (!en.challengesUnlocked) return void say(t("term.ch_locked", { n: 3 }));
+        for (const ch of CHALLENGES) {
+          const done = en.s.challengesDone.includes(ch.id);
+          const active = en.s.challenge === ch.id;
+          const mark: Seg = done ? ["[x]", "c-green"] : active ? ["[>]", "c-amber"] : ["[ ]", "c-dim"];
+          say(mark, " ", [pad(ch.id, 13), done ? "c-green" : ""], challengeName(ch.id));
+          say(["      " + t("ch.rule") + " : " + t(`ch.${ch.id}.rule`), "c-dim"]);
+          say(["      " + t("ch.reward") + " : " + t(`ch.${ch.id}.reward`), "c-dim"]);
+        }
+        say(["challenge <id>  ·  challenge exit", "c-dim"]);
+        return;
+      }
+      if (arg === "exit") {
+        if (!en.exitChallenge()) say(t("term.ch_none"));
+        return;
+      }
+      const r = en.startChallenge(arg);
+      if (r === "unknown") say(t("term.ch_unknown"));
+      else if (r === "locked") say(t("term.ch_locked", { n: 3 }));
+      else if (r === "done") say(t("term.ch_already"));
+      else if (r === "active") say(t("term.ch_active"));
     },
     tree() {
       const en = e();
@@ -287,7 +380,7 @@ export function createCommands(c: GameCtx) {
 
   const aliases: Record<string, string> = {
     make: "compile", build: "compile", upgrade: "shop", manage: "toggle", ach: "achievements",
-    prestige: "release", ship: "release", quit: "exit", shutdown: "exit", cls: "clear", "?": "help",
+    prestige: "release", opt: "optimize", optimise: "optimize", ch: "challenge", ship: "release", quit: "exit", shutdown: "exit", cls: "clear", "?": "help",
   };
 
   function run(line: string, echo = false) {
@@ -306,10 +399,11 @@ export function createCommands(c: GameCtx) {
   }
 
   const ARGS: Record<string, string[]> = {
-    buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "autobuy_cpu", "autobuy_ram", "autobuy_disk", "autobuy_jobs", "release_bot"],
+    buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "auto_cpu", "auto_ram", "auto_disk", "auto_jobs", "release_bot"],
+    optimize: UPGRADES.map(u => u.id), challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
   };
-  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "tree", "talent", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
+  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "tree", "talent", "optimize", "challenge", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
 
   function complete(line: string): string[] {
     const parts = line.trimStart().split(/\s+/);

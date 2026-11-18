@@ -123,6 +123,11 @@ export function starsOnRelease(s: GameState): Decimal {
   return s.runEarned.div(base).pow(BAL.starExp).mul(starGainMultiplier(s)).floor();
 }
 
+/** runEarned needed to reach `n` stars on release. */
+export function earnedForStars(s: GameState, n: Decimal | number): Decimal {
+  return new Decimal(n).div(starGainMultiplier(s)).pow(1 / BAL.starExp).mul(releaseBase(s));
+}
+
 /** runEarned needed to get one more star than now. */
 export function nextStarAt(s: GameState): Decimal {
   const next = starsOnRelease(s).add(1).div(starGainMultiplier(s));

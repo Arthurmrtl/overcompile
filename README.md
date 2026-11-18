@@ -13,7 +13,7 @@ release tree. Everything you can click is also a terminal command.
 npm install
 npm run dev       # dev server with hot reload
 npm run build     # type-check + build dist/index.html (a single self-contained file)
-npm run sim       # headless balance simulation of a greedy player (hours as arg: npm run sim -- 4)
+npm run sim       # headless balance simulation (hours as arg: npm run sim -- 8; BAL_<knob>=x to try values)
 ```
 
 `dist/index.html` works when opened straight from disk, and can be hosted on any static host
@@ -29,6 +29,8 @@ src/
     formulas.ts    every balance number lives here
     engine.ts      tick, builds, shop, release, offline progress, events
     talents.ts     release tree
+    upgrades.ts    optimizations (infinite star upgrades)
+    challenges.ts  challenges
     achievements.ts
   commands.ts      terminal commands (UI buttons go through these too)
   ui/terminal.ts   terminal widget (history, Tab completion, Ctrl+C / Ctrl+L)
@@ -37,18 +39,24 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## v0.1 content
+## Content (v0.2)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
-- Perks: CI/CD (idle mode), Auto-Scaling
-- Offline progress (50%, 100% with a talent), capped at 24h
-- Prestige layer 1 — Release: ⭐ Stars, lifetime bonus, 14-node release tree, autobuyers, release bot
-- 26 achievements (+2% rewards each), stats, EN/FR, standard/scientific notation
+- Perks: CI/CD (idle mode), Auto-Scaling (buys the cheapest upgrade every 2 s)
+- Prestige layer 1 — Release: ⭐ Stars, lifetime bonus; each version needs more credits per star
+- Release tree (14 talents), including the Auto-Scaling branch (`as` permanent, `fast` 4×/s,
+  `ctrl` per-resource switches, `-j` job slots) and `off` (offline progress)
+- Optimizations: infinite star upgrades (rewards, build speed, warm start, offline efficiency/duration)
+- Offline progress: the first 5 minutes of absence always count; beyond that it must be unlocked
+  (`off`: 10 %, 2 h) and improved with Optimizations
+- Challenges (after 3 releases): Single-core, Debug build, Friday deploy, No cache — each grants a
+  permanent bonus
+- 29 achievements (+2% rewards each), stats, EN/FR, standard/scientific notation
+- v0.1 saves are migrated (old autobuyers become the Auto-Scaling talents)
 
 ## Roadmap
 
-- v0.2 — Challenges (Single-core, Debug build, Friday deploy…), `crontab` automation scripting
-- v0.3 — Prestige layer 2: Fork (Contributors, PRs)
+- v0.3 — Prestige layer 2: Fork (Contributors, PRs) + `crontab` automation scripting
 - v0.4 — Prestige layer 3: Distro (Arch / Debian / NixOS rule sets)
 
 ## License

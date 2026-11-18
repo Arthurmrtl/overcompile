@@ -3,17 +3,20 @@ import Decimal from "break_eternity.js";
 import { Engine, type GameEvent } from "./core/engine";
 import { ACHIEVEMENTS } from "./core/achievements";
 import {
-  HW, PERK_PRICE, bulkPrice, buildTime, expectedRate, failProbability, has, maxAffordable, nextStarAt,
-  achievementMultiplier, reward, rewardMultiplier, starMultiplier, starsOnRelease, RELEASE_BASE,
+  HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
+  failProbability, has, maxAffordable, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
+  achievementMultiplier, reward, rewardMultiplier, starMultiplier, starsOnRelease,
 } from "./core/formulas";
+import { CHALLENGES } from "./core/challenges";
+import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
-import { LOGO, createCommands, fakeCargoLine, version } from "./commands";
+import { LOGO, autoScaleInfo, challengeName, createCommands, fakeCargoLine, upgradeNow, version } from "./commands";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, Terminal } from "./ui/terminal";
 
-const GAME_VERSION = "0.1.0";
+const GAME_VERSION = "0.2.0";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -71,11 +74,13 @@ function toggleClass(el: Element | null, cls: string, on: boolean) {
 /* ================= Layout ================= */
 const app = document.getElementById("app")!;
 let selectedTalent: string = "warm_cache";
-let sideTab: "release" | "achievements" | "stats" = "release";
+let sideTab: "release" | "challenges" | "achievements" | "stats" = "release";
 let mobilePanel: "center" | "shop" | "side" = "center";
 let lastAchCount = -1;
 let lastSlotCount = -1;
 let lastTalentKey = "";
+let lastOptKey = "";
+let lastChKey = "";
 
 function buildLayout() {
   document.title = "overcompile";
@@ -119,6 +124,12 @@ function buildLayout() {
           <div><span class="k">${t("pipe.rate")}</span><span class="v" data-r="pRate"></span></div>
         </div>
         <div class="slots" data-r="slots"></div>
+        <div class="ch-banner" data-r="chBanner" hidden>
+          <div class="ch-banner-top"><span class="ch-banner-name" data-r="chName"></span><button class="btn small-btn" data-r="chExit">${t("ch.exit")}</button></div>
+          <div class="muted small" data-r="chRule"></div>
+          <div class="progress"><div class="fill" data-r="chProg"></div></div>
+          <div class="muted small" data-r="chGoal"></div>
+        </div>
       </div>
       <div class="card term-card">
         <div class="card-h"><span>${t("panel.terminal")}</span><span class="hint">Tab · ↑↓ · Ctrl+C · Ctrl+L</span></div>
@@ -128,6 +139,7 @@ function buildLayout() {
     <section class="col col-side">
       <div class="tabs" role="tablist">
         <button data-tab="release">${t("tab.release")}</button>
+        <button data-tab="challenges">${t("tab.challenges")}</button>
         <button data-tab="achievements">${t("tab.achievements")} <span class="badge" data-r="achBadge"></span></button>
         <button data-tab="stats">${t("tab.stats")}</button>
       </div>
@@ -147,6 +159,13 @@ function buildLayout() {
         <h3>${t("rel.tree")}</h3>
         <div class="tree" data-r="tree"></div>
         <div class="tree-detail" data-r="treeDetail"></div>
+        <h3>${t("opt.title")}</h3>
+        <p class="muted small">${t("opt.desc")}</p>
+        <div class="opt-list" data-r="opts"></div>
+      </div>
+      <div class="card tab-body" data-body="challenges">
+        <p class="muted small">${t("ch.desc")}</p>
+        <div class="ch-list" data-r="chList"></div>
       </div>
       <div class="card tab-body" data-body="achievements">
         <div class="muted small" data-r="achHead"></div>
@@ -173,6 +192,8 @@ function buildLayout() {
   lastAchCount = -1;
   lastSlotCount = -1;
   lastTalentKey = "";
+  lastOptKey = "";
+  lastChKey = "";
   bindLayout();
   render();
 }
@@ -195,7 +216,7 @@ function buildHardware() {
     const auto = h("label", { class: "auto-pill", "data-f": "auto", hidden: "" },
       h("input", { type: "checkbox" }), h("span", {}, t("auto")));
     auto.addEventListener("click", ev => ev.stopPropagation());
-    auto.querySelector("input")!.addEventListener("change", () => cmd.run(`toggle autobuy_${k}`, true));
+    auto.querySelector("input")!.addEventListener("change", () => cmd.run(`toggle auto_${k}`, true));
     card.querySelector(".hw-top")!.append(auto);
     card.addEventListener("click", () => {
       const a = engine.s.settings.buyAmount;
@@ -216,7 +237,7 @@ function buildPerks() {
     list.append(h("div", { class: "perk", "data-perk": k },
       h("div", { class: "perk-main" },
         h("div", { class: "perk-name" }, t(`perk.${k}`), " ", h("span", { class: "perk-state", "data-f": "state" })),
-        h("div", { class: "hw-desc" }, t(`perk.${k}.desc`)),
+        h("div", { class: "hw-desc", "data-f": "desc" }),
       ),
       btn,
     ));
@@ -285,6 +306,7 @@ function bindLayout() {
     else cmd.run("compile", true);
   });
   $("[data-r=relBtn]").addEventListener("click", () => cmd.run("release", true));
+  $("[data-r=chExit]").addEventListener("click", () => cmd.run("challenge exit", true));
   $("[data-a=save]").addEventListener("click", () => cmd.run("save", true));
   $("[data-a=settings]").addEventListener("click", () => openSettings());
   $<HTMLInputElement>("[data-r=botOn]").addEventListener("change", () => cmd.run("toggle release_bot", true));
@@ -320,10 +342,12 @@ function render() {
     setText($("[data-f=lvl]", card), `${lvl} ${t(`hw.${k}.unit`)}`);
     setText($("[data-f=price]", card), maxed ? t("hw.max") : `${n > 1 ? `+${n} · ` : ""}${fmt(cost)} cr`);
     setText($("[data-f=effect]", card), hwEffect(k));
-    toggleClass(card, "afford", !maxed && s.credits.gte(cost));
-    toggleClass(card, "maxed", maxed);
+    const locked = engine.hwLocked(k);
+    if (locked) setText($("[data-f=price]", card), "🔒");
+    toggleClass(card, "afford", !maxed && !locked && s.credits.gte(cost));
+    toggleClass(card, "maxed", maxed || locked);
     const auto = $("[data-f=auto]", card);
-    const ownsAuto = has(s, `autobuy_${k}`);
+    const ownsAuto = on(s, "as_ctrl") && (k !== "jobs" || on(s, "as_jobs"));
     if (auto.hidden === ownsAuto) auto.hidden = !ownsAuto;
     const cb = $<HTMLInputElement>("input", auto);
     if (cb.checked !== s.autobuy[k]) cb.checked = s.autobuy[k];
@@ -341,6 +365,10 @@ function render() {
     toggleClass(btn, "afford", !p.unlocked && s.credits.gte(PERK_PRICE[k]));
     toggleClass(btn, "toggle-on", p.unlocked && p.enabled);
     toggleClass(el, "owned", p.unlocked);
+    const desc = k === "auto_scaling"
+      ? (p.unlocked ? autoScaleInfo(engine) : t("perk.auto_scaling.desc", { i: fmtTime(autoScaleInterval(s)) }))
+      : t(`perk.${k}.desc`);
+    setText($("[data-f=desc]", el), desc);
   }
 
   // Pipeline
@@ -354,6 +382,7 @@ function render() {
   setText(runBtn, s.pipeline ? `■ ${t("interrupt")}` : `▶ ${t("compile")}`);
   toggleClass(runBtn, "running", s.pipeline);
   renderSlots(T);
+  renderChallengeBanner();
 
   // Side tabs
   app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b => toggleClass(b, "on", b.dataset.tab === sideTab));
@@ -361,6 +390,8 @@ function render() {
   app.querySelectorAll<HTMLButtonElement>("[data-m]").forEach(b => toggleClass(b, "on", b.dataset.m === mobilePanel));
 
   renderRelease();
+  renderOptimizations();
+  if (sideTab === "challenges") renderChallenges();
   renderAchievements();
   if (sideTab === "stats") renderStats();
 }
@@ -402,15 +433,19 @@ function renderRelease() {
   const btn = $<HTMLButtonElement>("[data-r=relBtn]");
   const can = gain.gte(1);
   btn.disabled = !can;
-  setText(btn, can ? t("rel.button", { v: version(engine), n: fmt(gain) }) : `🔒 ${t("rel.title")}`);
+  setText(btn, s.challenge ? `🔒 ${t("rel.challenge")}` : can ? t("rel.button", { v: version(engine), n: fmt(gain) }) : `🔒 ${t("rel.title")}`);
   toggleClass(btn, "ready", can);
   let prog: number;
-  if (!can) {
-    prog = s.runEarned.div(RELEASE_BASE).toNumber();
-    setText($("[data-r=relHint]"), t("rel.locked", { x: `${fmt(s.runEarned)} / ${fmt(RELEASE_BASE)}` }));
+  const base = releaseBase(s);
+  if (s.challenge) {
+    prog = 0;
+    setText($("[data-r=relHint]"), "");
+  } else if (!can) {
+    prog = s.runEarned.div(base).toNumber();
+    setText($("[data-r=relHint]"), t("rel.locked", { x: `${fmt(s.runEarned)} / ${fmt(base)}` }));
   } else {
     const next = nextStarAt(s);
-    const prevNeeded = gain.div(has(s, "semver") ? 2 : 1).pow(2).mul(RELEASE_BASE);
+    const prevNeeded = earnedForStars(s, gain);
     prog = s.runEarned.sub(prevNeeded).div(next.sub(prevNeeded).max(1)).toNumber();
     setText($("[data-r=relHint]"), t("rel.next", { x: fmt(next) }));
   }
@@ -454,6 +489,89 @@ function renderRelease() {
   );
 }
 
+function renderOptimizations() {
+  const s = engine.s;
+  const key = `${s.stars.toString()}|${JSON.stringify(s.upgrades)}|${s.talents.length}`;
+  if (key === lastOptKey) return;
+  lastOptKey = key;
+  const rows = UPGRADES.filter(u => !u.req || has(s, u.req)).map(u => {
+    const maxed = upgradeMaxed(s, u.id);
+    const price = upgradePrice(s, u.id);
+    const ok = engine.canBuyUpgrade(u.id).ok;
+    const btn = h("button", { class: "opt-btn" + (ok ? " afford" : "") }, maxed ? t("opt.max") : t("opt.buy", { n: fmt(price) }));
+    if (!ok) btn.setAttribute("disabled", "");
+    btn.addEventListener("click", () => cmd.run(`optimize ${u.id}`, true));
+    return h("div", { class: "opt" },
+      h("div", { class: "opt-main" },
+        h("div", { class: "opt-name" }, t(`opt.${u.id}`), " ", h("span", { class: "opt-lvl" }, t("opt.level", { n: level(s, u.id) }))),
+        h("div", { class: "hw-desc" }, `${t(`opt.${u.id}.desc`)} · ${t("opt.now", { x: upgradeNow(engine, u.id) })}`),
+      ),
+      btn,
+    );
+  });
+  $("[data-r=opts]").replaceChildren(...rows);
+}
+
+function renderChallengeBanner() {
+  const s = engine.s;
+  const banner = $("[data-r=chBanner]");
+  if (banner.hidden !== !s.challenge) {
+    banner.hidden = !s.challenge;
+    term.scrollToEnd();
+  }
+  if (!s.challenge) return;
+  const goal = challengeGoal(s);
+  setText($("[data-r=chName]"), t("ch.banner", { c: challengeName(s.challenge) }));
+  setText($("[data-r=chRule]"), t(`ch.${s.challenge}.rule`));
+  setText($("[data-r=chGoal]"), `${fmt(s.runEarned)} / ${fmt(goal)}`);
+  $("[data-r=chProg]").style.width = `${Math.min(1, s.runEarned.div(goal).toNumber()) * 100}%`;
+}
+
+function renderChallenges() {
+  const s = engine.s;
+  const key = `${s.challenge}|${s.challengesDone.join(",")}|${engine.challengesUnlocked}|${s.settings.lang}`;
+  if (key === lastChKey) return;
+  lastChKey = key;
+  const list = $("[data-r=chList]");
+  if (!engine.challengesUnlocked) {
+    list.replaceChildren(h("div", { class: "ch-locked" }, `🔒 ${t("ch.locked", { n: 3 })}`));
+    return;
+  }
+  list.replaceChildren(...CHALLENGES.map(ch => {
+    const done = s.challengesDone.includes(ch.id);
+    const active = s.challenge === ch.id;
+    let action: HTMLElement;
+    if (done) action = h("span", { class: "ch-state done" }, `✓ ${t("ch.done")}`);
+    else if (active) {
+      action = h("button", { class: "btn small-btn" }, t("ch.exit"));
+      action.addEventListener("click", () => cmd.run("challenge exit", true));
+    } else {
+      action = h("button", { class: "btn small-btn ch-start" }, t("ch.start"));
+      if (s.challenge) action.setAttribute("disabled", "");
+      action.addEventListener("click", () => confirmChallenge(ch.id));
+    }
+    return h("div", { class: "ch" + (done ? " done" : "") + (active ? " active" : "") },
+      h("div", { class: "ch-top" }, h("span", { class: "ch-name" }, challengeName(ch.id)), action),
+      h("div", { class: "ch-line" }, h("span", { class: "k" }, t("ch.rule")), t(`ch.${ch.id}.rule`)),
+      h("div", { class: "ch-line" }, h("span", { class: "k" }, t("ch.reward")), t(`ch.${ch.id}.reward`)),
+    );
+  }));
+}
+
+function confirmChallenge(id: string) {
+  const yes = h("button", { class: "btn" }, t("ch.start"));
+  const no = h("button", { class: "btn" }, t("cancel"));
+  yes.addEventListener("click", () => { closeModal(); cmd.run(`challenge ${id}`, true); });
+  no.addEventListener("click", closeModal);
+  openModal(
+    h("h2", {}, challengeName(id)),
+    h("p", {}, t(`ch.${id}.rule`)),
+    h("p", { class: "muted small" }, `${t("ch.reward")} : ${t(`ch.${id}.reward`)}`),
+    h("p", { class: "small" }, t("ch.confirm", { c: challengeName(id) })),
+    h("div", { class: "row" }, no, yes),
+  );
+}
+
 function renderAchievements() {
   const s = engine.s;
   const n = s.achievements.length;
@@ -488,6 +606,9 @@ function renderStats() {
     ["st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease)],
     ["st.streak", fmtInt(s.stats.bestStreak)],
     ["st.interrupts", fmtInt(s.stats.interrupts)],
+    ["st.offline", offlineUnlocked(s) ? t("st.offline.val", { p: Math.round(offlineEfficiency(s) * 100), h: offlineCapHours(s) }) : t("st.offline.locked")],
+    ["opt.title", `${Object.values(s.upgrades).reduce((a, b) => a + b, 0)}`],
+    ["tab.challenges", `${s.challengesDone.length} / ${CHALLENGES.length}`],
   ];
   const table = $("[data-r=stats]");
   if (table.childElementCount !== rows.length) {
@@ -501,8 +622,23 @@ function renderStats() {
 }
 
 /* ================= Toasts & modals ================= */
+let toastOverflow: HTMLElement | null = null;
+let toastOverflowCount = 0;
 function toast(title: string, body: string) {
   const box = $("[data-r=toasts]");
+  // At most 3 toasts on screen: the rest are summed up in one line (they are in the terminal log anyway)
+  if (box.querySelectorAll(".toast:not(.more)").length >= 3) {
+    toastOverflowCount++;
+    if (!toastOverflow || !toastOverflow.isConnected) {
+      toastOverflow = h("div", { class: "toast more" });
+      box.append(toastOverflow);
+      const el = toastOverflow;
+      setTimeout(() => el.classList.add("out"), 3500);
+      setTimeout(() => { el.remove(); toastOverflowCount = 0; }, 4000);
+    }
+    setText(toastOverflow, `+${toastOverflowCount} …`);
+    return;
+  }
   const el = h("div", { class: "toast" }, h("div", { class: "toast-t" }, title), h("div", {}, body));
   box.append(el);
   setTimeout(() => el.classList.add("out"), 3500);
@@ -591,6 +727,7 @@ function openSettings() {
 }
 
 function showOffline(rep: NonNullable<ReturnType<Engine["simulateOffline"]>>) {
+  if (rep.away < 60) return; // short absences are silent
   const items = [
     h("li", {}, t("off.credits", { x: fmt(rep.credits) })),
     h("li", {}, t("off.builds", { n: fmtInt(rep.builds), f: fmtInt(rep.fails) })),
@@ -601,7 +738,11 @@ function showOffline(rep: NonNullable<ReturnType<Engine["simulateOffline"]>>) {
   openModal(
     h("h2", {}, `🌙 ${t("off.title")}`),
     h("p", {}, t("off.time", { t: fmtTime(rep.away) })),
-    h("p", { class: "muted small" }, t("off.eff", { p: Math.round(rep.eff * 100) })),
+    h("p", { class: "muted small" }, t("off.grace")),
+    rep.unlocked
+      ? h("p", { class: "muted small" }, t("off.eff", { p: Math.round(rep.eff * 100) }))
+      : h("p", { class: "muted small" }, t("off.locked")),
+    rep.capped ? h("p", { class: "muted small" }, t("off.capped", { h: offlineCapHours(engine.s) })) : "",
     h("ul", { class: "off-list" }, ...items),
   );
   term.println(INFO, ` ${t("off.title")} (${fmtTime(rep.away)}): +${fmt(rep.credits)} ${t("credits")}`);
@@ -650,6 +791,20 @@ engine.on((e: GameEvent) => {
       engine.save();
       break;
     }
+    case "challenge_start":
+      flushLogs();
+      term.println(["[ CH ]", "c-amber"], " " + t("term.ch_started", { c: challengeName(e.id), x: fmt(challengeGoal(engine.s)) }));
+      toast("Challenge", challengeName(e.id));
+      break;
+    case "challenge_done":
+      flushLogs();
+      term.println(["[ CH ]", "c-green"], " " + t("term.ch_done", { c: challengeName(e.id), r: t(`ch.${e.id}.reward`) }));
+      toast(t("ch.done"), `${challengeName(e.id)} · ${t(`ch.${e.id}.reward`)}`);
+      engine.save();
+      break;
+    case "challenge_exit":
+      term.println(["[ CH ]", "c-dim"], " " + t("term.ch_exit", { c: challengeName(e.id) }));
+      break;
     case "pipeline_start":
       break;
   }
@@ -749,6 +904,7 @@ boot().then(() => {
   else if (away > 300 && engine.s.stats.builds > 0 && !engine.ciActive) {
     term.println(INFO, " " + t("off.nothing"));
   }
+  if (rep && !rep.unlocked && away > 300) term.println(INFO, " " + t("off.locked"));
 });
 setInterval(loop, 100);
 cargoTick();

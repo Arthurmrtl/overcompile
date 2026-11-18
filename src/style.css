@@ -281,3 +281,35 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
   .mnav button.on { color: var(--fg); background: var(--panel-2); }
   .term .l { font-size: 12px; }
 }
+
+/* ---------- v0.2: optimizations ---------- */
+.opt-list { display: flex; flex-direction: column; gap: 6px; }
+.opt { display: flex; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.opt-main { flex: 1; min-width: 0; }
+.opt-name { font-weight: 700; }
+.opt-lvl { font-size: 11px; font-weight: 400; color: var(--blue); }
+.opt-btn { flex: none; min-width: 64px; background: transparent; border: 1px solid var(--border-2); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--dim); }
+.opt-btn.afford { border-color: var(--amber); color: var(--amber); font-weight: 700; }
+
+/* ---------- v0.2: challenges ---------- */
+.small-btn { padding: 4px 10px; font-size: 12px; }
+.ch-banner { margin-top: 10px; padding: 8px 10px; border: 1px dashed var(--amber); border-radius: 6px; }
+.ch-banner[hidden] { display: none; }
+.ch-banner-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ch-banner-name { color: var(--amber); font-weight: 700; }
+.ch-banner .progress { margin: 6px 0 2px; }
+.ch-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ch { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+.ch.active { border-color: var(--amber); }
+.ch.done { border-color: var(--green-d); }
+.ch-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ch-name { font-weight: 800; }
+.ch.done .ch-name { color: var(--green); }
+.ch.active .ch-name { color: var(--amber); }
+.ch-line { font-size: 12px; color: var(--fg); }
+.ch-line .k { display: inline-block; min-width: 92px; color: var(--dim); }
+.ch-state.done { color: var(--green); font-size: 12px; font-weight: 700; }
+.ch-start { border-color: var(--amber); color: var(--amber); }
+.ch-start:disabled { opacity: .4; }
+.ch-locked { color: var(--dim); padding: 16px 0; text-align: center; }
+.hw.maxed .hw-price { color: var(--dim); }
