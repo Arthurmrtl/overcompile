@@ -5,19 +5,20 @@ import { ACHIEVEMENTS } from "./core/achievements";
 import {
   HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
   failProbability, has, maxAffordable, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
-  achievementMultiplier, reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
+  reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./core/challenges";
-import { OBJECTIVES } from "./core/objectives";
 import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
-import { LOGO, autoScaleInfo, challengeName, createCommands, fakeCargoLine, upgradeNow, version } from "./commands";
+import {
+  LOGO, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, nextGoals, rewardText, upgradeNow, version,
+} from "./commands";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal } from "./ui/terminal";
 
-const GAME_VERSION = "0.2.4";
+const GAME_VERSION = "0.2.5";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -70,7 +71,7 @@ const app = document.getElementById("app")!;
 let selectedTalent: string = "warm_cache";
 let sideTab: "release" | "challenges" | "achievements" | "stats" = "release";
 let mobilePanel: "center" | "shop" | "side" = "center";
-let lastAchCount = -1;
+let lastAchCount = "";
 let lastSlotCount = -1;
 let lastTalentKey = "";
 let lastOptKey = "";
@@ -147,7 +148,7 @@ function buildLayout() {
         <button class="release-btn" data-r="relBtn"></button>
         <div class="progress"><div class="fill" data-r="relProg"></div></div>
         <div class="muted small" data-r="relHint"></div>
-        <div class="objectives" data-reveal="pre">
+        <div class="objectives">
           <h3>${t("obj.title")}</h3>
           <div data-r="objList"></div>
         </div>
@@ -191,7 +192,7 @@ function buildLayout() {
   buildHardware();
   buildPerks();
   buildTree();
-  lastAchCount = -1;
+  lastAchCount = "";
   lastSlotCount = -1;
   lastTalentKey = "";
   lastOptKey = "";
@@ -528,35 +529,31 @@ function renderRelease() {
 }
 
 let lastObjKey = "";
+function claimButton(label: string, command: string) {
+  const b = h("button", { class: "claim-btn" }, label);
+  b.addEventListener("click", () => cmd.run(command, true));
+  return b;
+}
+
+/** Objectives panel: rewards waiting to be claimed, then the next tier of each chain. */
 function renderObjectives() {
   const s = engine.s;
-  if (starsRevealed(s)) return;
-  const key = `${s.objectives.join(",")}|${s.objClaimed.join(",")}|${s.settings.lang}`;
+  const key = `${s.achievements.length}|${s.achClaimed.length}|${starsRevealed(s)}|${engine.challengesUnlocked}|${s.settings.lang}`;
   if (key === lastObjKey) return;
   lastObjKey = key;
-  // Claimed objectives, then those to claim, then the next three to aim for
-  const claimed = OBJECTIVES.filter(o => s.objClaimed.includes(o.id));
-  const pending = engine.pendingObjectives();
-  const next = OBJECTIVES.filter(o => !s.objectives.includes(o.id)).slice(0, 3);
-  const rows = [...claimed, ...pending, ...next].map(o => {
-    const done = s.objectives.includes(o.id);
-    const isClaimed = s.objClaimed.includes(o.id);
-    let right: HTMLElement;
-    if (done && !isClaimed) {
-      right = h("button", { class: "claim-btn" }, `${t("obj.claim")} +${fmt(o.reward)} cr`);
-      right.addEventListener("click", () => cmd.run(`claim ${o.id}`, true));
-    } else right = h("span", { class: "obj-reward" }, `+${fmt(o.reward)} cr`);
-    return h("div", { class: "obj" + (isClaimed ? " done" : done ? " ready" : "") },
-      h("span", { class: "obj-mark" }, isClaimed ? "[x]" : done ? "[!]" : "[ ]"),
-      h("span", { class: "obj-name" }, t(`obj.${o.id}`)),
-      right);
-  });
-  const footer = h("div", { class: "obj-count muted small" }, `${claimed.length} / ${OBJECTIVES.length}`);
-  if (pending.length > 1) {
-    const all = h("button", { class: "claim-btn" }, `${t("obj.claim_all")} (${pending.length})`);
-    all.addEventListener("click", () => cmd.run("claim all", true));
-    footer.prepend(all, " ");
-  }
+  const pending = engine.pendingAchievements();
+  const rows = [
+    ...pending.map(a => h("div", { class: "obj ready" },
+      h("span", { class: "obj-mark" }, "[!]"),
+      h("span", { class: "obj-name", title: t(`a.${a.id}.desc`) }, t(`a.${a.id}`)),
+      claimButton(`${t("obj.claim")} ${rewardText(a.reward)}`, `claim ${a.id}`))),
+    ...nextGoals(engine).map(a => h("div", { class: "obj" },
+      h("span", { class: "obj-mark" }, "[ ]"),
+      h("span", { class: "obj-name", title: t(`a.${a.id}`) }, t(`a.${a.id}.desc`)),
+      h("span", { class: "obj-reward" }, rewardText(a.reward)))),
+  ];
+  const footer = h("div", { class: "obj-count muted small" }, `🏆 ${s.achievements.length} / ${ACHIEVEMENTS.length}`);
+  if (pending.length > 1) footer.prepend(claimButton(`${t("obj.claim_all")} (${pending.length})`, "claim all"), " ");
   $("[data-r=objList]").replaceChildren(...rows, footer);
 }
 
@@ -643,28 +640,28 @@ function confirmChallenge(id: string) {
   );
 }
 
-/** Achievements that would reveal a feature the player hasn't discovered yet. */
-function achievementSpoils(id: string, en: Engine) {
-  if (["release_10", "stars_100", "tree_full", "opt_25"].includes(id)) return !starsRevealed(en.s);
-  if (["challenge_1", "challenge_all"].includes(id)) return !en.challengesUnlocked;
-  return false;
-}
-
 function renderAchievements() {
   const s = engine.s;
   const n = s.achievements.length;
-  setText($("[data-r=achBadge]"), `${n}/${ACHIEVEMENTS.length}`);
-  const achKey = n * 100 + (starsRevealed(s) ? 10 : 0) + (engine.challengesUnlocked ? 1 : 0);
+  const pendingCount = engine.pendingAchievements().length;
+  setText($("[data-r=achBadge]"), pendingCount ? `${n}/${ACHIEVEMENTS.length} · ${pendingCount}!` : `${n}/${ACHIEVEMENTS.length}`);
+  const achKey = `${n}|${s.achClaimed.length}|${starsRevealed(s)}|${engine.challengesUnlocked}|${s.settings.lang}`;
   if (achKey === lastAchCount) return;
   lastAchCount = achKey;
-  setText($("[data-r=achHead]"), t("ach.count", { n, total: ACHIEVEMENTS.length, x: achievementMultiplier(s).toFixed(2) }));
+  const bonus = bonusSummary(engine);
+  setText($("[data-r=achHead]"), t("ach.count", { n, total: ACHIEVEMENTS.length }) + (bonus ? ` · ${bonus}` : ""));
   $("[data-r=ach]").replaceChildren(...ACHIEVEMENTS.map(a => {
     const got = s.achievements.includes(a.id);
-    const hidden = (a.secret || achievementSpoils(a.id, engine)) && !got;
-    return h("div", { class: "ach" + (got ? " got" : "") , title: hidden ? t("ach.secret") : t(`a.${a.id}.desc`) },
-      h("div", { class: "ach-icon" }, got ? "🏆" : "🔒"),
+    const claimed = s.achClaimed.includes(a.id);
+    const hidden = !got && !achVisible(engine, a);
+    const foot = hidden ? h("div", { class: "ach-reward" }, "")
+      : got && !claimed ? claimButton(`${t("obj.claim")} ${rewardText(a.reward)}`, `claim ${a.id}`)
+      : h("div", { class: "ach-reward" }, rewardText(a.reward));
+    return h("div", { class: "ach" + (claimed ? " got" : got ? " ready" : ""), title: hidden ? t("ach.secret") : t(`a.${a.id}.desc`) },
+      h("div", { class: "ach-icon" }, claimed ? "🏆" : got ? "🎁" : "🔒"),
       h("div", { class: "ach-name" }, hidden ? "???" : t(`a.${a.id}`)),
       h("div", { class: "ach-desc" }, hidden ? t("ach.secret") : t(`a.${a.id}.desc`)),
+      foot,
     );
   }));
 }
@@ -678,6 +675,7 @@ function renderStats() {
     ["st.earned", fmt(s.totalEarned)],
     ["st.run_earned", fmt(s.runEarned)],
     ["st.mult", `×${fmt(rewardMultiplier(s))}`],
+    ["st.ach_bonus", bonusSummary(engine) || "—"],
     ["st.playtime", fmtTime(s.stats.playTime)],
     ["st.runtime", fmtTime(s.stats.runTime)],
     ["st.releases", fmtInt(s.releases)],
@@ -865,10 +863,13 @@ engine.on((e: GameEvent) => {
     case "autobuy":
       autobuys[e.key] = (autobuys[e.key] ?? 0) + e.n;
       break;
-    case "achievement":
-      term.println(["🏆 ", ""], [t("term.achievement", { a: t(`a.${e.id}`) }).replace("🏆 ", ""), "c-amber"]);
-      toast(t("ach.unlocked"), `🏆 ${t(`a.${e.id}`)}`);
+    case "achievement": {
+      const r = Engine.rewardOf(e.id);
+      const rt = r ? rewardText(r) : "";
+      term.println(["🏆 ", ""], [t("term.achievement", { a: t(`a.${e.id}`) }).replace("🏆 ", ""), "c-amber"], ["  " + t("ach.to_claim", { r: rt }), "c-green"]);
+      toast(t("ach.unlocked"), `🏆 ${t(`a.${e.id}`)} · ${rt}`);
       break;
+    }
     case "release": {
       flushMinute(true);
       runCount = { ok: 0, fail: 0 };
@@ -903,10 +904,6 @@ engine.on((e: GameEvent) => {
       break;
     case "challenge_exit":
       term.println(["[ CH ]", "c-dim"], " " + t("term.ch_exit", { c: challengeName(e.id) }));
-      break;
-    case "objective":
-      term.println(["[ OBJ ]", "c-green"], " " + t("obj.done", { o: t(`obj.${e.id}`), x: fmt(e.reward) }));
-      toast(t("obj.title"), `${t(`obj.${e.id}`)} · ${t("obj.claim")} +${fmt(e.reward)} cr`);
       break;
     case "pipeline_start":
     case "pipeline_done":

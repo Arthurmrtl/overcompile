@@ -35,10 +35,8 @@ export interface GameState {
   challengesDone: string[];
   /** Features the player has already discovered (for NEW badges). */
   seen: string[];
-  /** First-run objectives already completed. */
-  objectives: string[];
-  /** Completed objectives whose reward has been claimed. */
-  objClaimed: string[];
+  /** Achievements whose reward has been claimed (never reset). */
+  achClaimed: string[];
   achievements: string[];
   stats: {
     builds: number;
@@ -87,8 +85,7 @@ export function newState(): GameState {
     challenge: null,
     challengesDone: [],
     seen: [],
-    objectives: [],
-    objClaimed: [],
+    achClaimed: [],
     achievements: [],
     stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null },
     settings: { lang: browserLang(), notation: "standard", logLevel: "reduced", buyAmount: 1 },
@@ -127,9 +124,19 @@ export function deserialize(json: string): GameState {
   s.seen = [...(raw.seen ?? [])];
   if (raw.settings?.verbose === false && !raw.settings?.logLevel) s.settings.logLevel = "minimal";
   delete (s.settings as Record<string, unknown>).verbose;
-  s.objectives = [...(raw.objectives ?? [])];
-  // v0.2.2 credited objectives automatically: those count as claimed
-  s.objClaimed = [...(raw.objClaimed ?? s.objectives)];
+  s.achClaimed = [...(raw.achClaimed ?? [])];
+  // v0.2.2–0.2.4 first-run objectives became the first tiers of the achievement chains
+  if (!raw.achClaimed) {
+    const map: Record<string, string> = {
+      o_first_build: "first_build", o_ci: "ci_cd", o_cpu10: "cpu_10", o_jobs2: "jobs_2", o_1k: "credits_1k",
+      o_streak25: "streak_25", o_autoscale: "auto_scaling", o_jobs4: "jobs_4", o_10k: "credits_10k",
+    };
+    // v0.2.2 credited objectives automatically, v0.2.3+ only once claimed
+    const claimed: string[] = raw.objClaimed ?? raw.objectives ?? [];
+    for (const o of claimed) if (map[o] && !s.achClaimed.includes(map[o])) s.achClaimed.push(map[o]);
+  }
+  delete (s as unknown as Record<string, unknown>).objectives;
+  delete (s as unknown as Record<string, unknown>).objClaimed;
   migrate(s, raw.version ?? 1);
   // Slots must match the number of jobs
   s.slots = Array.from({ length: s.hw.jobs }, (_, i) => raw.slots?.[i] ?? { progress: 0, running: false });

@@ -1,7 +1,6 @@
 import Decimal from "break_eternity.js";
-import { ACHIEVEMENTS } from "./achievements";
+import { ACHIEVEMENTS, ACH_BY_ID, type Reward } from "./achievements";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./challenges";
-import { OBJECTIVES } from "./objectives";
 import {
   HW, PERK_PRICE, OFFLINE_GRACE_SECONDS, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
   has, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
@@ -23,7 +22,7 @@ export type GameEvent =
   | { t: "challenge_start"; id: string }
   | { t: "challenge_done"; id: string }
   | { t: "challenge_exit"; id: string }
-  | { t: "objective"; id: string; reward: number };
+
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" };
 
@@ -123,37 +122,29 @@ export class Engine {
       this.release(true);
     }
 
-    this.checkObjectives();
     this.checkAchievements();
   }
 
-  /** First-run objectives (before the first release only). */
-  checkObjectives() {
-    const s = this.s;
-    if (s.releases > 0 || s.objectives.length >= OBJECTIVES.length) return;
-    for (const o of OBJECTIVES) {
-      if (!s.objectives.includes(o.id) && o.check(s)) {
-        s.objectives.push(o.id);
-        this.emit({ t: "objective", id: o.id, reward: o.reward });
-      }
-    }
+  /** Unlocked achievements whose reward is waiting to be claimed. */
+  pendingAchievements() {
+    return ACHIEVEMENTS.filter(a => this.s.achievements.includes(a.id) && !this.s.achClaimed.includes(a.id));
   }
 
-  /** Completed objectives waiting to be claimed. */
-  pendingObjectives() {
-    return OBJECTIVES.filter(o => this.s.objectives.includes(o.id) && !this.s.objClaimed.includes(o.id));
+  /** Claims one achievement's reward (or all pending ones). Returns what was gained. */
+  claimAchievements(id?: string): Reward[] {
+    const got: Reward[] = [];
+    for (const a of this.pendingAchievements()) {
+      if (id && a.id !== id) continue;
+      this.s.achClaimed.push(a.id);
+      if ("credits" in a.reward) this.s.credits = this.s.credits.add(a.reward.credits);
+      got.push(a.reward);
+    }
+    return got;
   }
 
-  /** Claims one objective (or all pending ones). Returns the credits gained. */
-  claimObjectives(id?: string): number {
-    let total = 0;
-    for (const o of this.pendingObjectives()) {
-      if (id && o.id !== id) continue;
-      this.s.objClaimed.push(o.id);
-      this.s.credits = this.s.credits.add(o.reward);
-      total += o.reward;
-    }
-    return total;
+  /** Reward of an achievement (for display). */
+  static rewardOf(id: string): Reward | undefined {
+    return ACH_BY_ID[id]?.reward;
   }
 
   private advanceBuilds(dt: number) {

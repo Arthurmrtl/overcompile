@@ -1,5 +1,6 @@
 import Decimal from "break_eternity.js";
 import type { GameState, HwKey } from "./state";
+import { achBonus } from "./achievements";
 import { CHALLENGES } from "./challenges";
 import { TALENTS } from "./talents";
 const TALENT_REQ: Record<string, string[]> = Object.fromEntries(TALENTS.map(t => [t.id, t.req]));
@@ -74,6 +75,7 @@ export function buildTime(s: GameState): number {
   if (on(s, "warm_cache")) t /= BAL.incSpeed;
   if (on(s, "dist_cache")) t /= BAL.distSpeed;
   t *= optSpeedMult(s);
+  t /= achSpeedMult(s);
   if (challengeDone(s, "single_core")) t /= 1.5;
   if (inChallenge(s, "debug_build")) t *= 10;
   return t;
@@ -83,6 +85,7 @@ export function failProbability(s: GameState): number {
   let p = 0.25 * Math.pow(1.012, s.hw.cpu - 1) * Math.pow(0.965, s.hw.disk - 1);
   if (on(s, "rust_rewrite")) p /= 2;
   if (challengeDone(s, "friday")) p *= 0.75;
+  p *= achFailMult(s);
   p = Math.min(Math.max(p, 0.01), 0.9);
   if (inChallenge(s, "friday")) p = Math.max(p, 0.5);
   return p;
@@ -92,12 +95,14 @@ export function starMultiplier(s: GameState): Decimal {
   return s.lifetimeStars.sqrt().mul(0.25).add(1);
 }
 
-export function achievementMultiplier(s: GameState): number {
-  return 1 + 0.02 * s.achievements.length;
-}
+/** Claimed achievement bonuses, as multipliers. */
+export const achGainsMult = (s: GameState) => 1 + achBonus(s, "gains") / 100;
+export const achSpeedMult = (s: GameState) => 1 + achBonus(s, "speed") / 100;
+export const achFailMult = (s: GameState) => Math.max(0.5, 1 - achBonus(s, "fail") / 100);
+export const achStarsMult = (s: GameState) => 1 + achBonus(s, "stars") / 100;
 
 export function rewardMultiplier(s: GameState): Decimal {
-  let m = starMultiplier(s).mul(achievementMultiplier(s)).mul(optRewardMult(s));
+  let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s));
   if (on(s, "code_review")) m = m.mul(BAL.revReward);
   if (on(s, "lto")) m = m.mul(BAL.ltoReward);
   if (challengeDone(s, "debug_build")) m = m.mul(2);
@@ -123,7 +128,7 @@ export function releaseBase(s: GameState): Decimal {
 }
 
 export function starGainMultiplier(s: GameState): number {
-  let m = 1;
+  let m = achStarsMult(s);
   if (on(s, "semver")) m *= 2;
   if (challengeDone(s, "no_cache")) m *= 1.5;
   return m;

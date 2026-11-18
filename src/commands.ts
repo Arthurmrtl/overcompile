@@ -1,7 +1,6 @@
 import type { Engine } from "./core/engine";
-import { ACHIEVEMENTS } from "./core/achievements";
+import { ACHIEVEMENTS, type Achievement, type Reward, achBonus } from "./core/achievements";
 import { CHALLENGES } from "./core/challenges";
-import { OBJECTIVES } from "./core/objectives";
 import {
   HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
   maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
@@ -63,6 +62,48 @@ export function upgradeNow(e: Engine, id: string): string {
 }
 
 export const challengeName = (id: string) => t(`ch.${id}`);
+
+/** "+5 cr" or "+2 % rewards" */
+export function rewardText(r: Reward): string {
+  if ("credits" in r) return `+${fmt(r.credits)} cr`;
+  return t(`bonus.${r.stat}`, { p: r.pct });
+}
+
+export function summarizeRewards(rs: Reward[]): string {
+  const credits = rs.reduce((a, r) => a + ("credits" in r ? r.credits : 0), 0);
+  const parts = credits ? [`+${fmt(credits)} cr`] : [];
+  for (const r of rs) if (!("credits" in r)) parts.push(rewardText(r));
+  return parts.join(", ");
+}
+
+/** Claimed bonuses, e.g. "rewards +12% · speed +5%" */
+export function bonusSummary(e: Engine): string {
+  const parts = (["gains", "speed", "fail", "stars"] as const)
+    .map(stat => ({ stat, pct: achBonus(e.s, stat) }))
+    .filter(x => x.pct > 0)
+    .map(x => t(`bonus.${x.stat}`, { p: x.pct }));
+  return parts.length ? parts.join(" · ") : "";
+}
+
+/** Whether an achievement may be shown (secrets and undiscovered features stay ???). */
+export function achVisible(e: Engine, a: Achievement): boolean {
+  if (a.secret) return false;
+  if (a.reveal === "stars") return starsRevealed(e.s);
+  if (a.reveal === "challenges") return e.challengesUnlocked;
+  return true;
+}
+
+/** Next tier of each visible chain: the current objectives. */
+export function nextGoals(e: Engine, limit = 5): Achievement[] {
+  const seen = new Set<string>();
+  const out: Achievement[] = [];
+  for (const a of ACHIEVEMENTS) {
+    if (seen.has(a.chain) || a.secret || e.s.achievements.includes(a.id)) continue;
+    seen.add(a.chain);
+    if (achVisible(e, a)) out.push(a);
+  }
+  return out.slice(0, limit);
+}
 
 export function printStatus(c: GameCtx) {
   const { s } = c.engine;
@@ -216,19 +257,17 @@ export function createCommands(c: GameCtx) {
     claim(args) {
       const en = e();
       const id = args[0] && args[0] !== "all" ? args[0] : undefined;
-      const gained = en.claimObjectives(id);
-      if (gained > 0) say(OK, " " + t("obj.claimed", { x: fmt(gained) }));
+      const got = en.claimAchievements(id);
+      if (got.length) say(OK, " " + t("ach.claimed", { r: summarizeRewards(got) }));
       else say(t("obj.nothing"));
     },
     goals() {
-      const { s } = e();
-      say(["[" + t("obj.title").toUpperCase() + "]", "c-bold"], `  ${s.objectives.length} / ${OBJECTIVES.length}`);
-      for (const o of OBJECTIVES) {
-        const ok = s.objectives.includes(o.id);
-        const claimed = s.objClaimed.includes(o.id);
-        say(claimed ? ["[x]", "c-green"] : ok ? ["[!]", "c-amber"] : ["[ ]", "c-dim"], " ", pad(t(`obj.${o.id}`), 40),
-          [`+${fmt(o.reward)} cr`, claimed ? "c-dim" : "c-amber"], ok && !claimed ? ["  ← claim", "c-green"] : "");
-      }
+      const en = e();
+      const pending = en.pendingAchievements();
+      say(["[" + t("obj.title").toUpperCase() + "]", "c-bold"]);
+      for (const a of pending) say(["[!]", "c-amber"], " ", pad(t(`a.${a.id}`), 34), [rewardText(a.reward), "c-amber"], ["  ← claim", "c-green"]);
+      for (const a of nextGoals(en)) say(["[ ]", "c-dim"], " ", pad(t(`a.${a.id}`), 34), [rewardText(a.reward), "c-dim"], ["  " + t(`a.${a.id}.desc`), "c-dim"]);
+      if (pending.length > 1) say(["claim all", "c-dim"]);
     },
     optimize(args) {
       const en = e();
@@ -310,14 +349,15 @@ export function createCommands(c: GameCtx) {
       else say(FAIL, " " + t("term.talent_stars"));
     },
     achievements() {
-      const { s } = e();
-      say(["[ACHIEVEMENTS]", "c-bold"], "  " + t("ach.count", { n: s.achievements.length, total: ACHIEVEMENTS.length, x: (1 + 0.02 * s.achievements.length).toFixed(2) }));
+      const en = e();
+      const { s } = en;
+      say(["[ACHIEVEMENTS]", "c-bold"], "  " + t("ach.count", { n: s.achievements.length, total: ACHIEVEMENTS.length }), "  ", [bonusSummary(en), "c-amber"]);
       for (const a of ACHIEVEMENTS) {
         const got = s.achievements.includes(a.id);
-        const spoils = (["release_10", "stars_100", "tree_full", "opt_25"].includes(a.id) && !starsRevealed(s))
-          || (["challenge_1", "challenge_all"].includes(a.id) && !e().challengesUnlocked);
-        if (!got && (a.secret || spoils)) { say(["  🔒 ???", "c-dim"]); continue; }
-        say(got ? ["  🏆 ", ""] : ["  🔒 ", "c-dim"], [pad(t(`a.${a.id}`), 28), got ? "c-amber" : "c-dim"], [t(`a.${a.id}.desc`), "c-dim"]);
+        if (!got && !achVisible(en, a)) { say(["  🔒 ???", "c-dim"]); continue; }
+        const claimed = s.achClaimed.includes(a.id);
+        say(claimed ? ["  [x] ", "c-green"] : got ? ["  [!] ", "c-amber"] : ["  [ ] ", "c-dim"],
+          [pad(t(`a.${a.id}`), 28), got ? "c-amber" : "c-dim"], [pad(rewardText(a.reward), 16), claimed ? "c-dim" : "c-amber"], [t(`a.${a.id}.desc`), "c-dim"]);
       }
     },
     stats() {
@@ -414,7 +454,6 @@ export function createCommands(c: GameCtx) {
     const en = e();
     if (["tree", "talent", "optimize"].includes(name)) return starsRevealed(en.s);
     if (name === "challenge") return en.challengesUnlocked;
-    if (name === "goals" || name === "claim") return !starsRevealed(en.s);
     return true;
   }
 
