@@ -293,6 +293,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
   .mnav button.on { color: var(--fg); background: var(--panel-2); }
   .term .l { font-size: 12px; }
   .term-stream, .term[data-log=reduced] .term-stream { height: calc(2 * 1.45em); }
+  .term-status { white-space: pre-wrap; }
 }
 
 /* ---------- v0.2: optimizations ---------- */
@@ -360,3 +361,16 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .ach-reward { margin-top: auto; padding-top: 4px; font-size: 11px; color: var(--amber); }
 .ach.got .ach-reward { color: var(--dim); }
 .ach .claim-btn { margin-top: auto; align-self: flex-start; }
+
+/* ---------- v0.2.6: goals inside the achievements tab ---------- */
+.goal { padding: 6px 0; border-bottom: 1px dotted var(--border); font-size: 12px; }
+.goal-top { display: flex; justify-content: space-between; gap: 8px; }
+.goal-name { flex: 1; min-width: 0; }
+.goal-bar { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.goal-bar .progress { flex: 1; margin: 0; height: 5px; }
+.goal-bar .progress .fill { background: var(--green); }
+.goal-val { flex: none; min-width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
+[data-r=achPendingBox][hidden] { display: none; }
+.mnav button { position: relative; }
+.mdot { position: absolute; top: 4px; right: calc(50% - 18px); width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.mdot[hidden] { display: none; }

@@ -12,13 +12,15 @@ import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./
 import { HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import {
-  LOGO, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, nextGoals, rewardText, upgradeNow, version,
+  LOGO, achDesc, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, nextGoals, progressText,
+  rewardText, upgradeNow, version,
 } from "./commands";
+import { achProgress } from "./core/achievements";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal } from "./ui/terminal";
 
-const GAME_VERSION = "0.2.5";
+const GAME_VERSION = "0.2.6";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -148,10 +150,6 @@ function buildLayout() {
         <button class="release-btn" data-r="relBtn"></button>
         <div class="progress"><div class="fill" data-r="relProg"></div></div>
         <div class="muted small" data-r="relHint"></div>
-        <div class="objectives">
-          <h3>${t("obj.title")}</h3>
-          <div data-r="objList"></div>
-        </div>
         <div class="bot" data-r="bot" hidden>
           <label class="switch"><input type="checkbox" data-r="botOn"><span>${t("rel.bot")}</span></label>
           <label class="small">${t("rel.bot.threshold")} <input type="number" min="1" step="1" data-r="botThr"> ⭐</label>
@@ -171,6 +169,13 @@ function buildLayout() {
       </div>
       <div class="card tab-body" data-body="achievements">
         <div class="muted small" data-r="achHead"></div>
+        <div data-r="achPendingBox">
+          <h3>${t("ach.pending")}</h3>
+          <div class="obj-list" data-r="achPending"></div>
+        </div>
+        <h3>${t("ach.next")}</h3>
+        <div class="obj-list" data-r="achNext"></div>
+        <h3>${t("ach.all")}</h3>
         <div class="ach-grid" data-r="ach"></div>
       </div>
       <div class="card tab-body" data-body="stats">
@@ -181,7 +186,7 @@ function buildLayout() {
   <nav class="mnav">
     <button data-m="shop">🛒<span>${t("nav.shop")}</span></button>
     <button data-m="center">⌨️<span>${t("nav.terminal")}</span></button>
-    <button data-m="side">🚀<span>${t("nav.release")}</span></button>
+    <button data-m="side">🚀<span>${t("nav.release")}</span><i class="mdot" data-r="mDot" hidden></i></button>
   </nav>
   <footer class="foot"><a href="https://github.com/Antiz96/incrust" target="_blank" rel="noopener noreferrer">${t("fork_of")}</a></footer>
   <div class="toasts" data-r="toasts"></div>
@@ -410,7 +415,7 @@ function render() {
 
   renderRelease();
   renderOptimizations();
-  renderObjectives();
+  if (sideTab === "achievements") renderGoals();
   if (sideTab === "challenges") renderChallenges();
   renderAchievements();
   if (sideTab === "stats") renderStats();
@@ -535,26 +540,38 @@ function claimButton(label: string, command: string) {
   return b;
 }
 
-/** Objectives panel: rewards waiting to be claimed, then the next tier of each chain. */
-function renderObjectives() {
+let goalsTimer = 0;
+/** Achievements tab: rewards to claim, then the next tier of each chain with its progress. */
+function renderGoals(force = false) {
   const s = engine.s;
-  const key = `${s.achievements.length}|${s.achClaimed.length}|${starsRevealed(s)}|${engine.challengesUnlocked}|${s.settings.lang}`;
-  if (key === lastObjKey) return;
-  lastObjKey = key;
   const pending = engine.pendingAchievements();
-  const rows = [
-    ...pending.map(a => h("div", { class: "obj ready" },
-      h("span", { class: "obj-mark" }, "[!]"),
-      h("span", { class: "obj-name", title: t(`a.${a.id}.desc`) }, t(`a.${a.id}`)),
-      claimButton(`${t("obj.claim")} ${rewardText(a.reward)}`, `claim ${a.id}`))),
-    ...nextGoals(engine).map(a => h("div", { class: "obj" },
-      h("span", { class: "obj-mark" }, "[ ]"),
-      h("span", { class: "obj-name", title: t(`a.${a.id}`) }, t(`a.${a.id}.desc`)),
-      h("span", { class: "obj-reward" }, rewardText(a.reward)))),
-  ];
-  const footer = h("div", { class: "obj-count muted small" }, `🏆 ${s.achievements.length} / ${ACHIEVEMENTS.length}`);
-  if (pending.length > 1) footer.prepend(claimButton(`${t("obj.claim_all")} (${pending.length})`, "claim all"), " ");
-  $("[data-r=objList]").replaceChildren(...rows, footer);
+  const key = `${s.achievements.length}|${s.achClaimed.length}|${starsRevealed(s)}|${engine.challengesUnlocked}|${s.settings.lang}`;
+  const now = performance.now();
+  if (!force && key === lastObjKey && now - goalsTimer < 1000) return;
+  lastObjKey = key;
+  goalsTimer = now;
+  const box = $("[data-r=achPendingBox]");
+  if (box.hidden === pending.length > 0) box.hidden = pending.length === 0;
+  const claimRows = pending.map(a => h("div", { class: "obj ready" },
+    h("span", { class: "obj-mark" }, "[!]"),
+    h("span", { class: "obj-name", title: achDesc(a) }, t(`a.${a.id}`)),
+    claimButton(`${t("obj.claim")} ${rewardText(a.reward)}`, `claim ${a.id}`)));
+  if (pending.length > 1) claimRows.push(h("div", { class: "obj-count" }, claimButton(`${t("obj.claim_all")} (${pending.length})`, "claim all")));
+  $("[data-r=achPending]").replaceChildren(...claimRows);
+  $("[data-r=achNext]").replaceChildren(...nextGoals(engine).map(a => {
+    const fill = h("div", { class: "fill" });
+    fill.style.width = `${Math.round(achProgress(s, a) * 100)}%`;
+    return h("div", { class: "goal" },
+      h("div", { class: "goal-top" },
+        h("span", { class: "goal-name" }, achDesc(a)),
+        h("span", { class: "obj-reward" }, rewardText(a.reward)),
+      ),
+      h("div", { class: "goal-bar" },
+        h("div", { class: "progress" }, fill),
+        h("span", { class: "goal-val muted small" }, progressText(engine, a)),
+      ),
+    );
+  }));
 }
 
 function renderOptimizations() {
@@ -644,7 +661,10 @@ function renderAchievements() {
   const s = engine.s;
   const n = s.achievements.length;
   const pendingCount = engine.pendingAchievements().length;
-  setText($("[data-r=achBadge]"), pendingCount ? `${n}/${ACHIEVEMENTS.length} · ${pendingCount}!` : `${n}/${ACHIEVEMENTS.length}`);
+  setText($("[data-r=achBadge]"), pendingCount ? `${pendingCount}!` : `${n}/${ACHIEVEMENTS.length}`);
+  toggleClass($("[data-r=achBadge]"), "new", pendingCount > 0);
+  const dot = $("[data-r=mDot]");
+  if (dot.hidden === pendingCount > 0) dot.hidden = pendingCount === 0;
   const achKey = `${n}|${s.achClaimed.length}|${starsRevealed(s)}|${engine.challengesUnlocked}|${s.settings.lang}`;
   if (achKey === lastAchCount) return;
   lastAchCount = achKey;
@@ -660,7 +680,7 @@ function renderAchievements() {
     return h("div", { class: "ach" + (claimed ? " got" : got ? " ready" : ""), title: hidden ? t("ach.secret") : t(`a.${a.id}.desc`) },
       h("div", { class: "ach-icon" }, claimed ? "🏆" : got ? "🎁" : "🔒"),
       h("div", { class: "ach-name" }, hidden ? "???" : t(`a.${a.id}`)),
-      h("div", { class: "ach-desc" }, hidden ? t("ach.secret") : t(`a.${a.id}.desc`)),
+      h("div", { class: "ach-desc" }, hidden ? t("ach.secret") : achDesc(a)),
       foot,
     );
   }));

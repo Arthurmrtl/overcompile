@@ -134,21 +134,38 @@ export function starGainMultiplier(s: GameState): number {
   return m;
 }
 
+/**
+ * Stars for a run that earned `ratio` × the release base. Two curves, the best wins:
+ * - early: 1 + log2(ratio) → 2 stars at ×2, 3 at ×4, 4 at ×8 (the first releases stay generous)
+ * - late:  ratio ^ starExp  → takes over around ×700 and keeps big runs rewarding
+ */
+function starCurve(ratio: Decimal): Decimal {
+  const early = ratio.log2().add(1);
+  const late = ratio.pow(BAL.starExp);
+  return early.max(late);
+}
+
+/** Inverse of starCurve: the ratio needed for a curve value of `v`. */
+function ratioFor(v: Decimal): Decimal {
+  const early = Decimal.pow(2, v.sub(1));
+  const late = v.pow(1 / BAL.starExp);
+  return early.min(late).max(1);
+}
+
 export function starsOnRelease(s: GameState): Decimal {
   const base = releaseBase(s);
   if (s.challenge || s.runEarned.lt(base)) return new Decimal(0);
-  return s.runEarned.div(base).pow(BAL.starExp).mul(starGainMultiplier(s)).floor();
+  return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s)).floor();
 }
 
 /** runEarned needed to reach `n` stars on release. */
 export function earnedForStars(s: GameState, n: Decimal | number): Decimal {
-  return new Decimal(n).div(starGainMultiplier(s)).pow(1 / BAL.starExp).mul(releaseBase(s));
+  return ratioFor(new Decimal(n).div(starGainMultiplier(s))).mul(releaseBase(s));
 }
 
 /** runEarned needed to get one more star than now. */
 export function nextStarAt(s: GameState): Decimal {
-  const next = starsOnRelease(s).add(1).div(starGainMultiplier(s));
-  return next.pow(1 / BAL.starExp).mul(releaseBase(s)).max(releaseBase(s));
+  return earnedForStars(s, starsOnRelease(s).add(1)).max(releaseBase(s));
 }
 
 /** Credits to earn in the run to complete the active challenge. */

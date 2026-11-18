@@ -1,5 +1,7 @@
 import type { Engine } from "./core/engine";
-import { ACHIEVEMENTS, type Achievement, type Reward, achBonus } from "./core/achievements";
+import {
+  ACHIEVEMENTS, type Achievement, type Reward, PER_RUN_METRICS, achBonus, achProgress, metricValue,
+} from "./core/achievements";
 import { CHALLENGES } from "./core/challenges";
 import {
   HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
@@ -93,8 +95,8 @@ export function achVisible(e: Engine, a: Achievement): boolean {
   return true;
 }
 
-/** Next tier of each visible chain: the current objectives. */
-export function nextGoals(e: Engine, limit = 5): Achievement[] {
+/** Next tier of each visible chain (the current objectives), closest to completion first. */
+export function nextGoals(e: Engine, limit = Infinity): Achievement[] {
   const seen = new Set<string>();
   const out: Achievement[] = [];
   for (const a of ACHIEVEMENTS) {
@@ -102,7 +104,20 @@ export function nextGoals(e: Engine, limit = 5): Achievement[] {
     seen.add(a.chain);
     if (achVisible(e, a)) out.push(a);
   }
-  return out.slice(0, limit);
+  return out.sort((x, y) => achProgress(e.s, y) - achProgress(e.s, x)).slice(0, limit);
+}
+
+/** "12 / 50" */
+export function progressText(e: Engine, a: Achievement): string {
+  if (!a.metric || a.target === undefined) return "";
+  if (a.target === 1) return "";
+  return `${fmt(metricValue(e.s, a.metric).min(a.target).floor())} / ${fmt(a.target)}`;
+}
+
+/** Achievement description, with "(in one run)" for hardware tiers. */
+export function achDesc(a: Achievement): string {
+  const d = t(`a.${a.id}.desc`);
+  return a.metric && PER_RUN_METRICS.includes(a.metric) ? `${d.replace(/\.$/, "")} ${t("ach.per_run")}` : d;
 }
 
 export function printStatus(c: GameCtx) {
@@ -266,7 +281,7 @@ export function createCommands(c: GameCtx) {
       const pending = en.pendingAchievements();
       say(["[" + t("obj.title").toUpperCase() + "]", "c-bold"]);
       for (const a of pending) say(["[!]", "c-amber"], " ", pad(t(`a.${a.id}`), 34), [rewardText(a.reward), "c-amber"], ["  ← claim", "c-green"]);
-      for (const a of nextGoals(en)) say(["[ ]", "c-dim"], " ", pad(t(`a.${a.id}`), 34), [rewardText(a.reward), "c-dim"], ["  " + t(`a.${a.id}.desc`), "c-dim"]);
+      for (const a of nextGoals(en, 8)) say(["[ ]", "c-dim"], " ", pad(achDesc(a), 44), pad(progressText(en, a), 16), [rewardText(a.reward), "c-amber"]);
       if (pending.length > 1) say(["claim all", "c-dim"]);
     },
     optimize(args) {

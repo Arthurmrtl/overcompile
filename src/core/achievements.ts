@@ -11,8 +11,14 @@ import { TALENTS } from "./talents";
 export type BonusStat = "gains" | "speed" | "fail" | "stars";
 export type Reward = { credits: number } | { stat: BonusStat; pct: number };
 
+export type Metric = "builds" | "fails" | "earned" | "perk_ci" | "perk_as" | "cpu" | "ram" | "disk" | "jobs"
+  | "streak" | "releases" | "stars" | "tree" | "opt" | "challenges";
+
 export interface Achievement {
   id: string;
+  /** What is measured, and the value to reach (for progress bars). */
+  metric?: Metric;
+  target?: number;
   /** Chain it belongs to: the objectives panel shows the next tier of each chain. */
   chain: string;
   reward: Reward;
@@ -22,75 +28,105 @@ export interface Achievement {
   check: (s: GameState) => boolean;
 }
 
-const earned = (s: GameState, n: number) => s.totalEarned.gte(new Decimal(n));
+/** Current value of a metric. Hardware metrics are per run (they reset at each release). */
+export function metricValue(s: GameState, m: Metric): Decimal {
+  switch (m) {
+    case "builds": return new Decimal(s.stats.builds);
+    case "fails": return new Decimal(s.stats.fails);
+    case "earned": return s.totalEarned;
+    case "perk_ci": return new Decimal(s.perks.ci_cd.unlocked ? 1 : 0);
+    case "perk_as": return new Decimal(s.perks.auto_scaling.unlocked ? 1 : 0);
+    case "cpu": case "ram": case "disk": case "jobs": return new Decimal(s.hw[m]);
+    case "streak": return new Decimal(s.stats.bestStreak);
+    case "releases": return new Decimal(s.releases);
+    case "stars": return s.lifetimeStars;
+    case "tree": return new Decimal(TALENTS.filter(t => s.talents.includes(t.id)).length);
+    case "opt": return new Decimal(Object.values(s.upgrades).reduce((a, b) => a + b, 0));
+    case "challenges": return new Decimal(s.challengesDone.length);
+  }
+}
+export const PER_RUN_METRICS: Metric[] = ["cpu", "ram", "disk", "jobs"];
+
+/** Progress 0..1 towards an achievement (log scale for big numbers). */
+export function achProgress(s: GameState, a: Achievement): number {
+  if (!a.metric || a.target === undefined) return 0;
+  const v = metricValue(s, a.metric);
+  if (v.gte(a.target)) return 1;
+  if (a.target >= 1e4) return Math.max(0, v.max(1).log10().toNumber() / Math.log10(a.target));
+  return v.toNumber() / a.target;
+}
+
+/** Builds a tier: reaching `target` on `metric`. */
+function tier(id: string, chain: string, metric: Metric, target: number, reward: Reward, reveal?: "stars" | "challenges"): Achievement {
+  return { id, chain, metric, target, reward, reveal, check: s => metricValue(s, metric).gte(target) };
+}
 const cr = (credits: number): Reward => ({ credits });
 const gains = (pct: number): Reward => ({ stat: "gains", pct });
 const speed = (pct: number): Reward => ({ stat: "speed", pct });
 const fail = (pct: number): Reward => ({ stat: "fail", pct });
 const stars = (pct: number): Reward => ({ stat: "stars", pct });
-const optLevels = (s: GameState) => Object.values(s.upgrades).reduce((a, b) => a + b, 0);
 
 export const ACHIEVEMENTS: Achievement[] = [
   // Builds
-  { id: "first_build", chain: "builds", reward: cr(5), check: s => s.stats.builds >= 1 },
-  { id: "builds_100", chain: "builds", reward: cr(25), check: s => s.stats.builds >= 100 },
-  { id: "builds_1k", chain: "builds", reward: cr(150), check: s => s.stats.builds >= 1e3 },
-  { id: "builds_10k", chain: "builds", reward: gains(2), check: s => s.stats.builds >= 1e4 },
-  { id: "builds_100k", chain: "builds", reward: speed(2), check: s => s.stats.builds >= 1e5 },
-  { id: "builds_1m", chain: "builds", reward: gains(3), check: s => s.stats.builds >= 1e6 },
-  { id: "builds_10m", chain: "builds", reward: speed(3), check: s => s.stats.builds >= 1e7 },
+  tier("first_build", "builds", "builds", 1, cr(5)),
+  tier("builds_100", "builds", "builds", 100, cr(25)),
+  tier("builds_1k", "builds", "builds", 1e3, cr(150)),
+  tier("builds_10k", "builds", "builds", 1e4, gains(2)),
+  tier("builds_100k", "builds", "builds", 1e5, speed(2)),
+  tier("builds_1m", "builds", "builds", 1e6, gains(3)),
+  tier("builds_10m", "builds", "builds", 1e7, speed(3)),
   // Failures (one-off, for the lore)
-  { id: "first_fail", chain: "misc", reward: cr(5), check: s => s.stats.fails >= 1 },
+  tier("first_fail", "misc", "fails", 1, cr(5)),
   // Credits earned (all time)
-  { id: "credits_1k", chain: "credits", reward: cr(100), check: s => earned(s, 1e3) },
-  { id: "credits_10k", chain: "credits", reward: cr(1000), check: s => earned(s, 1e4) },
-  { id: "credits_1m", chain: "credits", reward: gains(2), check: s => earned(s, 1e6) },
-  { id: "credits_1b", chain: "credits", reward: gains(3), check: s => earned(s, 1e9) },
-  { id: "credits_1t", chain: "credits", reward: gains(5), check: s => earned(s, 1e12) },
-  { id: "credits_1qa", chain: "credits", reward: gains(5), check: s => earned(s, 1e15) },
+  tier("credits_1k", "credits", "earned", 1e3, cr(100)),
+  tier("credits_10k", "credits", "earned", 1e4, cr(1000)),
+  tier("credits_1m", "credits", "earned", 1e6, gains(2)),
+  tier("credits_1b", "credits", "earned", 1e9, gains(3)),
+  tier("credits_1t", "credits", "earned", 1e12, gains(5)),
+  tier("credits_1qa", "credits", "earned", 1e15, gains(5)),
   // Perks
-  { id: "ci_cd", chain: "perks", reward: cr(10), check: s => s.perks.ci_cd.unlocked },
-  { id: "auto_scaling", chain: "perks", reward: cr(300), check: s => s.perks.auto_scaling.unlocked },
-  // Hardware
-  { id: "cpu_10", chain: "cpu", reward: cr(25), check: s => s.hw.cpu >= 10 },
-  { id: "cpu_25", chain: "cpu", reward: cr(300), check: s => s.hw.cpu >= 25 },
-  { id: "cpu_50", chain: "cpu", reward: speed(2), check: s => s.hw.cpu >= 50 },
-  { id: "cpu_100", chain: "cpu", reward: speed(3), check: s => s.hw.cpu >= 100 },
-  { id: "cpu_250", chain: "cpu", reward: speed(5), check: s => s.hw.cpu >= 250 },
-  { id: "ram_25", chain: "ram", reward: cr(200), check: s => s.hw.ram >= 25 },
-  { id: "ram_50", chain: "ram", reward: gains(2), check: s => s.hw.ram >= 50 },
-  { id: "ram_100", chain: "ram", reward: gains(3), check: s => s.hw.ram >= 100 },
-  { id: "ram_250", chain: "ram", reward: gains(5), check: s => s.hw.ram >= 250 },
-  { id: "disk_25", chain: "disk", reward: cr(200), check: s => s.hw.disk >= 25 },
-  { id: "disk_50", chain: "disk", reward: fail(2), check: s => s.hw.disk >= 50 },
-  { id: "disk_100", chain: "disk", reward: fail(3), check: s => s.hw.disk >= 100 },
-  { id: "disk_250", chain: "disk", reward: fail(5), check: s => s.hw.disk >= 250 },
-  { id: "jobs_2", chain: "jobs", reward: cr(50), check: s => s.hw.jobs >= 2 },
-  { id: "jobs_4", chain: "jobs", reward: cr(500), check: s => s.hw.jobs >= 4 },
-  { id: "jobs_8", chain: "jobs", reward: speed(2), check: s => s.hw.jobs >= 8 },
-  { id: "jobs_16", chain: "jobs", reward: speed(3), check: s => s.hw.jobs >= 16 },
+  tier("ci_cd", "perk_ci", "perk_ci", 1, cr(10)),
+  tier("auto_scaling", "perk_as", "perk_as", 1, cr(300)),
+  // Hardware (within one run)
+  tier("cpu_10", "cpu", "cpu", 10, cr(25)),
+  tier("cpu_25", "cpu", "cpu", 25, cr(300)),
+  tier("cpu_50", "cpu", "cpu", 50, speed(2)),
+  tier("cpu_100", "cpu", "cpu", 100, speed(3)),
+  tier("cpu_250", "cpu", "cpu", 250, speed(5)),
+  tier("ram_25", "ram", "ram", 25, cr(200)),
+  tier("ram_50", "ram", "ram", 50, gains(2)),
+  tier("ram_100", "ram", "ram", 100, gains(3)),
+  tier("ram_250", "ram", "ram", 250, gains(5)),
+  tier("disk_25", "disk", "disk", 25, cr(200)),
+  tier("disk_50", "disk", "disk", 50, fail(2)),
+  tier("disk_100", "disk", "disk", 100, fail(3)),
+  tier("disk_250", "disk", "disk", 250, fail(5)),
+  tier("jobs_2", "jobs", "jobs", 2, cr(50)),
+  tier("jobs_4", "jobs", "jobs", 4, cr(500)),
+  tier("jobs_8", "jobs", "jobs", 8, speed(2)),
+  tier("jobs_16", "jobs", "jobs", 16, speed(3)),
   // Success streak
-  { id: "streak_25", chain: "streak", reward: cr(200), check: s => s.stats.bestStreak >= 25 },
-  { id: "streak_100", chain: "streak", reward: gains(2), check: s => s.stats.bestStreak >= 100 },
-  { id: "streak_500", chain: "streak", reward: fail(3), check: s => s.stats.bestStreak >= 500 },
+  tier("streak_25", "streak", "streak", 25, cr(200)),
+  tier("streak_100", "streak", "streak", 100, gains(2)),
+  tier("streak_500", "streak", "streak", 500, fail(3)),
   // Releases
-  { id: "release_1", chain: "releases", reveal: "stars", reward: gains(2), check: s => s.releases >= 1 },
-  { id: "release_5", chain: "releases", reveal: "stars", reward: stars(2), check: s => s.releases >= 5 },
-  { id: "release_10", chain: "releases", reveal: "stars", reward: stars(3), check: s => s.releases >= 10 },
-  { id: "release_25", chain: "releases", reveal: "stars", reward: gains(5), check: s => s.releases >= 25 },
-  { id: "release_50", chain: "releases", reveal: "stars", reward: stars(5), check: s => s.releases >= 50 },
+  tier("release_1", "releases", "releases", 1, gains(2), "stars"),
+  tier("release_5", "releases", "releases", 5, stars(2), "stars"),
+  tier("release_10", "releases", "releases", 10, stars(3), "stars"),
+  tier("release_25", "releases", "releases", 25, gains(5), "stars"),
+  tier("release_50", "releases", "releases", 50, stars(5), "stars"),
   // Stars earned
-  { id: "stars_10", chain: "stars", reveal: "stars", reward: gains(2), check: s => s.lifetimeStars.gte(10) },
-  { id: "stars_100", chain: "stars", reveal: "stars", reward: stars(3), check: s => s.lifetimeStars.gte(100) },
-  { id: "stars_1k", chain: "stars", reveal: "stars", reward: gains(5), check: s => s.lifetimeStars.gte(1e3) },
-  { id: "stars_10k", chain: "stars", reveal: "stars", reward: stars(5), check: s => s.lifetimeStars.gte(1e4) },
+  tier("stars_10", "stars", "stars", 10, gains(2), "stars"),
+  tier("stars_100", "stars", "stars", 100, stars(3), "stars"),
+  tier("stars_1k", "stars", "stars", 1e3, gains(5), "stars"),
+  tier("stars_10k", "stars", "stars", 1e4, stars(5), "stars"),
   // Tree & optimizations
-  { id: "tree_full", chain: "tree", reveal: "stars", reward: gains(5), check: s => TALENTS.every(t => s.talents.includes(t.id)) },
-  { id: "opt_25", chain: "opt", reveal: "stars", reward: speed(3), check: s => optLevels(s) >= 25 },
-  { id: "opt_100", chain: "opt", reveal: "stars", reward: speed(5), check: s => optLevels(s) >= 100 },
+  tier("tree_full", "tree", "tree", TALENTS.length, gains(5), "stars"),
+  tier("opt_25", "opt", "opt", 25, speed(3), "stars"),
+  tier("opt_100", "opt", "opt", 100, speed(5), "stars"),
   // Challenges
-  { id: "challenge_1", chain: "challenges", reveal: "challenges", reward: gains(3), check: s => s.challengesDone.length >= 1 },
-  { id: "challenge_all", chain: "challenges", reveal: "challenges", reward: stars(5), check: s => CHALLENGES.every(c => s.challengesDone.includes(c.id)) },
+  tier("challenge_1", "challenges", "challenges", 1, gains(3), "challenges"),
+  tier("challenge_all", "challenges", "challenges", CHALLENGES.length, stars(5), "challenges"),
   // Secrets, granted by terminal commands or actions
   { id: "interrupt", chain: "secret", secret: true, reward: gains(1), check: s => s.stats.interrupts >= 1 },
   { id: "sudo", chain: "secret", secret: true, reward: gains(1), check: () => false },

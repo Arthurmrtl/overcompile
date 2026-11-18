@@ -39,11 +39,11 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## Content (v0.2.5)
+## Content (v0.2.6)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (1 000 cr, buys the cheapest upgrade every 2 s)
-- Prestige layer 1 — Release: ⭐ Stars, lifetime bonus; each version needs more credits per star
+- Prestige layer 1 — Release: ⭐ Stars, lifetime bonus; each version needs more credits per star; generous early star curve (2★ at ×2, 3★ at ×4…)
 - Release tree (14 talents), including the Auto-Scaling branch (`as` permanent, `fast` 4×/s,
   `ctrl` per-resource switches, `-j` job slots) and `off` (offline progress)
 - Optimizations: infinite star upgrades (rewards, build speed, warm start, offline efficiency/duration)
@@ -53,7 +53,7 @@ scripts/sim.ts     pacing simulation
   permanent bonus
 - Progressive reveal: stars, the tree (with fog of war), optimizations and challenges — and their terminal commands — appear as they are unlocked
 - Terminal: a short build stream + live status line on top, a readable journal below (commands, events, one summary per minute, income records); 3 log levels
-- 54 achievements in tiered chains, never reset; they double as the objectives panel (next tier of each chain). Each pays a reward claimed whenever you want (`claim`): credits early, permanent bonuses later (+x% rewards / speed / stars, −x% failures)
+- 54 achievements in tiered chains, never reset; the Achievements tab shows rewards to claim, then the next tier of each chain with its progress. Each pays a reward claimed whenever you want (`claim`): credits early, permanent bonuses later (+x% rewards / speed / stars, −x% failures)
 - Stats, EN/FR, standard/scientific notation
 - v0.1 saves are migrated (old autobuyers become the Auto-Scaling talents)
 
