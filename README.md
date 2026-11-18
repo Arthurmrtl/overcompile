@@ -20,6 +20,15 @@ npm run sim       # headless balance simulation (hours as arg: npm run sim -- 8;
 (GitHub Pages, Nginx, …). Saves live in `localStorage` (`overcompile-save`), with export/import
 in the settings.
 
+## Contributing / deploying
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): setup, workflow, where things live, balance rules
+- [deploy/README.md](deploy/README.md): Docker image, GitHub Actions, home hosting behind Nginx Proxy Manager
+
+```bash
+docker build -t overcompile . && docker run --rm -p 8080:80 overcompile   # → http://localhost:8080
+```
+
 ## Project layout
 
 ```

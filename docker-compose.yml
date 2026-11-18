@@ -1,0 +1,20 @@
+# Home deployment. Replace OWNER by your GitHub user name (lower case).
+# Behind Nginx Proxy Manager: point a proxy host to http://<this machine>:8080
+services:
+  overcompile:
+    image: ghcr.io/OWNER/overcompile:latest
+    container_name: overcompile
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Optional: pulls the new image automatically after every push on main
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower-overcompile
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable --cleanup --interval 300
