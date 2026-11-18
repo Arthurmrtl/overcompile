@@ -3,7 +3,7 @@ import { ACHIEVEMENTS } from "./core/achievements";
 import { CHALLENGES } from "./core/challenges";
 import {
   HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
-  maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier,
+  maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { UPGRADES, UPGRADE_BY_ID, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { type HwKey, HW_KEYS, PERK_KEYS, type PerkKey, exportSave, importSave } from "./core/state";
@@ -69,7 +69,7 @@ export function printStatus(c: GameCtx) {
   c.term.println(["[RESOURCES]", "c-bold"]);
   for (const k of HW_KEYS) p(t(`hw.${k}`), `${s.hw[k]} ${hwUnit(k)}`);
   p(t("credits").toUpperCase(), fmt(s.credits));
-  p(t("rel.stars"), fmt(s.stars));
+  if (starsRevealed(s)) p(t("rel.stars"), fmt(s.stars));
   c.term.println("");
   c.term.println(["[PERKS]", "c-bold"]);
   for (const k of PERK_KEYS) p(t(`perk.${k}`), perkState(c.engine, k));
@@ -113,15 +113,15 @@ export function createCommands(c: GameCtx) {
       const rows: [string, string][] = [
         ["compile", t("help.compile")], ["stop", t("help.stop")], ["buy", t("help.buy")],
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
-        ["status", t("help.status")], ["release", t("help.release")], ["tree", t("help.tree")],
+        ["status", t("help.status")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
         ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
       ];
-      for (const [cmd, desc] of rows) say([pad(cmd, 14), "c-green"], ["<== ", "c-dim"], desc);
+      for (const [cmd, desc] of rows) if (available(cmd)) say([pad(cmd, 14), "c-green"], ["<== ", "c-dim"], desc);
     },
     guide() {
-      for (const l of t("guide").split("\n")) say(l);
+      for (const l of t(starsRevealed(e().s) ? "guide" : "guide.pre").split("\n")) say(l);
     },
     status() {
       printStatus(c);
@@ -268,6 +268,12 @@ export function createCommands(c: GameCtx) {
       say(["[RELEASE TREE]", "c-bold"], `  ⭐ ${fmt(en.s.stars)}`);
       say("");
       for (const tal of TALENTS) {
+        const vis = talentVisibility(en.s, tal.id, tal.req);
+        if (vis === "hidden") continue;
+        if (vis === "fog") {
+          say(["[?]", "c-dim"], " ", [pad("???", 17), "c-dim"], pad("???", 24), [`${tal.cost}⭐`, "c-dim"]);
+          continue;
+        }
         const owned = has(en.s, tal.id);
         const avail = en.canBuyTalent(tal.id);
         const mark: Seg = owned ? ["[x]", "c-green"] : avail.ok ? ["[+]", "c-amber"] : ["[ ]", "c-dim"];
@@ -278,7 +284,7 @@ export function createCommands(c: GameCtx) {
     talent(args) {
       const tal = resolveTalent(args[0]);
       if (!args[0]) return void say(t("term.usage_talent"));
-      if (!tal) return void say(t("term.talent_unknown"));
+      if (!tal || talentVisibility(e().s, tal.id, tal.req) === "hidden") return void say(t("term.talent_unknown"));
       const r = e().buyTalent(tal.id);
       if (r.ok) say(STAR, " " + t("term.talent_ok", { t: t(`t.${tal.id}`) }));
       else if (r.reason === "owned") say(t("term.talent_owned"));
@@ -290,7 +296,9 @@ export function createCommands(c: GameCtx) {
       say(["[ACHIEVEMENTS]", "c-bold"], "  " + t("ach.count", { n: s.achievements.length, total: ACHIEVEMENTS.length, x: (1 + 0.02 * s.achievements.length).toFixed(2) }));
       for (const a of ACHIEVEMENTS) {
         const got = s.achievements.includes(a.id);
-        if (!got && a.secret) { say(["  🔒 ???", "c-dim"]); continue; }
+        const spoils = (["release_10", "stars_100", "tree_full", "opt_25"].includes(a.id) && !starsRevealed(s))
+          || (["challenge_1", "challenge_all"].includes(a.id) && !e().challengesUnlocked);
+        if (!got && (a.secret || spoils)) { say(["  🔒 ???", "c-dim"]); continue; }
         say(got ? ["  🏆 ", ""] : ["  🔒 ", "c-dim"], [pad(t(`a.${a.id}`), 28), got ? "c-amber" : "c-dim"], [t(`a.${a.id}.desc`), "c-dim"]);
       }
     },
@@ -383,12 +391,20 @@ export function createCommands(c: GameCtx) {
     prestige: "release", opt: "optimize", optimise: "optimize", ch: "challenge", ship: "release", quit: "exit", shutdown: "exit", cls: "clear", "?": "help",
   };
 
+  /** Commands appear as the game reveals their feature. */
+  function available(name: string) {
+    const en = e();
+    if (["tree", "talent", "optimize"].includes(name)) return starsRevealed(en.s);
+    if (name === "challenge") return en.challengesUnlocked;
+    return true;
+  }
+
   function run(line: string, echo = false) {
     if (echo) term.echo(line);
     const parts = line.trim().split(/\s+/).filter(Boolean);
     if (!parts.length) return;
     const name = aliases[parts[0].toLowerCase()] ?? parts[0].toLowerCase();
-    const fn = commands[name];
+    const fn = available(name) ? commands[name] : undefined;
     if (!fn) {
       say(t("term.invalid", { c: parts[0] }));
       say([t("term.invalid2"), "c-dim"]);
@@ -407,8 +423,8 @@ export function createCommands(c: GameCtx) {
 
   function complete(line: string): string[] {
     const parts = line.trimStart().split(/\s+/);
-    if (parts.length <= 1) return PUBLIC.filter(cmd => cmd.startsWith(parts[0] ?? ""));
-    const opts = ARGS[parts[0]];
+    if (parts.length <= 1) return PUBLIC.filter(cmd => available(cmd) && cmd.startsWith(parts[0] ?? ""));
+    const opts = available(parts[0]) ? ARGS[parts[0]] : undefined;
     if (!opts || parts.length > 2) return [];
     return opts.filter(o => o.startsWith(parts[1])).map(o => `${parts[0]} ${o}`);
   }

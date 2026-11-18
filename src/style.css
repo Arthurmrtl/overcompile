@@ -313,3 +313,14 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .ch-start:disabled { opacity: .4; }
 .ch-locked { color: var(--dim); padding: 16px 0; text-align: center; }
 .hw.maxed .hw-price { color: var(--dim); }
+
+/* ---------- v0.2.1: progressive reveal ---------- */
+[data-reveal][hidden] { display: none !important; }
+.teaser { margin: 0 0 12px; padding: 10px 12px; border: 1px dashed var(--border-2); border-radius: 6px; color: var(--fg); }
+.badge.new { color: var(--bg); background: var(--green); border-radius: 3px; padding: 0 4px; font-weight: 700; }
+.badge.new[hidden] { display: none; }
+.node.hidden { display: none; }
+.node.fog { opacity: .55; border-style: dashed; }
+.node.fog .node-icon { color: var(--dim); }
+.node.fog .node-cost { color: var(--dim); }
+.tree-lines line.hidden { display: none; }

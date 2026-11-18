@@ -5,9 +5,9 @@ import { ACHIEVEMENTS } from "./core/achievements";
 import {
   HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
   failProbability, has, maxAffordable, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
-  achievementMultiplier, reward, rewardMultiplier, starMultiplier, starsOnRelease,
+  achievementMultiplier, reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
 } from "./core/formulas";
-import { CHALLENGES } from "./core/challenges";
+import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./core/challenges";
 import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
@@ -16,7 +16,7 @@ import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, Terminal } from "./ui/terminal";
 
-const GAME_VERSION = "0.2.0";
+const GAME_VERSION = "0.2.1";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -89,7 +89,7 @@ function buildLayout() {
     <div class="brand"><span class="logo">overcompile</span><span class="cursor">▌</span><span class="ver">v${GAME_VERSION}</span></div>
     <div class="hud">
       <div class="hud-credits"><div class="big" data-r="credits">0</div><div class="sub"><span data-r="rate">0</span> ${t("credits")}${t("per_sec")}</div></div>
-      <div class="hud-stars" title="${t("rel.stars")}"><span class="star">⭐</span><span data-r="stars">0</span></div>
+      <div class="hud-stars" data-reveal="stars" title="${t("rel.stars")}"><span class="star">⭐</span><span data-r="stars">0</span></div>
     </div>
     <div class="actions">
       <button class="icon-btn" data-a="save" title="${t("save")}">💾</button>
@@ -139,16 +139,17 @@ function buildLayout() {
     <section class="col col-side">
       <div class="tabs" role="tablist">
         <button data-tab="release">${t("tab.release")}</button>
-        <button data-tab="challenges">${t("tab.challenges")}</button>
+        <button data-tab="challenges" data-reveal="challenges">${t("tab.challenges")} <span class="badge new" data-r="chNew">${t("rev.new")}</span></button>
         <button data-tab="achievements">${t("tab.achievements")} <span class="badge" data-r="achBadge"></span></button>
         <button data-tab="stats">${t("tab.stats")}</button>
       </div>
       <div class="card tab-body" data-body="release">
-        <div class="rel-head">
+        <p class="teaser" data-reveal="pre">${t("rev.teaser")}</p>
+        <div class="rel-head" data-reveal="stars">
           <div class="rel-stars"><span class="star">⭐</span><span data-r="relStars"></span><span class="lbl">${t("rel.stars")}</span></div>
           <div class="rel-bonus" data-r="relBonus"></div>
         </div>
-        <p class="muted small">${t("rel.desc")}</p>
+        <p class="muted small" data-reveal="stars">${t("rel.desc")}</p>
         <button class="release-btn" data-r="relBtn"></button>
         <div class="progress"><div class="fill" data-r="relProg"></div></div>
         <div class="muted small" data-r="relHint"></div>
@@ -156,12 +157,14 @@ function buildLayout() {
           <label class="switch"><input type="checkbox" data-r="botOn"><span>${t("rel.bot")}</span></label>
           <label class="small">${t("rel.bot.threshold")} <input type="number" min="1" step="1" data-r="botThr"> ⭐</label>
         </div>
-        <h3>${t("rel.tree")}</h3>
-        <div class="tree" data-r="tree"></div>
-        <div class="tree-detail" data-r="treeDetail"></div>
-        <h3>${t("opt.title")}</h3>
-        <p class="muted small">${t("opt.desc")}</p>
-        <div class="opt-list" data-r="opts"></div>
+        <div data-reveal="stars">
+          <h3>${t("rel.tree")}</h3>
+          <div class="tree" data-r="tree"></div>
+          <div class="tree-detail" data-r="treeDetail"></div>
+          <h3>${t("opt.title")}</h3>
+          <p class="muted small">${t("opt.desc")}</p>
+          <div class="opt-list" data-r="opts"></div>
+        </div>
       </div>
       <div class="card tab-body" data-body="challenges">
         <p class="muted small">${t("ch.desc")}</p>
@@ -293,7 +296,11 @@ function bindLayout() {
       render();
     }));
   app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b =>
-    b.addEventListener("click", () => { sideTab = b.dataset.tab as typeof sideTab; render(); }));
+    b.addEventListener("click", () => {
+      sideTab = b.dataset.tab as typeof sideTab;
+      if (sideTab === "challenges" && !engine.s.seen.includes("challenges")) engine.s.seen.push("challenges");
+      render();
+    }));
   app.querySelectorAll<HTMLButtonElement>("[data-m]").forEach(b =>
     b.addEventListener("click", () => {
       mobilePanel = b.dataset.m as typeof mobilePanel;
@@ -384,6 +391,17 @@ function render() {
   renderSlots(T);
   renderChallengeBanner();
 
+  // Progressive reveal
+  const revealed = { stars: starsRevealed(s), pre: !starsRevealed(s), challenges: engine.challengesUnlocked };
+  app.querySelectorAll<HTMLElement>("[data-reveal]").forEach(el => {
+    const show = revealed[el.dataset.reveal as keyof typeof revealed];
+    if (el.hidden === show) el.hidden = !show;
+  });
+  const chNew = $("[data-r=chNew]");
+  const showNew = engine.challengesUnlocked && !s.seen.includes("challenges");
+  if (chNew.hidden === showNew) chNew.hidden = !showNew;
+  if (sideTab === "challenges" && !engine.challengesUnlocked) sideTab = "release";
+
   // Side tabs
   app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b => toggleClass(b, "on", b.dataset.tab === sideTab));
   app.querySelectorAll<HTMLElement>("[data-body]").forEach(b => toggleClass(b, "on", b.dataset.body === sideTab));
@@ -433,7 +451,10 @@ function renderRelease() {
   const btn = $<HTMLButtonElement>("[data-r=relBtn]");
   const can = gain.gte(1);
   btn.disabled = !can;
-  setText(btn, s.challenge ? `🔒 ${t("rel.challenge")}` : can ? t("rel.button", { v: version(engine), n: fmt(gain) }) : `🔒 ${t("rel.title")}`);
+  const firstRelease = !starsRevealed(s);
+  setText(btn, s.challenge ? `🔒 ${t("rel.challenge")}`
+    : can ? (firstRelease ? t("rev.button") : t("rel.button", { v: version(engine), n: fmt(gain) }))
+    : `🔒 ${t("rel.title")}`);
   toggleClass(btn, "ready", can);
   let prog: number;
   const base = releaseBase(s);
@@ -447,7 +468,7 @@ function renderRelease() {
     const next = nextStarAt(s);
     const prevNeeded = earnedForStars(s, gain);
     prog = s.runEarned.sub(prevNeeded).div(next.sub(prevNeeded).max(1)).toNumber();
-    setText($("[data-r=relHint]"), t("rel.next", { x: fmt(next) }));
+    setText($("[data-r=relHint]"), firstRelease ? t("rev.ready") : t("rel.next", { x: fmt(next) }));
   }
   $("[data-r=relProg]").style.width = `${Math.max(0, Math.min(1, prog)) * 100}%`;
 
@@ -463,8 +484,14 @@ function renderRelease() {
   const key = `${s.talents.join(",")}|${s.stars.toString()}|${selectedTalent}`;
   if (key === lastTalentKey) return;
   lastTalentKey = key;
+  const vis = Object.fromEntries(TALENTS.map(x => [x.id, talentVisibility(s, x.id, x.req)]));
+  if (vis[selectedTalent] === "hidden") selectedTalent = "warm_cache";
   for (const tal of TALENTS) {
     const node = $(`[data-t=${tal.id}]`);
+    toggleClass(node, "hidden", vis[tal.id] === "hidden");
+    toggleClass(node, "fog", vis[tal.id] === "fog");
+    setText($(".node-icon", node), vis[tal.id] === "fog" ? "???" : tal.icon);
+    node.title = vis[tal.id] === "shown" ? t(`t.${tal.id}`) : "???";
     const owned = has(s, tal.id);
     const reqOk = tal.req.every(r => has(s, r));
     toggleClass(node, "owned", owned);
@@ -472,8 +499,10 @@ function renderRelease() {
     toggleClass(node, "afford", !owned && reqOk && s.stars.gte(tal.cost));
     toggleClass(node, "sel", selectedTalent === tal.id);
   }
-  app.querySelectorAll<SVGLineElement>(".tree-lines line").forEach(l =>
-    l.classList.toggle("lit", has(s, l.dataset.from!) && has(s, l.dataset.to!)));
+  app.querySelectorAll<SVGLineElement>(".tree-lines line").forEach(l => {
+    l.classList.toggle("lit", has(s, l.dataset.from!) && has(s, l.dataset.to!));
+    l.classList.toggle("hidden", vis[l.dataset.from!] !== "shown" || vis[l.dataset.to!] === "hidden");
+  });
   const tal = TALENT_BY_ID[selectedTalent];
   const owned = has(s, tal.id);
   const check = engine.canBuyTalent(tal.id);
@@ -481,6 +510,14 @@ function renderRelease() {
   const learn = h("button", { class: "learn-btn" + (check.ok ? " afford" : "") }, owned ? `✓ ${t("tree.owned")}` : `${t("buy")} · ${tal.cost} ⭐`);
   if (owned || !check.ok) learn.setAttribute("disabled", "");
   learn.addEventListener("click", () => cmd.run(`talent ${tal.id}`, true));
+  if (vis[tal.id] === "fog") {
+    detail.replaceChildren(
+      h("div", { class: "td-name" }, h("span", { class: "td-tag" }, "[???]"), ` ${t("tree.fog")}`),
+      h("div", { class: "td-desc muted" }, t("tree.fog.desc")),
+      h("div", { class: "td-req muted small" }, `${tal.cost} ★`),
+    );
+    return;
+  }
   detail.replaceChildren(
     h("div", { class: "td-name" }, h("span", { class: "td-tag" }, `[${tal.icon}]`), ` ${t(`t.${tal.id}`)}`),
     h("div", { class: "td-desc" }, t(`t.${tal.id}.desc`)),
@@ -572,16 +609,24 @@ function confirmChallenge(id: string) {
   );
 }
 
+/** Achievements that would reveal a feature the player hasn't discovered yet. */
+function achievementSpoils(id: string, en: Engine) {
+  if (["release_10", "stars_100", "tree_full", "opt_25"].includes(id)) return !starsRevealed(en.s);
+  if (["challenge_1", "challenge_all"].includes(id)) return !en.challengesUnlocked;
+  return false;
+}
+
 function renderAchievements() {
   const s = engine.s;
   const n = s.achievements.length;
   setText($("[data-r=achBadge]"), `${n}/${ACHIEVEMENTS.length}`);
-  if (n === lastAchCount) return;
-  lastAchCount = n;
+  const achKey = n * 100 + (starsRevealed(s) ? 10 : 0) + (engine.challengesUnlocked ? 1 : 0);
+  if (achKey === lastAchCount) return;
+  lastAchCount = achKey;
   setText($("[data-r=achHead]"), t("ach.count", { n, total: ACHIEVEMENTS.length, x: achievementMultiplier(s).toFixed(2) }));
   $("[data-r=ach]").replaceChildren(...ACHIEVEMENTS.map(a => {
     const got = s.achievements.includes(a.id);
-    const hidden = a.secret && !got;
+    const hidden = (a.secret || achievementSpoils(a.id, engine)) && !got;
     return h("div", { class: "ach" + (got ? " got" : "") , title: hidden ? t("ach.secret") : t(`a.${a.id}.desc`) },
       h("div", { class: "ach-icon" }, got ? "🏆" : "🔒"),
       h("div", { class: "ach-name" }, hidden ? "???" : t(`a.${a.id}`)),
@@ -788,6 +833,14 @@ engine.on((e: GameEvent) => {
       if (e.auto) term.println(STAR, " " + t("term.release_auto", { v, n: fmt(e.stars) }));
       else term.println(STAR, " " + t("term.release_ok", { v, n: fmt(e.stars), b: fmt(starMultiplier(engine.s)) }));
       toast("🚀 Release", `v${v} · +${fmt(e.stars)} ⭐`);
+      if (engine.s.releases === 1) {
+        term.println(STAR, " " + t("rev.first"));
+        term.println(["[ NEW ]", "c-green"], " " + t("rev.cmds", { c: "tree, talent, optimize" }));
+      }
+      if (engine.s.releases === CHALLENGES_UNLOCK_AT) {
+        term.println(["[ NEW ]", "c-green"], " " + t("rev.cmds", { c: "challenge" }));
+        toast(t("rev.new"), t("tab.challenges"));
+      }
       engine.save();
       break;
     }

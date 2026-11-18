@@ -33,6 +33,8 @@ export interface GameState {
   /** Active challenge id, or null. */
   challenge: string | null;
   challengesDone: string[];
+  /** Features the player has already discovered (for NEW badges). */
+  seen: string[];
   achievements: string[];
   stats: {
     builds: number;
@@ -80,6 +82,7 @@ export function newState(): GameState {
     upgrades: {},
     challenge: null,
     challengesDone: [],
+    seen: [],
     achievements: [],
     stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null },
     settings: { lang: browserLang(), notation: "standard", verbose: true, buyAmount: 1 },
@@ -115,6 +118,7 @@ export function deserialize(json: string): GameState {
   for (const f of DECIMAL_FIELDS) s[f] = new Decimal(raw[f] ?? 0);
   s.upgrades = { ...(raw.upgrades ?? {}) };
   s.challengesDone = [...(raw.challengesDone ?? [])];
+  s.seen = [...(raw.seen ?? [])];
   migrate(s, raw.version ?? 1);
   // Slots must match the number of jobs
   s.slots = Array.from({ length: s.hw.jobs }, (_, i) => raw.slots?.[i] ?? { progress: 0, running: false });

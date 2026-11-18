@@ -1,6 +1,8 @@
 import Decimal from "break_eternity.js";
 import type { GameState, HwKey } from "./state";
 import { CHALLENGES } from "./challenges";
+import { TALENTS } from "./talents";
+const TALENT_REQ: Record<string, string[]> = Object.fromEntries(TALENTS.map(t => [t.id, t.req]));
 import { offlineCapHours, offlineEff, optRewardMult, optSpeedMult } from "./upgrades";
 
 /** The player owns this talent (tree display, prerequisites). */
@@ -9,6 +11,16 @@ export const has = (s: GameState, talent: string) => s.talents.includes(talent);
 export const on = (s: GameState, talent: string) => s.challenge !== "no_cache" && s.talents.includes(talent);
 export const inChallenge = (s: GameState, id: string) => s.challenge === id;
 export const challengeDone = (s: GameState, id: string) => s.challengesDone.includes(id);
+
+/* ---------- Progressive reveal ---------- */
+/** Stars, the release tree and optimizations stay hidden until the first release. */
+export const starsRevealed = (s: GameState) => s.releases > 0 || s.lifetimeStars.gt(0);
+/** Tree fog of war: "shown" = owned or buyable; "fog" = next tier, shown as ???; "hidden" = further away. */
+export function talentVisibility(s: GameState, id: string, req: string[]): "shown" | "fog" | "hidden" {
+  if (s.talents.includes(id) || req.every(r => s.talents.includes(r))) return "shown";
+  const reqShown = (r: string) => s.talents.includes(r) || (TALENT_REQ[r] ?? []).every(x => s.talents.includes(x));
+  return req.some(reqShown) ? "fog" : "hidden";
+}
 
 /* ---------- Hardware prices ---------- */
 export const HW: Record<HwKey, { base: number; ratio: number; max?: number }> = {
