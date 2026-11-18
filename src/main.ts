@@ -1,0 +1,769 @@
+import "./style.css";
+import Decimal from "break_eternity.js";
+import { Engine, type GameEvent } from "./core/engine";
+import { ACHIEVEMENTS } from "./core/achievements";
+import {
+  HW, PERK_PRICE, bulkPrice, buildTime, expectedRate, failProbability, has, maxAffordable, nextStarAt,
+  achievementMultiplier, reward, rewardMultiplier, starMultiplier, starsOnRelease, RELEASE_BASE,
+} from "./core/formulas";
+import { HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
+import { TALENTS, TALENT_BY_ID } from "./core/talents";
+import { LOGO, createCommands, fakeCargoLine, version } from "./commands";
+import { fmt, fmtInt, fmtTime, setNotation } from "./format";
+import { setLang, t } from "./i18n";
+import { AUTO, FAIL, INFO, OK, STAR, Terminal } from "./ui/terminal";
+
+const GAME_VERSION = "0.1.0";
+
+/* ================= Boot ================= */
+const engine = Engine.load();
+setLang(engine.s.settings.lang);
+setNotation(engine.s.settings.notation);
+
+let halted = false;
+const term = new Terminal({
+  onCommand: line => {
+    if (halted) return void boot();
+    cmd.run(line);
+  },
+  onCtrlC: () => {
+    if (halted) return;
+    engine.interrupt();
+  },
+  complete: line => cmd.complete(line),
+});
+
+const ctx = {
+  engine,
+  term,
+  relayout: () => buildLayout(),
+  openSettings: () => openSettings(),
+  halt: () => void halt(),
+  save: () => engine.save(),
+};
+const cmd = createCommands(ctx);
+// Keep command output readable: pause the fake build log for a moment after each command
+let quietUntil = 0;
+const rawRun = cmd.run;
+cmd.run = (line: string, echo = false) => {
+  quietUntil = performance.now() + 5000;
+  rawRun(line, echo);
+};
+
+/* ================= DOM helpers ================= */
+const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector<T>(sel)!;
+function h(tag: string, attrs: Record<string, string> = {}, ...children: (Node | string)[]) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") el.className = v;
+    else el.setAttribute(k, v);
+  }
+  el.append(...children);
+  return el;
+}
+function setText(el: Element | null, text: string) {
+  if (el && el.textContent !== text) el.textContent = text;
+}
+function toggleClass(el: Element | null, cls: string, on: boolean) {
+  if (el && el.classList.contains(cls) !== on) el.classList.toggle(cls, on);
+}
+
+/* ================= Layout ================= */
+const app = document.getElementById("app")!;
+let selectedTalent: string = "warm_cache";
+let sideTab: "release" | "achievements" | "stats" = "release";
+let mobilePanel: "center" | "shop" | "side" = "center";
+let lastAchCount = -1;
+let lastSlotCount = -1;
+let lastTalentKey = "";
+
+function buildLayout() {
+  document.title = "overcompile";
+  app.innerHTML = `
+  <header class="top">
+    <div class="brand"><span class="logo">overcompile</span><span class="cursor">▌</span><span class="ver">v${GAME_VERSION}</span></div>
+    <div class="hud">
+      <div class="hud-credits"><div class="big" data-r="credits">0</div><div class="sub"><span data-r="rate">0</span> ${t("credits")}${t("per_sec")}</div></div>
+      <div class="hud-stars" title="${t("rel.stars")}"><span class="star">⭐</span><span data-r="stars">0</span></div>
+    </div>
+    <div class="actions">
+      <button class="icon-btn" data-a="save" title="${t("save")}">💾</button>
+      <button class="icon-btn" data-a="settings" title="${t("settings")}">⚙</button>
+    </div>
+  </header>
+  <main class="layout" data-mobile="${mobilePanel}">
+    <section class="col col-shop">
+      <div class="card">
+        <div class="card-h"><span>${t("panel.hardware")}</span>
+          <div class="seg" role="group" aria-label="${t("buy.amount")}">
+            <button data-amount="1">×1</button><button data-amount="10">×10</button><button data-amount="max">max</button>
+          </div>
+        </div>
+        <div class="hw-list" data-r="hw"></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><span>${t("panel.perks")}</span></div>
+        <div class="perk-list" data-r="perks"></div>
+      </div>
+    </section>
+    <section class="col col-center">
+      <div class="card pipeline">
+        <div class="card-h">
+          <span>${t("panel.pipeline")} <span class="pipe-state" data-r="pipeState"></span></span>
+          <button class="run-btn" data-r="runBtn"></button>
+        </div>
+        <div class="params">
+          <div><span class="k">${t("pipe.build_time")}</span><span class="v" data-r="pTime"></span></div>
+          <div><span class="k">${t("pipe.reward")}</span><span class="v" data-r="pReward"></span></div>
+          <div><span class="k">${t("pipe.fail")}</span><span class="v" data-r="pFail"></span></div>
+          <div><span class="k">${t("pipe.rate")}</span><span class="v" data-r="pRate"></span></div>
+        </div>
+        <div class="slots" data-r="slots"></div>
+      </div>
+      <div class="card term-card">
+        <div class="card-h"><span>${t("panel.terminal")}</span><span class="hint">Tab · ↑↓ · Ctrl+C · Ctrl+L</span></div>
+        <div class="term-host" data-r="termHost"></div>
+      </div>
+    </section>
+    <section class="col col-side">
+      <div class="tabs" role="tablist">
+        <button data-tab="release">${t("tab.release")}</button>
+        <button data-tab="achievements">${t("tab.achievements")} <span class="badge" data-r="achBadge"></span></button>
+        <button data-tab="stats">${t("tab.stats")}</button>
+      </div>
+      <div class="card tab-body" data-body="release">
+        <div class="rel-head">
+          <div class="rel-stars"><span class="star">⭐</span><span data-r="relStars"></span><span class="lbl">${t("rel.stars")}</span></div>
+          <div class="rel-bonus" data-r="relBonus"></div>
+        </div>
+        <p class="muted small">${t("rel.desc")}</p>
+        <button class="release-btn" data-r="relBtn"></button>
+        <div class="progress"><div class="fill" data-r="relProg"></div></div>
+        <div class="muted small" data-r="relHint"></div>
+        <div class="bot" data-r="bot" hidden>
+          <label class="switch"><input type="checkbox" data-r="botOn"><span>${t("rel.bot")}</span></label>
+          <label class="small">${t("rel.bot.threshold")} <input type="number" min="1" step="1" data-r="botThr"> ⭐</label>
+        </div>
+        <h3>${t("rel.tree")}</h3>
+        <div class="tree" data-r="tree"></div>
+        <div class="tree-detail" data-r="treeDetail"></div>
+      </div>
+      <div class="card tab-body" data-body="achievements">
+        <div class="muted small" data-r="achHead"></div>
+        <div class="ach-grid" data-r="ach"></div>
+      </div>
+      <div class="card tab-body" data-body="stats">
+        <table class="stats" data-r="stats"></table>
+      </div>
+    </section>
+  </main>
+  <nav class="mnav">
+    <button data-m="shop">🛒<span>${t("nav.shop")}</span></button>
+    <button data-m="center">⌨️<span>${t("nav.terminal")}</span></button>
+    <button data-m="side">🚀<span>${t("nav.release")}</span></button>
+  </nav>
+  <footer class="foot"><a href="https://github.com/Antiz96/incrust" target="_blank" rel="noopener noreferrer">${t("fork_of")}</a></footer>
+  <div class="toasts" data-r="toasts"></div>
+  <div class="modal" data-r="modal" hidden><div class="modal-box" data-r="modalBox"></div></div>`;
+
+  $("[data-r=termHost]").append(term.root);
+  buildHardware();
+  buildPerks();
+  buildTree();
+  lastAchCount = -1;
+  lastSlotCount = -1;
+  lastTalentKey = "";
+  bindLayout();
+  render();
+}
+
+function buildHardware() {
+  const list = $("[data-r=hw]");
+  list.replaceChildren();
+  for (const k of HW_KEYS) {
+    const card = h("button", { class: "hw", "data-hw": k },
+      h("div", { class: "hw-top" },
+        h("span", { class: "hw-name" }, t(`hw.${k}`)),
+        h("span", { class: "hw-lvl", "data-f": "lvl" }),
+      ),
+      h("div", { class: "hw-desc" }, t(`hw.${k}.desc`)),
+      h("div", { class: "hw-bottom" },
+        h("span", { class: "hw-effect", "data-f": "effect" }),
+        h("span", { class: "hw-price", "data-f": "price" }),
+      ),
+    );
+    const auto = h("label", { class: "auto-pill", "data-f": "auto", hidden: "" },
+      h("input", { type: "checkbox" }), h("span", {}, t("auto")));
+    auto.addEventListener("click", ev => ev.stopPropagation());
+    auto.querySelector("input")!.addEventListener("change", () => cmd.run(`toggle autobuy_${k}`, true));
+    card.querySelector(".hw-top")!.append(auto);
+    card.addEventListener("click", () => {
+      const a = engine.s.settings.buyAmount;
+      cmd.run(`buy ${k}${a === 1 ? "" : " " + a}`, true);
+    });
+    list.append(card);
+  }
+}
+
+function buildPerks() {
+  const list = $("[data-r=perks]");
+  list.replaceChildren();
+  for (const k of PERK_KEYS) {
+    const btn = h("button", { class: "perk-btn", "data-f": "btn" });
+    btn.addEventListener("click", () => {
+      cmd.run(engine.s.perks[k].unlocked ? `toggle ${k}` : `perk ${k}`, true);
+    });
+    list.append(h("div", { class: "perk", "data-perk": k },
+      h("div", { class: "perk-main" },
+        h("div", { class: "perk-name" }, t(`perk.${k}`), " ", h("span", { class: "perk-state", "data-f": "state" })),
+        h("div", { class: "hw-desc" }, t(`perk.${k}.desc`)),
+      ),
+      btn,
+    ));
+  }
+}
+
+function buildTree() {
+  const tree = $("[data-r=tree]");
+  tree.replaceChildren();
+  const rows = Math.max(...TALENTS.map(x => x.row)) + 1;
+  const COLS = 5;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${COLS * 100} ${rows * 100}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.classList.add("tree-lines");
+  for (const tal of TALENTS) {
+    for (const r of tal.req) {
+      const p = TALENT_BY_ID[r];
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(p.col * 100 + 50));
+      line.setAttribute("y1", String(p.row * 100 + 50));
+      line.setAttribute("x2", String(tal.col * 100 + 50));
+      line.setAttribute("y2", String(tal.row * 100 + 50));
+      line.dataset.to = tal.id;
+      line.dataset.from = r;
+      svg.append(line);
+    }
+  }
+  tree.style.aspectRatio = `${COLS} / ${rows}`;
+  tree.append(svg);
+  for (const tal of TALENTS) {
+    const node = h("button", { class: "node", "data-t": tal.id, title: t(`t.${tal.id}`) },
+      h("span", { class: "node-icon" }, tal.icon),
+      h("span", { class: "node-cost" }, `${tal.cost}★`),
+    );
+    node.style.left = `${(tal.col + 0.5) * (100 / COLS)}%`;
+    node.style.top = `${(tal.row + 0.5) * (100 / rows)}%`;
+    node.addEventListener("click", () => {
+      selectedTalent = tal.id;
+      lastTalentKey = "";
+      render();
+    });
+    node.addEventListener("dblclick", () => cmd.run(`talent ${tal.id}`, true));
+    tree.append(node);
+  }
+}
+
+function bindLayout() {
+  app.querySelectorAll<HTMLButtonElement>("[data-amount]").forEach(b =>
+    b.addEventListener("click", () => {
+      const v = b.dataset.amount!;
+      engine.s.settings.buyAmount = v === "max" ? "max" : (Number(v) as 1 | 10);
+      render();
+    }));
+  app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b =>
+    b.addEventListener("click", () => { sideTab = b.dataset.tab as typeof sideTab; render(); }));
+  app.querySelectorAll<HTMLButtonElement>("[data-m]").forEach(b =>
+    b.addEventListener("click", () => {
+      mobilePanel = b.dataset.m as typeof mobilePanel;
+      $("main.layout").dataset.mobile = mobilePanel;
+      render();
+      if (mobilePanel === "center") term.focus();
+    }));
+  $("[data-r=runBtn]").addEventListener("click", () => {
+    if (engine.s.pipeline) { term.echo("^C"); engine.interrupt(); }
+    else cmd.run("compile", true);
+  });
+  $("[data-r=relBtn]").addEventListener("click", () => cmd.run("release", true));
+  $("[data-a=save]").addEventListener("click", () => cmd.run("save", true));
+  $("[data-a=settings]").addEventListener("click", () => openSettings());
+  $<HTMLInputElement>("[data-r=botOn]").addEventListener("change", () => cmd.run("toggle release_bot", true));
+  $<HTMLInputElement>("[data-r=botThr]").addEventListener("change", ev => {
+    const v = Math.max(1, Math.floor(Number((ev.target as HTMLInputElement).value) || 1));
+    engine.s.autoRelease.threshold = v;
+  });
+  $("[data-r=modal]").addEventListener("click", ev => {
+    if (ev.target === ev.currentTarget) closeModal();
+  });
+}
+
+/* ================= Render ================= */
+function render() {
+  const s = engine.s;
+  setText($("[data-r=credits]"), fmt(s.credits));
+  setText($("[data-r=rate]"), s.pipeline || engine.ciActive ? fmt(expectedRate(s)) : "0");
+  setText($("[data-r=stars]"), fmt(s.stars));
+
+  // Buy amount
+  app.querySelectorAll<HTMLButtonElement>("[data-amount]").forEach(b =>
+    toggleClass(b, "on", String(s.settings.buyAmount) === b.dataset.amount));
+
+  // Hardware
+  for (const k of HW_KEYS) {
+    const card = $(`[data-hw=${k}]`);
+    const lvl = s.hw[k];
+    const max = HW[k].max;
+    const maxed = max !== undefined && lvl >= max;
+    let n = s.settings.buyAmount === "max" ? Math.max(1, maxAffordable(k, lvl, s.credits)) : s.settings.buyAmount;
+    if (max !== undefined) n = Math.max(1, Math.min(n, max - lvl));
+    const cost = bulkPrice(k, lvl, n);
+    setText($("[data-f=lvl]", card), `${lvl} ${t(`hw.${k}.unit`)}`);
+    setText($("[data-f=price]", card), maxed ? t("hw.max") : `${n > 1 ? `+${n} · ` : ""}${fmt(cost)} cr`);
+    setText($("[data-f=effect]", card), hwEffect(k));
+    toggleClass(card, "afford", !maxed && s.credits.gte(cost));
+    toggleClass(card, "maxed", maxed);
+    const auto = $("[data-f=auto]", card);
+    const ownsAuto = has(s, `autobuy_${k}`);
+    if (auto.hidden === ownsAuto) auto.hidden = !ownsAuto;
+    const cb = $<HTMLInputElement>("input", auto);
+    if (cb.checked !== s.autobuy[k]) cb.checked = s.autobuy[k];
+  }
+
+  // Perks
+  for (const k of PERK_KEYS) {
+    const el = $(`[data-perk=${k}]`);
+    const p = s.perks[k];
+    const st = $("[data-f=state]", el);
+    setText(st, !p.unlocked ? "" : p.enabled ? t("perk.enabled") : t("perk.disabled"));
+    toggleClass(st, "on", p.enabled);
+    const btn = $<HTMLButtonElement>("[data-f=btn]", el);
+    setText(btn, p.unlocked ? (p.enabled ? "ON" : "OFF") : `${t("unlock")} · ${fmt(PERK_PRICE[k])} cr`);
+    toggleClass(btn, "afford", !p.unlocked && s.credits.gte(PERK_PRICE[k]));
+    toggleClass(btn, "toggle-on", p.unlocked && p.enabled);
+    toggleClass(el, "owned", p.unlocked);
+  }
+
+  // Pipeline
+  const T = buildTime(s);
+  setText($("[data-r=pTime]"), fmtTime(T));
+  setText($("[data-r=pReward]"), fmt(reward(s)));
+  setText($("[data-r=pFail]"), `${(failProbability(s) * 100).toFixed(1)}%`);
+  setText($("[data-r=pRate]"), `${fmt(expectedRate(s))}${t("per_sec")}`);
+  setText($("[data-r=pipeState]"), s.pipeline ? (engine.ciActive ? `● ${t("pipe.ci")}` : `● ${t("pipe.running")}`) : "");
+  const runBtn = $("[data-r=runBtn]");
+  setText(runBtn, s.pipeline ? `■ ${t("interrupt")}` : `▶ ${t("compile")}`);
+  toggleClass(runBtn, "running", s.pipeline);
+  renderSlots(T);
+
+  // Side tabs
+  app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b => toggleClass(b, "on", b.dataset.tab === sideTab));
+  app.querySelectorAll<HTMLElement>("[data-body]").forEach(b => toggleClass(b, "on", b.dataset.body === sideTab));
+  app.querySelectorAll<HTMLButtonElement>("[data-m]").forEach(b => toggleClass(b, "on", b.dataset.m === mobilePanel));
+
+  renderRelease();
+  renderAchievements();
+  if (sideTab === "stats") renderStats();
+}
+
+function hwEffect(k: HwKey): string {
+  const s = engine.s;
+  switch (k) {
+    case "cpu": return `${fmtTime(buildTime(s))} / build`;
+    case "ram": return `${fmt(reward(s))} cr / build`;
+    case "disk": return `${(failProbability(s) * 100).toFixed(1)}% fail`;
+    case "jobs": return `make -j${s.hw.jobs}`;
+  }
+}
+
+function renderSlots(T: number) {
+  const s = engine.s;
+  const box = $("[data-r=slots]");
+  if (lastSlotCount !== s.slots.length) {
+    lastSlotCount = s.slots.length;
+    box.replaceChildren(...s.slots.map((_, i) => h("div", { class: "slot" }, h("div", { class: "fill" }), h("span", { class: "slot-id" }, `#${i + 1}`))));
+    box.dataset.n = String(s.slots.length);
+  }
+  const fast = T < 0.4;
+  s.slots.forEach((slot, i) => {
+    const el = box.children[i] as HTMLElement;
+    const fill = el.firstElementChild as HTMLElement;
+    toggleClass(el, "active", slot.running);
+    toggleClass(el, "fast", slot.running && fast);
+    const w = slot.running ? (fast ? 100 : Math.min(100, slot.progress * 100)) : 0;
+    fill.style.width = `${w}%`;
+  });
+}
+
+function renderRelease() {
+  const s = engine.s;
+  setText($("[data-r=relStars]"), fmt(s.stars));
+  setText($("[data-r=relBonus]"), t("rel.bonus", { x: fmt(starMultiplier(s)) }));
+  const gain = starsOnRelease(s);
+  const btn = $<HTMLButtonElement>("[data-r=relBtn]");
+  const can = gain.gte(1);
+  btn.disabled = !can;
+  setText(btn, can ? t("rel.button", { v: version(engine), n: fmt(gain) }) : `🔒 ${t("rel.title")}`);
+  toggleClass(btn, "ready", can);
+  let prog: number;
+  if (!can) {
+    prog = s.runEarned.div(RELEASE_BASE).toNumber();
+    setText($("[data-r=relHint]"), t("rel.locked", { x: `${fmt(s.runEarned)} / ${fmt(RELEASE_BASE)}` }));
+  } else {
+    const next = nextStarAt(s);
+    const prevNeeded = gain.div(has(s, "semver") ? 2 : 1).pow(2).mul(RELEASE_BASE);
+    prog = s.runEarned.sub(prevNeeded).div(next.sub(prevNeeded).max(1)).toNumber();
+    setText($("[data-r=relHint]"), t("rel.next", { x: fmt(next) }));
+  }
+  $("[data-r=relProg]").style.width = `${Math.max(0, Math.min(1, prog)) * 100}%`;
+
+  const bot = $("[data-r=bot]");
+  const ownsBot = has(s, "release_bot");
+  if (bot.hidden === ownsBot) bot.hidden = !ownsBot;
+  const botOn = $<HTMLInputElement>("[data-r=botOn]");
+  if (botOn.checked !== s.autoRelease.enabled) botOn.checked = s.autoRelease.enabled;
+  const thr = $<HTMLInputElement>("[data-r=botThr]");
+  if (document.activeElement !== thr && thr.value !== String(s.autoRelease.threshold)) thr.value = String(s.autoRelease.threshold);
+
+  // Tree state
+  const key = `${s.talents.join(",")}|${s.stars.toString()}|${selectedTalent}`;
+  if (key === lastTalentKey) return;
+  lastTalentKey = key;
+  for (const tal of TALENTS) {
+    const node = $(`[data-t=${tal.id}]`);
+    const owned = has(s, tal.id);
+    const reqOk = tal.req.every(r => has(s, r));
+    toggleClass(node, "owned", owned);
+    toggleClass(node, "avail", !owned && reqOk);
+    toggleClass(node, "afford", !owned && reqOk && s.stars.gte(tal.cost));
+    toggleClass(node, "sel", selectedTalent === tal.id);
+  }
+  app.querySelectorAll<SVGLineElement>(".tree-lines line").forEach(l =>
+    l.classList.toggle("lit", has(s, l.dataset.from!) && has(s, l.dataset.to!)));
+  const tal = TALENT_BY_ID[selectedTalent];
+  const owned = has(s, tal.id);
+  const check = engine.canBuyTalent(tal.id);
+  const detail = $("[data-r=treeDetail]");
+  const learn = h("button", { class: "learn-btn" + (check.ok ? " afford" : "") }, owned ? `✓ ${t("tree.owned")}` : `${t("buy")} · ${tal.cost} ⭐`);
+  if (owned || !check.ok) learn.setAttribute("disabled", "");
+  learn.addEventListener("click", () => cmd.run(`talent ${tal.id}`, true));
+  detail.replaceChildren(
+    h("div", { class: "td-name" }, h("span", { class: "td-tag" }, `[${tal.icon}]`), ` ${t(`t.${tal.id}`)}`),
+    h("div", { class: "td-desc" }, t(`t.${tal.id}.desc`)),
+    tal.req.length ? h("div", { class: "td-req muted small" }, t("tree.requires", { x: tal.req.map(r => t(`t.${r}`)).join(", ") })) : "",
+    learn,
+  );
+}
+
+function renderAchievements() {
+  const s = engine.s;
+  const n = s.achievements.length;
+  setText($("[data-r=achBadge]"), `${n}/${ACHIEVEMENTS.length}`);
+  if (n === lastAchCount) return;
+  lastAchCount = n;
+  setText($("[data-r=achHead]"), t("ach.count", { n, total: ACHIEVEMENTS.length, x: achievementMultiplier(s).toFixed(2) }));
+  $("[data-r=ach]").replaceChildren(...ACHIEVEMENTS.map(a => {
+    const got = s.achievements.includes(a.id);
+    const hidden = a.secret && !got;
+    return h("div", { class: "ach" + (got ? " got" : "") , title: hidden ? t("ach.secret") : t(`a.${a.id}.desc`) },
+      h("div", { class: "ach-icon" }, got ? "🏆" : "🔒"),
+      h("div", { class: "ach-name" }, hidden ? "???" : t(`a.${a.id}`)),
+      h("div", { class: "ach-desc" }, hidden ? t("ach.secret") : t(`a.${a.id}.desc`)),
+    );
+  }));
+}
+
+function renderStats() {
+  const s = engine.s;
+  const rows: [string, string][] = [
+    ["st.builds", fmtInt(s.stats.builds)],
+    ["st.fails", fmtInt(s.stats.fails)],
+    ["st.success", s.stats.builds ? `${((1 - s.stats.fails / s.stats.builds) * 100).toFixed(1)}%` : "—"],
+    ["st.earned", fmt(s.totalEarned)],
+    ["st.run_earned", fmt(s.runEarned)],
+    ["st.mult", `×${fmt(rewardMultiplier(s))}`],
+    ["st.playtime", fmtTime(s.stats.playTime)],
+    ["st.runtime", fmtTime(s.stats.runTime)],
+    ["st.releases", fmtInt(s.releases)],
+    ["st.lifetime_stars", fmt(s.lifetimeStars)],
+    ["st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease)],
+    ["st.streak", fmtInt(s.stats.bestStreak)],
+    ["st.interrupts", fmtInt(s.stats.interrupts)],
+  ];
+  const table = $("[data-r=stats]");
+  if (table.childElementCount !== rows.length) {
+    table.replaceChildren(...rows.map(() => h("tr", {}, h("th"), h("td"))));
+  }
+  rows.forEach(([k, v], i) => {
+    const tr = table.children[i];
+    setText(tr.children[0], t(k));
+    setText(tr.children[1], v);
+  });
+}
+
+/* ================= Toasts & modals ================= */
+function toast(title: string, body: string) {
+  const box = $("[data-r=toasts]");
+  const el = h("div", { class: "toast" }, h("div", { class: "toast-t" }, title), h("div", {}, body));
+  box.append(el);
+  setTimeout(() => el.classList.add("out"), 3500);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function openModal(...content: (Node | string)[]) {
+  const modal = $("[data-r=modal]");
+  const close = h("button", { class: "modal-close", "aria-label": t("close") }, "✕");
+  close.addEventListener("click", closeModal);
+  $("[data-r=modalBox]").replaceChildren(close, ...content);
+  modal.hidden = false;
+}
+function closeModal() {
+  $("[data-r=modal]").hidden = true;
+  term.focus();
+}
+
+function openSettings() {
+  const s = engine.s;
+  const langSel = h("select", {}, h("option", { value: "en" }, "English"), h("option", { value: "fr" }, "Français")) as HTMLSelectElement;
+  langSel.value = s.settings.lang;
+  langSel.addEventListener("change", () => { cmd.run(`lang ${langSel.value}`, true); openSettings(); });
+  const notSel = h("select", {},
+    h("option", { value: "standard" }, t("set.notation.standard")),
+    h("option", { value: "scientific" }, t("set.notation.scientific"))) as HTMLSelectElement;
+  notSel.value = s.settings.notation;
+  notSel.addEventListener("change", () => cmd.run(`notation ${notSel.value}`, true));
+  const verbose = h("input", { type: "checkbox" }) as HTMLInputElement;
+  verbose.checked = s.settings.verbose;
+  verbose.addEventListener("change", () => { s.settings.verbose = verbose.checked; });
+
+  const area = h("textarea", { rows: "4", placeholder: t("set.import.placeholder") }) as HTMLTextAreaElement;
+  const msg = h("div", { class: "small muted" });
+  const exportBtn = h("button", { class: "btn" }, t("set.export"));
+  exportBtn.addEventListener("click", async () => {
+    engine.save();
+    area.value = exportSave(engine.s);
+    try { await navigator.clipboard.writeText(area.value); } catch { /* clipboard may be unavailable */ }
+    setText(msg, t("set.export.done"));
+  });
+  const importBtn = h("button", { class: "btn" }, t("set.import"));
+  importBtn.addEventListener("click", () => {
+    try {
+      const st = importSave(area.value);
+      engine.replaceState(st);
+      engine.save();
+      setLang(st.settings.lang);
+      setNotation(st.settings.notation);
+      buildLayout();
+      closeModal();
+      term.println(OK, " " + t("term.import_ok"));
+    } catch {
+      setText(msg, t("set.import.fail"));
+    }
+  });
+  const resetBtn = h("button", { class: "btn danger" }, t("set.reset"));
+  resetBtn.addEventListener("click", () => {
+    const yes = h("button", { class: "btn danger" }, t("confirm"));
+    const no = h("button", { class: "btn" }, t("cancel"));
+    yes.addEventListener("click", () => {
+      engine.hardReset();
+      engine.save();
+      setLang(engine.s.settings.lang);
+      term.clear();
+      buildLayout();
+      closeModal();
+      boot();
+    });
+    no.addEventListener("click", () => openSettings());
+    openModal(h("h2", {}, t("set.reset")), h("p", {}, t("set.reset.confirm")), h("div", { class: "row" }, no, yes));
+  });
+
+  openModal(
+    h("h2", {}, t("settings")),
+    h("label", { class: "field" }, h("span", {}, t("set.lang")), langSel),
+    h("label", { class: "field" }, h("span", {}, t("set.notation")), notSel),
+    h("label", { class: "field check" }, verbose, h("span", {}, t("set.verbose"))),
+    h("hr"),
+    area,
+    h("div", { class: "row" }, exportBtn, importBtn),
+    msg,
+    h("hr"),
+    resetBtn,
+  );
+}
+
+function showOffline(rep: NonNullable<ReturnType<Engine["simulateOffline"]>>) {
+  const items = [
+    h("li", {}, t("off.credits", { x: fmt(rep.credits) })),
+    h("li", {}, t("off.builds", { n: fmtInt(rep.builds), f: fmtInt(rep.fails) })),
+  ];
+  if (rep.upgrades > 0) items.push(h("li", {}, t("off.upgrades", { n: fmtInt(rep.upgrades) })));
+  if (rep.releases > 0) items.push(h("li", {}, t("off.releases", { n: rep.releases, s: fmt(rep.stars) })));
+  for (const a of rep.achievements) items.push(h("li", {}, `🏆 ${t(`a.${a}`)}`));
+  openModal(
+    h("h2", {}, `🌙 ${t("off.title")}`),
+    h("p", {}, t("off.time", { t: fmtTime(rep.away) })),
+    h("p", { class: "muted small" }, t("off.eff", { p: Math.round(rep.eff * 100) })),
+    h("ul", { class: "off-list" }, ...items),
+  );
+  term.println(INFO, ` ${t("off.title")} (${fmtTime(rep.away)}): +${fmt(rep.credits)} ${t("credits")}`);
+}
+
+/* ================= Game events → terminal ================= */
+let batch = { ok: 0, fail: 0, credits: new Decimal(0) };
+let autobuys: Partial<Record<HwKey, number>> = {};
+let flushTimer = 0;
+
+engine.on((e: GameEvent) => {
+  switch (e.t) {
+    case "builds": {
+      const single = buildTime(engine.s) >= 1.5 && e.ok + e.fail <= 2;
+      if (single) {
+        for (let i = 0; i < e.fail; i++) term.println(FAIL, " " + t("term.build_fail"));
+        if (e.ok) term.println(INFO, " " + t("term.build_ok", { x: fmt(e.credits) }));
+      } else {
+        batch.ok += e.ok;
+        batch.fail += e.fail;
+        batch.credits = batch.credits.add(e.credits);
+      }
+      break;
+    }
+    case "pipeline_done":
+      flushLogs();
+      term.println(INFO, " " + t("term.done"));
+      break;
+    case "interrupted":
+      flushLogs();
+      term.println(INFO, " " + t("term.interrupted"));
+      break;
+    case "autobuy":
+      autobuys[e.key] = (autobuys[e.key] ?? 0) + e.n;
+      break;
+    case "achievement":
+      term.println(["🏆 ", ""], [t("term.achievement", { a: t(`a.${e.id}`) }).replace("🏆 ", ""), "c-amber"]);
+      toast(t("ach.unlocked"), `🏆 ${t(`a.${e.id}`)}`);
+      break;
+    case "release": {
+      flushLogs();
+      const v = `${engine.s.releases}.0.0`;
+      if (e.auto) term.println(STAR, " " + t("term.release_auto", { v, n: fmt(e.stars) }));
+      else term.println(STAR, " " + t("term.release_ok", { v, n: fmt(e.stars), b: fmt(starMultiplier(engine.s)) }));
+      toast("🚀 Release", `v${v} · +${fmt(e.stars)} ⭐`);
+      engine.save();
+      break;
+    }
+    case "pipeline_start":
+      break;
+  }
+});
+
+function flushLogs() {
+  if (batch.ok + batch.fail > 0) {
+    term.println(batch.fail && !batch.ok ? FAIL : INFO, " " + t("term.batch", { n: fmtInt(batch.ok + batch.fail), f: fmtInt(batch.fail), x: fmt(batch.credits) }));
+    batch = { ok: 0, fail: 0, credits: new Decimal(0) };
+  }
+  const entries = Object.entries(autobuys).filter(([, n]) => n! > 0);
+  if (entries.length) {
+    term.println(AUTO, " " + t("term.autobuy", { list: entries.map(([k, n]) => `${t(`hw.${k}`)} +${n}`).join(", ") }));
+    autobuys = {};
+  }
+}
+
+/* ================= Main loop ================= */
+let last = performance.now();
+let saveTimer = 0;
+
+function loop() {
+  const now = performance.now();
+  let dt = (now - last) / 1000;
+  last = now;
+  if (halted) return;
+
+  if (dt > 60) {
+    // The tab was asleep (laptop lid closed, throttled tab…): treat as offline time
+    const rep = engine.simulateOffline(dt);
+    if (rep) showOffline(rep);
+    dt = 0;
+  }
+  // Split long frames so that slots and autobuyers behave consistently
+  while (dt > 0) {
+    const step = Math.min(dt, 1);
+    engine.tick(step);
+    dt -= step;
+  }
+
+  flushTimer += 0.1;
+  if (flushTimer >= 4) { flushTimer = 0; flushLogs(); }
+  saveTimer += 0.1;
+  if (saveTimer >= 15) { saveTimer = 0; engine.save(); }
+
+  render();
+}
+
+// Fake build log on its own timer (rate scales with CPU, capped)
+function cargoTick() {
+  if (!halted && engine.s.pipeline && engine.s.settings.verbose && performance.now() > quietUntil) term.println(...fakeCargoLine());
+  const speed = Math.ceil(engine.s.hw.cpu / 10);
+  const delay = Math.max(250, (200 + Math.random() * 700) / speed);
+  setTimeout(cargoTick, delay);
+}
+
+/* ================= Boot / halt ================= */
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+async function boot() {
+  halted = false;
+  term.clear();
+  const steps = ["Starting system initialization...", "Mounting virtual filesystems...", "Detecting available brain cells...",
+    "Fetching coffee...", "Checking if it works on my machine...", "Loading essential nonsense..."];
+  for (const s of steps) { term.println(OK, " " + s); await sleep(90); }
+  term.println([LOGO, "c-green ascii"]);
+  term.println(["  v" + GAME_VERSION + " · " + t("fork_of"), "c-dim"]);
+  term.println("");
+  cmd.printStatus();
+  term.println("");
+  term.println(t("term.welcome"));
+  term.println("");
+  term.focus();
+}
+
+async function halt() {
+  flushLogs();
+  engine.interrupt();
+  engine.save();
+  const steps: [typeof OK, string, number][] = [
+    [OK, "Terminating background nonsense...", 200], [OK, "Saving imaginary progress...", 200],
+    [OK, "Returning borrowed brain cells...", 300], [FAIL, "Considering touching some grass...", 300],
+    [OK, "Flushing coffee reserves...", 600], [OK, "Shutting down system...", 500],
+  ];
+  halted = true;
+  for (const [tag, msg, ms] of steps) { term.println(tag, " " + msg); await sleep(ms); }
+  term.println("");
+  term.println([t("term.halted"), "c-dim"]);
+}
+
+/* ================= Start ================= */
+buildLayout();
+const away = (Date.now() - engine.s.lastSeen) / 1000;
+boot().then(() => {
+  const rep = engine.simulateOffline(away);
+  if (rep) showOffline(rep);
+  else if (away > 300 && engine.s.stats.builds > 0 && !engine.ciActive) {
+    term.println(INFO, " " + t("off.nothing"));
+  }
+});
+setInterval(loop, 100);
+cargoTick();
+window.addEventListener("beforeunload", () => engine.save());
+document.addEventListener("visibilitychange", () => { if (document.hidden) engine.save(); });
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && !$("[data-r=modal]").hidden) closeModal();
+  const target = ev.target as HTMLElement;
+  const inField = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+  // Typing anywhere goes to the terminal
+  if (!inField && $("[data-r=modal]").hidden && ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey) term.focus();
+  // Ctrl+C anywhere (outside of text fields) interrupts the pipeline
+  if (!inField && ev.ctrlKey && ev.key.toLowerCase() === "c" && !String(window.getSelection()) && engine.s.pipeline) {
+    ev.preventDefault();
+    term.echo("^C");
+    engine.interrupt();
+  }
+});
