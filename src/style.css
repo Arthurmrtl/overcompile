@@ -334,3 +334,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .obj.done .obj-mark { color: var(--green); }
 .obj.done .obj-name, .obj.done .obj-reward { color: var(--dim); }
 .obj-count { margin-top: 6px; text-align: right; }
+.obj.ready .obj-mark { color: var(--amber); }
+.obj.ready .obj-name { color: var(--fg); font-weight: 700; }
+.claim-btn { flex: none; background: var(--green-d); border: 1px solid var(--green); color: #fff; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+.claim-btn:hover { background: #16a34a; }
+.obj-count { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }

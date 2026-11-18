@@ -134,10 +134,26 @@ export class Engine {
     for (const o of OBJECTIVES) {
       if (!s.objectives.includes(o.id) && o.check(s)) {
         s.objectives.push(o.id);
-        s.credits = s.credits.add(o.reward);
         this.emit({ t: "objective", id: o.id, reward: o.reward });
       }
     }
+  }
+
+  /** Completed objectives waiting to be claimed. */
+  pendingObjectives() {
+    return OBJECTIVES.filter(o => this.s.objectives.includes(o.id) && !this.s.objClaimed.includes(o.id));
+  }
+
+  /** Claims one objective (or all pending ones). Returns the credits gained. */
+  claimObjectives(id?: string): number {
+    let total = 0;
+    for (const o of this.pendingObjectives()) {
+      if (id && o.id !== id) continue;
+      this.s.objClaimed.push(o.id);
+      this.s.credits = this.s.credits.add(o.reward);
+      total += o.reward;
+    }
+    return total;
   }
 
   private advanceBuilds(dt: number) {

@@ -38,6 +38,7 @@ while (t < H * 3600) {
   }
   if (!s.talents.includes("as_jobs") && s.credits.gte(price("jobs", s.hw.jobs).mul(1.2))) e.buyHw("jobs", 1);
   e.tick(dt);
+  e.claimObjectives();
   t += dt;
 
   if (!firstStarLogged && starsOnRelease(s).gte(1) && s.releases === 0) { firstStarLogged = true; milestones.push(`1st star possible ${fmt(t)} (${Math.round(t / 60)} min)`); }

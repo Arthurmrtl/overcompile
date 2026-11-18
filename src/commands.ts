@@ -114,7 +114,7 @@ export function createCommands(c: GameCtx) {
       const rows: [string, string][] = [
         ["compile", t("help.compile")], ["stop", t("help.stop")], ["buy", t("help.buy")],
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
-        ["status", t("help.status")], ["goals", t("help.goals")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
+        ["status", t("help.status")], ["goals", t("help.goals")], ["claim", t("help.claim")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
         ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
@@ -213,12 +213,21 @@ export function createCommands(c: GameCtx) {
         say(INFO, " " + t("term.release_no", { hint }));
       }
     },
+    claim(args) {
+      const en = e();
+      const id = args[0] && args[0] !== "all" ? args[0] : undefined;
+      const gained = en.claimObjectives(id);
+      if (gained > 0) say(OK, " " + t("obj.claimed", { x: fmt(gained) }));
+      else say(t("obj.nothing"));
+    },
     goals() {
       const { s } = e();
       say(["[" + t("obj.title").toUpperCase() + "]", "c-bold"], `  ${s.objectives.length} / ${OBJECTIVES.length}`);
       for (const o of OBJECTIVES) {
         const ok = s.objectives.includes(o.id);
-        say(ok ? ["[x]", "c-green"] : ["[ ]", "c-dim"], " ", pad(t(`obj.${o.id}`), 40), [`+${fmt(o.reward)} cr`, ok ? "c-dim" : "c-amber"]);
+        const claimed = s.objClaimed.includes(o.id);
+        say(claimed ? ["[x]", "c-green"] : ok ? ["[!]", "c-amber"] : ["[ ]", "c-dim"], " ", pad(t(`obj.${o.id}`), 40),
+          [`+${fmt(o.reward)} cr`, claimed ? "c-dim" : "c-amber"], ok && !claimed ? ["  ← claim", "c-green"] : "");
       }
     },
     optimize(args) {
@@ -405,7 +414,7 @@ export function createCommands(c: GameCtx) {
     const en = e();
     if (["tree", "talent", "optimize"].includes(name)) return starsRevealed(en.s);
     if (name === "challenge") return en.challengesUnlocked;
-    if (name === "goals") return !starsRevealed(en.s);
+    if (name === "goals" || name === "claim") return !starsRevealed(en.s);
     return true;
   }
 
@@ -429,7 +438,7 @@ export function createCommands(c: GameCtx) {
     optimize: UPGRADES.map(u => u.id), challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
   };
-  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "tree", "talent", "optimize", "challenge", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
+  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "challenge", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
 
   function complete(line: string): string[] {
     const parts = line.trimStart().split(/\s+/);

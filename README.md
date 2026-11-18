@@ -43,7 +43,7 @@ scripts/sim.ts     pacing simulation
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (1 000 cr, buys the cheapest upgrade every 2 s)
-- First-run objectives: 9 short goals before the first release, each paying credits (`goals`)
+- First-run objectives: 9 short goals before the first release, each paying credits (`goals`, rewards collected with a Claim button or `claim`)
 - Prestige layer 1 — Release: ⭐ Stars, lifetime bonus; each version needs more credits per star
 - Release tree (14 talents), including the Auto-Scaling branch (`as` permanent, `fast` 4×/s,
   `ctrl` per-resource switches, `-j` job slots) and `off` (offline progress)

@@ -17,7 +17,7 @@ import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, Terminal } from "./ui/terminal";
 
-const GAME_VERSION = "0.2.2";
+const GAME_VERSION = "0.2.3";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -537,22 +537,33 @@ let lastObjKey = "";
 function renderObjectives() {
   const s = engine.s;
   if (starsRevealed(s)) return;
-  const key = `${s.objectives.join(",")}|${s.settings.lang}`;
+  const key = `${s.objectives.join(",")}|${s.objClaimed.join(",")}|${s.settings.lang}`;
   if (key === lastObjKey) return;
   lastObjKey = key;
-  // Done objectives, then the next three to aim for
-  const done = OBJECTIVES.filter(o => s.objectives.includes(o.id));
+  // Claimed objectives, then those to claim, then the next three to aim for
+  const claimed = OBJECTIVES.filter(o => s.objClaimed.includes(o.id));
+  const pending = engine.pendingObjectives();
   const next = OBJECTIVES.filter(o => !s.objectives.includes(o.id)).slice(0, 3);
-  $("[data-r=objList]").replaceChildren(
-    ...[...done, ...next].map(o => {
-      const ok = s.objectives.includes(o.id);
-      return h("div", { class: "obj" + (ok ? " done" : "") },
-        h("span", { class: "obj-mark" }, ok ? "[x]" : "[ ]"),
-        h("span", { class: "obj-name" }, t(`obj.${o.id}`)),
-        h("span", { class: "obj-reward" }, `+${fmt(o.reward)} cr`));
-    }),
-    h("div", { class: "obj-count muted small" }, `${done.length} / ${OBJECTIVES.length}`),
-  );
+  const rows = [...claimed, ...pending, ...next].map(o => {
+    const done = s.objectives.includes(o.id);
+    const isClaimed = s.objClaimed.includes(o.id);
+    let right: HTMLElement;
+    if (done && !isClaimed) {
+      right = h("button", { class: "claim-btn" }, `${t("obj.claim")} +${fmt(o.reward)} cr`);
+      right.addEventListener("click", () => cmd.run(`claim ${o.id}`, true));
+    } else right = h("span", { class: "obj-reward" }, `+${fmt(o.reward)} cr`);
+    return h("div", { class: "obj" + (isClaimed ? " done" : done ? " ready" : "") },
+      h("span", { class: "obj-mark" }, isClaimed ? "[x]" : done ? "[!]" : "[ ]"),
+      h("span", { class: "obj-name" }, t(`obj.${o.id}`)),
+      right);
+  });
+  const footer = h("div", { class: "obj-count muted small" }, `${claimed.length} / ${OBJECTIVES.length}`);
+  if (pending.length > 1) {
+    const all = h("button", { class: "claim-btn" }, `${t("obj.claim_all")} (${pending.length})`);
+    all.addEventListener("click", () => cmd.run("claim all", true));
+    footer.prepend(all, " ");
+  }
+  $("[data-r=objList]").replaceChildren(...rows, footer);
 }
 
 function renderOptimizations() {
@@ -889,7 +900,7 @@ engine.on((e: GameEvent) => {
       break;
     case "objective":
       term.println(["[ OBJ ]", "c-green"], " " + t("obj.done", { o: t(`obj.${e.id}`), x: fmt(e.reward) }));
-      toast(t("obj.title"), `${t(`obj.${e.id}`)} · +${fmt(e.reward)} cr`);
+      toast(t("obj.title"), `${t(`obj.${e.id}`)} · ${t("obj.claim")} +${fmt(e.reward)} cr`);
       break;
     case "pipeline_start":
       break;

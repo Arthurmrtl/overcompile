@@ -37,6 +37,8 @@ export interface GameState {
   seen: string[];
   /** First-run objectives already completed. */
   objectives: string[];
+  /** Completed objectives whose reward has been claimed. */
+  objClaimed: string[];
   achievements: string[];
   stats: {
     builds: number;
@@ -86,6 +88,7 @@ export function newState(): GameState {
     challengesDone: [],
     seen: [],
     objectives: [],
+    objClaimed: [],
     achievements: [],
     stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null },
     settings: { lang: browserLang(), notation: "standard", verbose: true, buyAmount: 1 },
@@ -123,6 +126,8 @@ export function deserialize(json: string): GameState {
   s.challengesDone = [...(raw.challengesDone ?? [])];
   s.seen = [...(raw.seen ?? [])];
   s.objectives = [...(raw.objectives ?? [])];
+  // v0.2.2 credited objectives automatically: those count as claimed
+  s.objClaimed = [...(raw.objClaimed ?? s.objectives)];
   migrate(s, raw.version ?? 1);
   // Slots must match the number of jobs
   s.slots = Array.from({ length: s.hw.jobs }, (_, i) => raw.slots?.[i] ?? { progress: 0, running: false });
