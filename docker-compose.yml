@@ -1,8 +1,8 @@
-# Home deployment. Replace OWNER by your GitHub user name (lower case).
+# Home deployment.
 # Behind Nginx Proxy Manager: point a proxy host to http://<this machine>:8080
 services:
   overcompile:
-    image: ghcr.io/OWNER/overcompile:latest
+    image: ghcr.io/arthurmrtl/overcompile:latest
     container_name: overcompile
     restart: unless-stopped
     ports:

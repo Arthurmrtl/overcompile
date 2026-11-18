@@ -23,7 +23,7 @@ Nginx Proxy Manager ──► https://overcompile.<your domain>
 
 ```bash
 mkdir -p /opt/overcompile && cd /opt/overcompile
-# copy docker-compose.yml here, replace OWNER by your GitHub user name (lower case)
+# copy docker-compose.yml here
 docker compose up -d
 curl http://localhost:8080/healthz   # → ok
 ```
