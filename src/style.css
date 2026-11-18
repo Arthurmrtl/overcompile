@@ -324,3 +324,13 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .node.fog .node-icon { color: var(--dim); }
 .node.fog .node-cost { color: var(--dim); }
 .tree-lines line.hidden { display: none; }
+
+/* ---------- v0.2.2: first-run objectives ---------- */
+.objectives { margin-top: 14px; }
+.obj { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dotted var(--border); font-size: 12px; }
+.obj-mark { color: var(--dim); font-weight: 700; }
+.obj-name { flex: 1; min-width: 0; }
+.obj-reward { color: var(--amber); }
+.obj.done .obj-mark { color: var(--green); }
+.obj.done .obj-name, .obj.done .obj-reward { color: var(--dim); }
+.obj-count { margin-top: 6px; text-align: right; }

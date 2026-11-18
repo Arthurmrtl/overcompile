@@ -29,7 +29,7 @@ export const HW: Record<HwKey, { base: number; ratio: number; max?: number }> = 
   disk: { base: 1.5, ratio: 1.2 },
   jobs: { base: 15, ratio: 5, max: 16 },
 };
-export const PERK_PRICE = { ci_cd: new Decimal(10), auto_scaling: new Decimal(250) };
+export const PERK_PRICE = { ci_cd: new Decimal(10), auto_scaling: new Decimal(1000) };
 
 /** Price of the next level when currently at `level`. */
 export function price(key: HwKey, level: number): Decimal {

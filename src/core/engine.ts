@@ -1,6 +1,7 @@
 import Decimal from "break_eternity.js";
 import { ACHIEVEMENTS } from "./achievements";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./challenges";
+import { OBJECTIVES } from "./objectives";
 import {
   HW, PERK_PRICE, OFFLINE_GRACE_SECONDS, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
   has, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
@@ -21,7 +22,8 @@ export type GameEvent =
   | { t: "release"; stars: Decimal; auto: boolean }
   | { t: "challenge_start"; id: string }
   | { t: "challenge_done"; id: string }
-  | { t: "challenge_exit"; id: string };
+  | { t: "challenge_exit"; id: string }
+  | { t: "objective"; id: string; reward: number };
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" };
 
@@ -121,7 +123,21 @@ export class Engine {
       this.release(true);
     }
 
+    this.checkObjectives();
     this.checkAchievements();
+  }
+
+  /** First-run objectives (before the first release only). */
+  checkObjectives() {
+    const s = this.s;
+    if (s.releases > 0 || s.objectives.length >= OBJECTIVES.length) return;
+    for (const o of OBJECTIVES) {
+      if (!s.objectives.includes(o.id) && o.check(s)) {
+        s.objectives.push(o.id);
+        s.credits = s.credits.add(o.reward);
+        this.emit({ t: "objective", id: o.id, reward: o.reward });
+      }
+    }
   }
 
   private advanceBuilds(dt: number) {

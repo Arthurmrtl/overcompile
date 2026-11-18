@@ -8,6 +8,7 @@ import {
   achievementMultiplier, reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./core/challenges";
+import { OBJECTIVES } from "./core/objectives";
 import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
@@ -16,7 +17,7 @@ import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, Terminal } from "./ui/terminal";
 
-const GAME_VERSION = "0.2.1";
+const GAME_VERSION = "0.2.2";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -153,6 +154,10 @@ function buildLayout() {
         <button class="release-btn" data-r="relBtn"></button>
         <div class="progress"><div class="fill" data-r="relProg"></div></div>
         <div class="muted small" data-r="relHint"></div>
+        <div class="objectives" data-reveal="pre">
+          <h3>${t("obj.title")}</h3>
+          <div data-r="objList"></div>
+        </div>
         <div class="bot" data-r="bot" hidden>
           <label class="switch"><input type="checkbox" data-r="botOn"><span>${t("rel.bot")}</span></label>
           <label class="small">${t("rel.bot.threshold")} <input type="number" min="1" step="1" data-r="botThr"> ⭐</label>
@@ -197,6 +202,7 @@ function buildLayout() {
   lastTalentKey = "";
   lastOptKey = "";
   lastChKey = "";
+  lastObjKey = "";
   bindLayout();
   render();
 }
@@ -409,6 +415,7 @@ function render() {
 
   renderRelease();
   renderOptimizations();
+  renderObjectives();
   if (sideTab === "challenges") renderChallenges();
   renderAchievements();
   if (sideTab === "stats") renderStats();
@@ -523,6 +530,28 @@ function renderRelease() {
     h("div", { class: "td-desc" }, t(`t.${tal.id}.desc`)),
     tal.req.length ? h("div", { class: "td-req muted small" }, t("tree.requires", { x: tal.req.map(r => t(`t.${r}`)).join(", ") })) : "",
     learn,
+  );
+}
+
+let lastObjKey = "";
+function renderObjectives() {
+  const s = engine.s;
+  if (starsRevealed(s)) return;
+  const key = `${s.objectives.join(",")}|${s.settings.lang}`;
+  if (key === lastObjKey) return;
+  lastObjKey = key;
+  // Done objectives, then the next three to aim for
+  const done = OBJECTIVES.filter(o => s.objectives.includes(o.id));
+  const next = OBJECTIVES.filter(o => !s.objectives.includes(o.id)).slice(0, 3);
+  $("[data-r=objList]").replaceChildren(
+    ...[...done, ...next].map(o => {
+      const ok = s.objectives.includes(o.id);
+      return h("div", { class: "obj" + (ok ? " done" : "") },
+        h("span", { class: "obj-mark" }, ok ? "[x]" : "[ ]"),
+        h("span", { class: "obj-name" }, t(`obj.${o.id}`)),
+        h("span", { class: "obj-reward" }, `+${fmt(o.reward)} cr`));
+    }),
+    h("div", { class: "obj-count muted small" }, `${done.length} / ${OBJECTIVES.length}`),
   );
 }
 
@@ -857,6 +886,10 @@ engine.on((e: GameEvent) => {
       break;
     case "challenge_exit":
       term.println(["[ CH ]", "c-dim"], " " + t("term.ch_exit", { c: challengeName(e.id) }));
+      break;
+    case "objective":
+      term.println(["[ OBJ ]", "c-green"], " " + t("obj.done", { o: t(`obj.${e.id}`), x: fmt(e.reward) }));
+      toast(t("obj.title"), `${t(`obj.${e.id}`)} · +${fmt(e.reward)} cr`);
       break;
     case "pipeline_start":
       break;

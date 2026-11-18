@@ -1,6 +1,7 @@
 import type { Engine } from "./core/engine";
 import { ACHIEVEMENTS } from "./core/achievements";
 import { CHALLENGES } from "./core/challenges";
+import { OBJECTIVES } from "./core/objectives";
 import {
   HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
   maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
@@ -113,7 +114,7 @@ export function createCommands(c: GameCtx) {
       const rows: [string, string][] = [
         ["compile", t("help.compile")], ["stop", t("help.stop")], ["buy", t("help.buy")],
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
-        ["status", t("help.status")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
+        ["status", t("help.status")], ["goals", t("help.goals")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
         ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
@@ -210,6 +211,14 @@ export function createCommands(c: GameCtx) {
         const base = releaseBase(en.s);
         const hint = en.s.runEarned.lt(base) ? t("rel.locked", { x: `${fmt(en.s.runEarned)} / ${fmt(base)}` }) : "";
         say(INFO, " " + t("term.release_no", { hint }));
+      }
+    },
+    goals() {
+      const { s } = e();
+      say(["[" + t("obj.title").toUpperCase() + "]", "c-bold"], `  ${s.objectives.length} / ${OBJECTIVES.length}`);
+      for (const o of OBJECTIVES) {
+        const ok = s.objectives.includes(o.id);
+        say(ok ? ["[x]", "c-green"] : ["[ ]", "c-dim"], " ", pad(t(`obj.${o.id}`), 40), [`+${fmt(o.reward)} cr`, ok ? "c-dim" : "c-amber"]);
       }
     },
     optimize(args) {
@@ -388,7 +397,7 @@ export function createCommands(c: GameCtx) {
 
   const aliases: Record<string, string> = {
     make: "compile", build: "compile", upgrade: "shop", manage: "toggle", ach: "achievements",
-    prestige: "release", opt: "optimize", optimise: "optimize", ch: "challenge", ship: "release", quit: "exit", shutdown: "exit", cls: "clear", "?": "help",
+    prestige: "release", objectives: "goals", goal: "goals", opt: "optimize", optimise: "optimize", ch: "challenge", ship: "release", quit: "exit", shutdown: "exit", cls: "clear", "?": "help",
   };
 
   /** Commands appear as the game reveals their feature. */
@@ -396,6 +405,7 @@ export function createCommands(c: GameCtx) {
     const en = e();
     if (["tree", "talent", "optimize"].includes(name)) return starsRevealed(en.s);
     if (name === "challenge") return en.challengesUnlocked;
+    if (name === "goals") return !starsRevealed(en.s);
     return true;
   }
 
@@ -419,7 +429,7 @@ export function createCommands(c: GameCtx) {
     optimize: UPGRADES.map(u => u.id), challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
   };
-  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "tree", "talent", "optimize", "challenge", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
+  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "tree", "talent", "optimize", "challenge", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
 
   function complete(line: string): string[] {
     const parts = line.trimStart().split(/\s+/);
