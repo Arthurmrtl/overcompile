@@ -10,11 +10,17 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
-  # Optional: pulls the new image automatically after every push on main
+  # Optional: pulls the new image automatically after every push on main.
+  # Only touches containers carrying the label above, so it leaves other stacks alone.
   watchtower:
     image: containrrr/watchtower
     container_name: watchtower-overcompile
     restart: unless-stopped
+    environment:
+      # containrrr/watchtower defaults to an API version that Docker 29+ rejects
+      - DOCKER_API_VERSION=1.44
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # ghcr.io credentials from `docker login` (needed while the package is private)
+      - /root/.docker/config.json:/config.json:ro
     command: --label-enable --cleanup --interval 300
