@@ -1,5 +1,7 @@
 import Decimal from "break_eternity.js";
 import type { GameState } from "./state";
+import { CHALLENGES } from "./challenges";
+import { TALENTS } from "./talents";
 
 export interface Achievement {
   id: string;
@@ -31,7 +33,10 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "release_1", check: s => s.releases >= 1 },
   { id: "release_10", check: s => s.releases >= 10 },
   { id: "stars_100", check: s => s.lifetimeStars.gte(100) },
-  { id: "tree_full", check: s => s.talents.length >= 14 },
+  { id: "tree_full", check: s => TALENTS.every(t => s.talents.includes(t.id)) },
+  { id: "opt_25", check: s => Object.values(s.upgrades).reduce((a, b) => a + b, 0) >= 25 },
+  { id: "challenge_1", check: s => s.challengesDone.length >= 1 },
+  { id: "challenge_all", check: s => CHALLENGES.every(c => s.challengesDone.includes(c.id)) },
   // Secret ones are granted by terminal commands
   { id: "interrupt", secret: true, check: s => s.stats.interrupts >= 1 },
   { id: "sudo", secret: true, check: () => false },

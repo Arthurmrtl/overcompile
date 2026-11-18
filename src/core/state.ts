@@ -28,6 +28,11 @@ export interface GameState {
   talents: string[];
   autobuy: Record<HwKey, boolean>;
   autoRelease: { enabled: boolean; threshold: number };
+  /** Levels of the infinite star upgrades (Optimizations). */
+  upgrades: Record<string, number>;
+  /** Active challenge id, or null. */
+  challenge: string | null;
+  challengesDone: string[];
   achievements: string[];
   stats: {
     builds: number;
@@ -44,7 +49,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -72,6 +77,9 @@ export function newState(): GameState {
     talents: [],
     autobuy: { cpu: true, ram: true, disk: true, jobs: true },
     autoRelease: { enabled: false, threshold: 10 },
+    upgrades: {},
+    challenge: null,
+    challengesDone: [],
     achievements: [],
     stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null },
     settings: { lang: browserLang(), notation: "standard", verbose: true, buyAmount: 1 },
@@ -105,9 +113,29 @@ export function deserialize(json: string): GameState {
     settings: { ...base.settings, ...raw.settings },
   };
   for (const f of DECIMAL_FIELDS) s[f] = new Decimal(raw[f] ?? 0);
+  s.upgrades = { ...(raw.upgrades ?? {}) };
+  s.challengesDone = [...(raw.challengesDone ?? [])];
+  migrate(s, raw.version ?? 1);
   // Slots must match the number of jobs
   s.slots = Array.from({ length: s.hw.jobs }, (_, i) => raw.slots?.[i] ?? { progress: 0, running: false });
   return s;
+}
+
+/** Upgrades older saves to the current format. */
+function migrate(s: GameState, from: number) {
+  if (from < 2) {
+    // v0.1 → v0.2: the four autobuyers become the Auto-Scaling branch, same cost each
+    const map: Record<string, string> = {
+      autobuy_cpu: "as_perm", autobuy_ram: "as_fast", autobuy_disk: "as_ctrl", autobuy_jobs: "as_jobs",
+    };
+    s.talents = s.talents.map(t => map[t] ?? t);
+    // A talent that no longer has its prerequisite keeps working: nothing is lost
+    if (s.talents.includes("as_perm")) s.perks.auto_scaling = { unlocked: true, enabled: true };
+    // Offline progress used to be 50% for everyone (100% with the talent): owners keep 50%
+    if (s.talents.includes("offline_runners")) s.upgrades.off_eff = Math.max(s.upgrades.off_eff ?? 0, 4);
+    s.challenge = null;
+  }
+  s.version = SAVE_VERSION;
 }
 
 export function exportSave(s: GameState): string {

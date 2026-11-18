@@ -1,10 +1,12 @@
 import Decimal from "break_eternity.js";
 import { ACHIEVEMENTS } from "./achievements";
+import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./challenges";
 import {
-  HW, PERK_PRICE, bulkPrice, buildTime, failProbability, has, maxAffordable, price, reward, starsOnRelease,
-  OFFLINE_CAP_SECONDS, offlineEfficiency,
+  HW, PERK_PRICE, OFFLINE_GRACE_SECONDS, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
+  has, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
 } from "./formulas";
 import { TALENT_BY_ID } from "./talents";
+import { UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
 import {
   type BuyAmount, type GameState, type HwKey, type PerkKey, SAVE_KEY, deserialize, newState, serialize,
 } from "./state";
@@ -16,7 +18,10 @@ export type GameEvent =
   | { t: "interrupted" }
   | { t: "achievement"; id: string }
   | { t: "autobuy"; key: HwKey; n: number }
-  | { t: "release"; stars: Decimal; auto: boolean };
+  | { t: "release"; stars: Decimal; auto: boolean }
+  | { t: "challenge_start"; id: string }
+  | { t: "challenge_done"; id: string }
+  | { t: "challenge_exit"; id: string };
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" };
 
@@ -25,7 +30,6 @@ export class Engine {
   private listeners: ((e: GameEvent) => void)[] = [];
   private muted = false;
   private autoScaleTimer = 0;
-  private autobuyTimer = 0;
 
   constructor(state?: GameState) {
     this.s = state ?? newState();
@@ -97,27 +101,23 @@ export class Engine {
 
     if (s.pipeline) this.advanceBuilds(dt);
 
-    // Auto-Scaling perk: buys the cheapest affordable CPU/RAM/Disk upgrade (every second)
+    // Auto-Scaling: buys the cheapest affordable upgrade (every 2 s, 0.25 s with `fast`)
     this.autoScaleTimer += dt;
-    if (s.perks.auto_scaling.enabled && this.autoScaleTimer >= 1) {
+    if (s.perks.auto_scaling.enabled && this.autoScaleTimer >= autoScaleInterval(s)) {
       this.autoScaleTimer = 0;
       this.autoScale();
     }
 
-    // Release-tree autobuyers: buy max (every half second)
-    this.autobuyTimer += dt;
-    if (this.autobuyTimer >= 0.5) {
-      this.autobuyTimer = 0;
-      for (const key of ["jobs", "ram", "cpu", "disk"] as HwKey[]) {
-        if (has(s, `autobuy_${key}`) && s.autobuy[key]) {
-          const r = this.buyHw(key, "max");
-          if (r.ok) this.emit({ t: "autobuy", key, n: r.n });
-        }
-      }
+    // Challenge completion
+    if (s.challenge && s.runEarned.gte(challengeGoal(s))) {
+      const id = s.challenge;
+      s.challenge = null;
+      s.challengesDone.push(id);
+      this.emit({ t: "challenge_done", id });
     }
 
     // Release bot
-    if (has(s, "release_bot") && s.autoRelease.enabled && starsOnRelease(s).gte(Math.max(1, s.autoRelease.threshold))) {
+    if (on(s, "release_bot") && s.autoRelease.enabled && !s.challenge && starsOnRelease(s).gte(Math.max(1, s.autoRelease.threshold))) {
       this.release(true);
     }
 
@@ -196,6 +196,7 @@ export class Engine {
     const s = this.s;
     const level = s.hw[key];
     const max = HW[key].max;
+    if (this.hwLocked(key)) return { ok: false, reason: "locked" };
     if (max !== undefined && level >= max) return { ok: false, reason: "max" };
     let n = amount === "max" ? maxAffordable(key, level, s.credits) : amount;
     if (max !== undefined) n = Math.min(n, max - level);
@@ -210,17 +211,40 @@ export class Engine {
     return { ok: true, n };
   }
 
+  /** Single-core challenge: CPU and Jobs stay at 1. */
+  hwLocked(key: HwKey) {
+    return inChallenge(this.s, "single_core") && (key === "cpu" || key === "jobs");
+  }
+
+  /** Whether Auto-Scaling may buy this resource (the `ctrl` talent adds per-resource switches). */
+  autoAllowed(key: HwKey) {
+    const s = this.s;
+    if (this.hwLocked(key)) return false;
+    if (key === "jobs" && !on(s, "as_jobs")) return false;
+    return on(s, "as_ctrl") ? s.autobuy[key] : true;
+  }
+
   autoScale() {
-    let guard = 0;
-    for (;;) {
-      const options = (["cpu", "ram", "disk"] as HwKey[])
-        .map(k => ({ k, p: price(k, this.s.hw[k]) }))
-        .filter(o => this.s.credits.gte(o.p));
-      if (!options.length || guard++ > 500) break;
-      const cheapest = options.reduce((a, b) => (b.p.lt(a.p) ? b : a));
-      this.buyHw(cheapest.k, 1);
-      this.emit({ t: "autobuy", key: cheapest.k, n: 1 });
+    const s = this.s;
+    const bought: Partial<Record<HwKey, number>> = {};
+    // `-j`: job slots first, as soon as one is affordable
+    if (this.autoAllowed("jobs")) {
+      const r = this.buyHw("jobs", "max");
+      if (r.ok) bought.jobs = r.n;
     }
+    // then the cheapest of CPU / RAM / Disk, again and again
+    const pool = (["cpu", "ram", "disk"] as HwKey[]).filter(k => this.autoAllowed(k));
+    for (let guard = 0; guard < 2000; guard++) {
+      let best: { k: HwKey; p: Decimal } | null = null;
+      for (const k of pool) {
+        const p = price(k, s.hw[k]);
+        if (s.credits.gte(p) && (!best || p.lt(best.p))) best = { k, p };
+      }
+      if (!best) break;
+      this.buyHw(best.k, 1);
+      bought[best.k] = (bought[best.k] ?? 0) + 1;
+    }
+    for (const [key, n] of Object.entries(bought)) this.emit({ t: "autobuy", key: key as HwKey, n: n! });
   }
 
   buyPerk(key: PerkKey): BuyResult {
@@ -243,6 +267,7 @@ export class Engine {
   /* ---------------- Release (prestige) ---------------- */
   release(auto = false): Decimal | null {
     const s = this.s;
+    if (s.challenge) return null;
     const gain = starsOnRelease(s);
     if (gain.lt(1)) return null;
     s.stars = s.stars.add(gain);
@@ -257,14 +282,17 @@ export class Engine {
 
   private resetRun() {
     const s = this.s;
-    const jobs = has(s, "monorepo") ? 2 : 1;
+    const jobs = on(s, "monorepo") && !inChallenge(s, "single_core") ? 2 : 1;
     s.credits = new Decimal(0);
     s.runEarned = new Decimal(0);
-    s.hw = { cpu: 1, ram: 1, disk: 1, jobs };
+    const boot = 1 + optBootLevels(s);
+    s.hw = { cpu: inChallenge(s, "single_core") ? 1 : boot, ram: boot, disk: boot, jobs };
     s.slots = Array.from({ length: jobs }, () => ({ progress: 0, running: false }));
     s.pipeline = false;
-    const ci = has(s, "ci_preinstalled");
-    s.perks = { ci_cd: { unlocked: ci, enabled: ci }, auto_scaling: { unlocked: false, enabled: false } };
+    const ci = on(s, "ci_preinstalled");
+    const as = on(s, "as_perm");
+    s.perks = { ci_cd: { unlocked: ci, enabled: ci }, auto_scaling: { unlocked: as, enabled: as } };
+    this.autoScaleTimer = 0;
     s.stats.runTime = 0;
     s.stats.streak = 0;
     if (ci) this.compile();
@@ -291,8 +319,57 @@ export class Engine {
     if (id === "ci_preinstalled" && !this.s.perks.ci_cd.unlocked) {
       this.s.perks.ci_cd = { unlocked: true, enabled: true };
     }
+    if (id === "as_perm" && !this.s.perks.auto_scaling.unlocked) {
+      this.s.perks.auto_scaling = { unlocked: true, enabled: true };
+    }
     this.checkAchievements();
     return r;
+  }
+
+  /* ---------------- Optimizations (infinite star upgrades) ---------------- */
+  canBuyUpgrade(id: string): BuyResult {
+    const u = UPGRADE_BY_ID[id];
+    if (!u || (u.req && !has(this.s, u.req))) return { ok: false, reason: "locked" };
+    if (upgradeMaxed(this.s, id)) return { ok: false, reason: "max" };
+    if (this.s.stars.lt(upgradePrice(this.s, id))) return { ok: false, reason: "stars" };
+    return { ok: true, n: 1 };
+  }
+
+  buyUpgrade(id: string): BuyResult {
+    const r = this.canBuyUpgrade(id);
+    if (!r.ok) return r;
+    this.s.stars = this.s.stars.sub(upgradePrice(this.s, id));
+    this.s.upgrades[id] = (this.s.upgrades[id] ?? 0) + 1;
+    this.checkAchievements();
+    return r;
+  }
+
+  /* ---------------- Challenges ---------------- */
+  get challengesUnlocked() {
+    return this.s.releases >= CHALLENGES_UNLOCK_AT;
+  }
+
+  startChallenge(id: string): "ok" | "locked" | "unknown" | "done" | "active" {
+    if (!CHALLENGES.some(c => c.id === id)) return "unknown";
+    if (!this.challengesUnlocked) return "locked";
+    if (this.s.challengesDone.includes(id)) return "done";
+    if (this.s.challenge) return "active";
+    this.s.challenge = id;
+    this.resetRun();
+    this.emit({ t: "challenge_start", id });
+    return "ok";
+  }
+
+  exitChallenge(): boolean {
+    const id = this.s.challenge;
+    if (!id) return false;
+    this.s.challenge = null;
+    if (id === "single_core" && on(this.s, "monorepo") && this.s.hw.jobs < 2) {
+      this.s.hw.jobs = 2;
+      this.s.slots.push({ progress: 0, running: this.s.pipeline && this.ciActive });
+    }
+    this.emit({ t: "challenge_exit", id });
+    return true;
   }
 
   /* ---------------- Achievements ---------------- */
@@ -309,15 +386,23 @@ export class Engine {
   }
 
   /* ---------------- Offline progress ---------------- */
-  /** Simulates time spent away. Returns a summary, or null if nothing happened. */
+  /**
+   * Simulates time spent away. The first 5 minutes always count in full (phone
+   * asleep, switching apps); beyond that, offline progress needs the `off`
+   * talent and runs at its efficiency, up to its duration cap.
+   * Returns a summary, or null if nothing happened.
+   */
   simulateOffline(seconds: number) {
     const s = this.s;
-    const away = Math.min(seconds, OFFLINE_CAP_SECONDS);
-    if (away < 10 || !s.pipeline || !this.ciActive) return null;
-    const before = { credits: s.credits, builds: s.stats.builds, fails: s.stats.fails, cpu: s.hw.cpu, ram: s.hw.ram, disk: s.hw.disk, jobs: s.hw.jobs, releases: s.releases, stars: s.lifetimeStars };
+    if (seconds < 1 || !s.pipeline || !this.ciActive) return null;
+    const grace = Math.min(seconds, OFFLINE_GRACE_SECONDS);
+    const beyond = Math.max(0, seconds - OFFLINE_GRACE_SECONDS);
     const eff = offlineEfficiency(s);
-    const steps = Math.min(2000, Math.ceil(away));
-    const dt = (away * eff) / steps;
+    const counted = Math.min(beyond, offlineCapSeconds(s));
+    const simulated = grace + counted * eff;
+    const before = { credits: s.credits, builds: s.stats.builds, fails: s.stats.fails, cpu: s.hw.cpu, ram: s.hw.ram, disk: s.hw.disk, jobs: s.hw.jobs, releases: s.releases, stars: s.lifetimeStars };
+    const steps = Math.min(2000, Math.ceil(simulated));
+    const dt = simulated / steps;
     const newAchievements: string[] = [];
     const collect = (e: GameEvent) => { if (e.t === "achievement") newAchievements.push(e.id); };
     this.listeners.push(collect);
@@ -326,10 +411,14 @@ export class Engine {
     this.muted = false;
     this.listeners = this.listeners.filter(l => l !== collect);
     // Play time counts real time, not simulated time
-    s.stats.playTime += away - away * eff;
+    s.stats.playTime += seconds - simulated;
     return {
-      away,
+      away: seconds,
+      grace,
       eff,
+      unlocked: eff > 0,
+      capped: beyond > counted,
+      simulated,
       credits: s.credits.sub(before.credits).max(0),
       builds: s.stats.builds - before.builds,
       fails: s.stats.fails - before.fails,
