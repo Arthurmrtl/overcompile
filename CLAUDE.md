@@ -60,7 +60,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.3.5)
+## Mécaniques actuelles (v0.3.6)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -94,7 +94,10 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 
 **Optimisations** (étoiles, coût ×3 à chaque niveau depuis la v0.2.8, rachetables à l'infini) : gains, vitesse, boot (+3 niveaux de matériel au début de chaque run), efficacité hors ligne, durée hors ligne. Elles existent parce qu'après l'arbre, les étoiles s'accumulaient sans rien sur quoi les dépenser.
 
-**Générations de matériel** (commande `gen`, inspirées de l'Ascension de Revolution Idle). Quand le CPU, la RAM ou le Disk atteint le niveau requis (75, puis ×1,4 à chaque fois : 75, 105, 145…), on peut le passer à la génération suivante. Son niveau repart au niveau de départ de la run, mais le bonus est permanent et n'est jamais remis à zéro : CPU builds ×1,15 plus rapides, RAM gains ×1,3, Disk gains ×1,15 et échecs ×0,85. Visibles après la 1re release. Simulation v0.3.0 (sur la base v0.2.8) : 1re génération vers 2 h 40 (Disk), arbre complet en 3 h 31 au lieu de 4 h 08 sans générations, 1re étoile inchangée. Une 1re génération plus tôt (niveau 50–60) ramenait l'arbre à 3 h 00–3 h 17. Réglages : `BAL.gen*`. Le simulateur les prend dès qu'elles sont disponibles (`NOGEN=1` pour les désactiver).
+**Générations de matériel** (commande `gen`, inspirées de l'Ascension de Revolution Idle). Quand le CPU, la RAM ou le Disk atteint le niveau requis (45, puis ×1,4 à chaque fois : 45, 63, 88, 123…), on peut le passer à la génération suivante. Son niveau repart au niveau de départ de la run, mais le bonus est permanent et n'est jamais remis à zéro : CPU builds ×1,08 plus rapides, RAM gains ×1,12, Disk gains ×1,06 et échecs ×0,92. Visibles après la 1re release. Réglages : `BAL.gen*`. Le simulateur les prend dès qu'elles sont disponibles (`NOGEN=1` pour les désactiver).
+- v0.3.0 (conçues par l'ami d'Arthur) : seuil 75, bonus ×1,15 / ×1,3 / ×1,15 et échecs ×0,85.
+- **Tranché (v0.3.6, Arthur) :** retour de jeu après l'arbre complet en 3 h 39 : « quasi inexploitable, on n'est jamais à 75 avant la toute fin de l'arbre ». Seuil baissé à 45 et bonus réduits pour ne pas accélérer l'arbre (baisser le seuil seul fait boule de neige : seuil 40 avec les anciens bonus → arbre en 2 h 10). Simulation : 1re génération vers 1 h 05–1 h 10 (Disk), puis environ une toutes les 30 min, arbre complet 2 h 57–3 h 03 (3 h 08 avant ; le vrai jeu d'Arthur prend ~15 % de plus que la sim).
+- **Tranché :** les générations restent une mécanique des releases (elles remplissent le milieu de partie). La couche Fork pourra s'en servir : remise à zéro avec un talent qui en garde une partie, seuil réduit, ou bonus de contributeurs selon les générations obtenues.
 
 **Événements de build** (`src/core/events.ts`, v0.3.1, façon « golden cookie »). Une fois la CI/CD active, un événement apparaît toutes les 3 à 6 minutes et reste 12 s : une pastille en haut de l'écran (visible quel que soit l'onglet) et une ligne `[ EVENT ]` dans le journal. On l'attrape en cliquant ou en tapant sa commande. **Tranché par Arthur :** tous positifs (pas de pénalité, la CVE est « CVE patchée ») et **pas d'option pour les désactiver**. Liste : Pause café `coffee` (builds ×2, 30 s), `cargo update` (+1 min de revenu), Test instable `retry` (0 % d'échec, 45 s), Code review express `approve` (gains ×3, 20 s), Conflit de merge `git merge` (tous les jobs terminent instantanément, 3 fois), CVE patchée `patch` (+5 min de revenu), Prod en feu `hotfix` (gains ×7, 15 s, rare), Release candidate `rc` (+10 % d'étoiles sur la prochaine release, rare, après la 1re release). Rien hors ligne ni pendant un challenge. Talent `pgr` (Astreinte, 3★, après `ci`) : fenêtre de 20 s et événements 25 % plus fréquents. Succès : 10 / 100 / 500 événements attrapés. La commande `events` les liste. Simulation : le joueur simulé en attrape 70 % (`EVENTS=0..1`, `NOEVENTS=1` pour les couper) ; arbre complet ~3 h 15–3 h 25 contre 3 h 35 sans, 1re étoile inchangée.
 
@@ -133,6 +136,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - Retours de jeu à garder en tête :
   - v0.1 : arbre fini en 1 h 38 avec 310 étoiles. C'était trop rapide après la 1re étoile, d'où le seuil qui monte à chaque release.
   - v0.2.2 : 1re étoile en 21 min 53.
+  - v0.3.5 : arbre complet en 3 h 39 (15 releases, 267 étoiles, 21 événements attrapés, 2 générations, release la plus rapide 1 min 21). Dans la cible, mais générations quasi inutilisées → v0.3.6. À surveiller : des releases toutes les ~1 min en fin d'arbre.
   - v0.2.7 : à 6 h 19, 6 releases, 22 étoiles, 0 challenge, « on s'ennuie fort ». Cause : runs d'une heure, aucune indication du bon moment pour publier, challenges passés inaperçus → v0.2.8.
   - Un creux d'attente avant la 1re étoile, quand il n'y a plus rien à acheter, décourage le joueur : il faut toujours un prochain objectif visible.
 

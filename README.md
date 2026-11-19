@@ -48,7 +48,7 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## Content (v0.3.5)
+## Content (v0.3.6)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (buys the cheapest upgrade every 2 s): not sold before the first release (the first run is played by hand), then priced at 25 % of the current release threshold until the permanent `as` talent (10★)
@@ -57,7 +57,7 @@ scripts/sim.ts     pacing simulation
   `ctrl` per-resource switches, `-j` job slots, with a player-set priority: save up for the next slot when it costs ≤ N s of income, from the `prio` button on the Jobs card or `autoscale jobs <off|10|30|60|300|always>`) and `off` (offline progress)
 - Release advisor: stars/min of the current run; the Release button pulses (and the journal says so) when shipping is worth it
 - Optimizations: infinite star upgrades, price ×3 per level (rewards, build speed, warm start, offline efficiency/duration)
-- Hardware generations (`gen`, inspired by Revolution Idle's ascension): once CPU, RAM or Disk reaches the required level (75, then ×1.4 each time), move it to the next generation. Its level restarts, but the bonus is permanent and never reset (CPU: builds ×1.15 faster · RAM: rewards ×1.3 · Disk: rewards ×1.15, failures ×0.85)
+- Hardware generations (`gen`, inspired by Revolution Idle's ascension): once CPU, RAM or Disk reaches the required level (45, then ×1.4 each time), move it to the next generation. Its level restarts, but the bonus is permanent and never reset (CPU: builds ×1.08 faster · RAM: rewards ×1.12 · Disk: rewards ×1.06, failures ×0.92)
 - Build events (`events`): every 3–6 min something shows up for 12 s (20 s with the `pgr` talent); click it or type its command for a boost. All positive: coffee break (`coffee`, builds ×2 · 30 s), `cargo update` (+1 min of income), flaky test (`retry`, 0 % failures · 45 s), express code review (`approve`, rewards ×3 · 20 s), merge conflict (`git merge`, every job finishes instantly ×3), CVE patched (`patch`, +5 min of income), prod on fire (`hotfix`, rewards ×7 · 15 s), release candidate (`rc`, +10 % stars on the next release). None offline or during a challenge
 - Offline progress: the first 5 minutes of absence always count; beyond that it must be unlocked
   (`off`: 10 %, 2 h) and improved with Optimizations
