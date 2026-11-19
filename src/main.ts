@@ -22,7 +22,7 @@ import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/term
 import { type Advice, ReleaseAdvisor } from "./core/advisor";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.3.5";
+const GAME_VERSION = "0.3.6";
 
 /* ================= Boot ================= */
 const engine = Engine.load();

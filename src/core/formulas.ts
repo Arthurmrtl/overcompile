@@ -83,12 +83,12 @@ export const BAL = {
   optReward: 1.25,      // Optimization "rewards": × per level
   optCostRatio: 3,      // infinite Optimizations: price × N per level (was 2)
   earlyK: 1.5,          // early star curve: 1 + earlyK × log2(earned / base) (was 1)
-  genBase: 75,         // first generation needs this level of the hardware (late mid-game)…
-  genGrowth: 1.4,      // …and each next one ×N more levels (75, 105, 145, 205…)
-  genCpu: 1.15,        // each CPU generation: builds ×N faster
-  genRam: 1.3,         // each RAM generation: rewards ×N
-  genDisk: 1.15,       // each Disk generation: rewards ×N…
-  genDiskFail: 0.85,   // …and failures ×N
+  genBase: 45,         // first generation needs this level of the hardware (v0.3.6: was 75, too late to matter before the end of the tree)…
+  genGrowth: 1.4,      // …and each next one ×N more levels (45, 63, 88, 123…)
+  genCpu: 1.08,        // each CPU generation: builds ×N faster
+  genRam: 1.12,         // each RAM generation: rewards ×N
+  genDisk: 1.06,       // each Disk generation: rewards ×N…
+  genDiskFail: 0.92,   // …and failures ×N
 };
 
 /* ---------- Hardware generations (inspired by Revolution Idle's ascension) ---------- */
