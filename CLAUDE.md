@@ -60,7 +60,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.3.4)
+## Mécaniques actuelles (v0.3.5)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -82,7 +82,7 @@ La courbe est volontairement généreuse au début : 2★ à ×1,6 le seuil, 3�
 
 **Découverte progressive.** Avant la 1re release, le joueur ne voit que l'objectif (« Publier v1.0.0 → ??? ») : ni étoiles, ni arbre, ni optimisations. Les challenges apparaissent après 3 releases. Une commande pas encore débloquée répond `bash: X: command not found`. L'arbre a un « brouillard » : seuls les talents adjacents à ceux qu'on possède sont visibles, et l'arbre ne prend que la hauteur des rangées visibles (v0.3.4, sinon gros vide sur mobile). Ne divulgue rien de verrouillé (UI, aide, `guide`, succès cachés).
 
-**Arbre de release (talents).** 15 talents, du premier (`inc`, Cache chaud, 1★) au dernier (`bot`, Release bot, 100★). Ils sont identifiés par des **tags texte**, et **Tranché :** pas d'emojis dans l'arbre (« ça fait gamin / IA »). Les autres emojis de l'interface (💾 ⚙ 🏆 🔒 🛒 ⌨️ 🚀 ⭐) restent.
+**Arbre de release (talents).** 15 talents, du premier (`inc`, Cache chaud, 1★) au dernier (`bot`, Release bot, 100★). Ils sont identifiés par des **tags texte**, et **Tranché :** pas d'emojis dans l'arbre (« ça fait gamin / IA »). Même chose pour les succès depuis la v0.3.5 (Arthur : « moins IA slop ») : tags `[ ]` à faire, `[!]` à récupérer, `[✓]` récupéré, `[?]` secret, et `[ ACH ]` dans le journal. Les autres emojis de l'interface (💾 ⚙ 🔒 🛒 ⌨️ 🚀 ⭐, icônes des événements) restent pour l'instant.
 
 Branche Auto-Scaling :
 - `as` (10★ depuis la v0.3.2) : Auto-Scaling permanent (conservé après une release) ;
@@ -106,7 +106,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - jamais remis à zéro ;
 - récompense à récupérer quand on veut (bouton Claim, commande `claim`) ;
 - petites sommes en crédits au début, puis bonus permanents du type « +2 % de gains » ;
-- un seul onglet Succès : « À récupérer », « En cours » (barres de progression, triés par proximité), « Tous ». Pas d'affichage en double.
+- un seul onglet Succès : « À récupérer » puis « Tous les succès ». **Tranché (v0.3.5) :** plus de liste « En cours » séparée (doublon, selon Arthur) ; chaque carte de succès pas encore obtenu porte sa barre de progression, et la grille est triée : en cours (les plus proches d'abord), puis à récupérer, récupérés, secrets. Pas d'affichage en double.
 
 **Console.** Elle doit être avant tout **satisfaisante et informative, pas verbeuse**. On a en haut un flux de build décoratif (lignes façon `cargo`, 5 max) et une ligne de statut en direct. En bas, un journal lisible : résumés par minute, records, bannières. Trois niveaux de verbosité dans les paramètres. Les toasts sont limités à 3 à la fois.
 

@@ -1,7 +1,7 @@
 import "./style.css";
 import Decimal from "break_eternity.js";
 import { Engine, type GameEvent } from "./core/engine";
-import { ACHIEVEMENTS } from "./core/achievements";
+import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
 import {
   HW, JOBS_PRIO_STEPS, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
   failProbability, genRequired, gensRevealed, has, maxAffordable, totalGens, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
@@ -12,7 +12,7 @@ import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./
 import { GEN_KEYS, type GenKey, HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import {
-  LOGO, achDesc, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, genBonusText, nextGoals, progressText,
+  LOGO, achDesc, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, genBonusText, progressText,
   eventBonusText, jobsPrioText, rewardText, upgradeNow, version,
 } from "./commands";
 import { achProgress } from "./core/achievements";
@@ -22,7 +22,7 @@ import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/term
 import { type Advice, ReleaseAdvisor } from "./core/advisor";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.3.4";
+const GAME_VERSION = "0.3.5";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -182,8 +182,6 @@ function buildLayout() {
           <h3>${t("ach.pending")}</h3>
           <div class="obj-list" data-r="achPending"></div>
         </div>
-        <h3>${t("ach.next")}</h3>
-        <div class="obj-list" data-r="achNext"></div>
         <h3>${t("ach.all")}</h3>
         <div class="ach-grid" data-r="ach"></div>
       </div>
@@ -737,20 +735,6 @@ function renderGoals(force = false) {
     claimButton(`${t("obj.claim")} ${rewardText(a.reward)}`, `claim ${a.id}`)));
   if (pending.length > 1) claimRows.push(h("div", { class: "obj-count" }, claimButton(`${t("obj.claim_all")} (${pending.length})`, "claim all")));
   $("[data-r=achPending]").replaceChildren(...claimRows);
-  $("[data-r=achNext]").replaceChildren(...nextGoals(engine).map(a => {
-    const fill = h("div", { class: "fill" });
-    fill.style.width = `${Math.round(achProgress(s, a) * 100)}%`;
-    return h("div", { class: "goal" },
-      h("div", { class: "goal-top" },
-        h("span", { class: "goal-name" }, achDesc(a)),
-        h("span", { class: "obj-reward" }, rewardText(a.reward)),
-      ),
-      h("div", { class: "goal-bar" },
-        h("div", { class: "progress" }, fill),
-        h("span", { class: "goal-val muted small" }, progressText(engine, a)),
-      ),
-    );
-  }));
 }
 
 function renderOptimizations() {
@@ -846,24 +830,59 @@ function renderAchievements() {
   const dotOn = pendingCount > 0 || (advice.advised && starsRevealed(s));
   if (dot.hidden === dotOn) dot.hidden = !dotOn;
   const achKey = `${n}|${s.achClaimed.length}|${starsRevealed(s)}|${engine.challengesUnlocked}|${s.settings.lang}`;
-  if (achKey === lastAchCount) return;
+  if (achKey === lastAchCount) {
+    if (sideTab === "achievements") updateAchBars();
+    return;
+  }
   lastAchCount = achKey;
   const bonus = bonusSummary(engine);
   setText($("[data-r=achHead]"), t("ach.count", { n, total: ACHIEVEMENTS.length }) + (bonus ? ` · ${bonus}` : ""));
-  $("[data-r=ach]").replaceChildren(...ACHIEVEMENTS.map(a => {
+  // Order: in progress (closest first), then ready to claim, claimed, and secrets last
+  const rank = (a: Achievement) => {
+    const got = s.achievements.includes(a.id);
+    if (got && !s.achClaimed.includes(a.id)) return 1;
+    if (got) return 2;
+    return achVisible(engine, a) ? 0 : 3;
+  };
+  const list = [...ACHIEVEMENTS].sort((x, y) => rank(x) - rank(y) || (rank(x) === 0 ? achProgress(s, y) - achProgress(s, x) : 0));
+  $("[data-r=ach]").replaceChildren(...list.map(a => {
     const got = s.achievements.includes(a.id);
     const claimed = s.achClaimed.includes(a.id);
     const hidden = !got && !achVisible(engine, a);
     const foot = hidden ? h("div", { class: "ach-reward" }, "")
       : got && !claimed ? claimButton(`${t("obj.claim")} ${rewardText(a.reward)}`, `claim ${a.id}`)
       : h("div", { class: "ach-reward" }, rewardText(a.reward));
+    // Progress bar on achievements still to get (not for one-shot ones)
+    const bar = !got && !hidden && a.target !== undefined && a.target > 1
+      ? h("div", { class: "ach-prog", "data-prog": a.id },
+          h("div", { class: "progress" }, h("div", { class: "fill" })),
+          h("span", { class: "ach-val" }))
+      : null;
     return h("div", { class: "ach" + (claimed ? " got" : got ? " ready" : ""), title: hidden ? t("ach.secret") : t(`a.${a.id}.desc`) },
-      h("div", { class: "ach-icon" }, claimed ? "🏆" : got ? "🎁" : "🔒"),
+      // Text tags, like the release tree and the "To claim" list (no emojis: Arthur's call)
+      h("div", { class: "ach-icon" }, hidden ? "[?]" : claimed ? "[✓]" : got ? "[!]" : "[ ]"),
       h("div", { class: "ach-name" }, hidden ? "???" : t(`a.${a.id}`)),
       h("div", { class: "ach-desc" }, hidden ? t("ach.secret") : achDesc(a)),
+      ...(bar ? [bar] : []),
       foot,
     );
   }));
+  achBarsTimer = 0;
+  updateAchBars();
+}
+
+let achBarsTimer = 0;
+/** Refreshes the progress bars of the achievements tab (about once a second). */
+function updateAchBars() {
+  const now = performance.now();
+  if (now - achBarsTimer < 1000) return;
+  achBarsTimer = now;
+  const s = engine.s;
+  for (const el of app.querySelectorAll<HTMLElement>("[data-prog]")) {
+    const a = ACH_BY_ID[el.dataset.prog!];
+    ($(".fill", el) as HTMLElement).style.width = `${Math.round(achProgress(s, a) * 100)}%`;
+    setText($(".ach-val", el), progressText(engine, a));
+  }
 }
 
 function renderStats() {
@@ -1019,7 +1038,7 @@ function showOffline(rep: NonNullable<ReturnType<Engine["simulateOffline"]>>) {
   ];
   if (rep.upgrades > 0) items.push(h("li", {}, t("off.upgrades", { n: fmtInt(rep.upgrades) })));
   if (rep.releases > 0) items.push(h("li", {}, t("off.releases", { n: rep.releases, s: fmt(rep.stars) })));
-  for (const a of rep.achievements) items.push(h("li", {}, `🏆 ${t(`a.${a}`)}`));
+  for (const a of rep.achievements) items.push(h("li", {}, `[!] ${t(`a.${a}`)}`));
   openModal(
     h("h2", {}, `🌙 ${t("off.title")}`),
     h("p", {}, t("off.time", { t: fmtTime(rep.away) })),
@@ -1068,8 +1087,8 @@ engine.on((e: GameEvent) => {
     case "achievement": {
       const r = Engine.rewardOf(e.id);
       const rt = r ? rewardText(r) : "";
-      term.println(["🏆 ", ""], [t("term.achievement", { a: t(`a.${e.id}`) }).replace("🏆 ", ""), "c-amber"], ["  " + t("ach.to_claim", { r: rt }), "c-green"]);
-      toast(t("ach.unlocked"), `🏆 ${t(`a.${e.id}`)} · ${rt}`);
+      term.println(["[ ACH ]", "c-amber"], [" " + t("term.achievement", { a: t(`a.${e.id}`) }), "c-amber"], ["  " + t("ach.to_claim", { r: rt }), "c-green"]);
+      toast(t("ach.unlocked"), `${t(`a.${e.id}`)} · ${rt}`);
       break;
     }
     case "release": {
