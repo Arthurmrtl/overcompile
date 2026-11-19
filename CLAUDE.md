@@ -54,13 +54,13 @@ Règles d'architecture :
 ## Sauvegarde : à ne pas casser
 
 - Stockage dans `localStorage`, clé `overcompile-save`. Sauvegarde automatique ; export/import en texte dans les paramètres.
-- `SAVE_VERSION` vaut actuellement **4**. Si tu changes la forme de `GameState` :
+- `SAVE_VERSION` vaut actuellement **5**. Si tu changes la forme de `GameState` :
   1. incrémente `SAVE_VERSION` ;
   2. ajoute une étape dans `migrate()` qui convertit les anciennes sauvegardes ;
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.3.2)
+## Mécaniques actuelles (v0.3.3)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -88,7 +88,7 @@ Branche Auto-Scaling :
 - `as` (10★ depuis la v0.3.2) : Auto-Scaling permanent (conservé après une release) ;
 - `fast` : 4 passages par seconde au lieu d'un toutes les 2 s ;
 - `ctrl` : cases AUTO, pour choisir quelles ressources l'Auto-Scaling achète ;
-- `-j` : l'Auto-Scaling gère aussi les Jobs.
+- `-j` : l'Auto-Scaling gère aussi les Jobs. Il en achète d'abord autant que possible, puis dépense le reste en CPU/RAM/Disk. **Tranché (v0.3.3, option choisie par Arthur) :** un seuil réglé par le joueur (`jobsPrio`, en secondes de revenu : jamais, 10 s, 30 s, 1 min, 5 min, toujours) fait économiser pour le prochain slot quand il coûte au plus ce temps de revenu. Bouton `prio … ▸` sur la carte Jobs, barre « épargne pour le job N », commande `autoscale jobs <off|10|30|60|300|always>` (visible seulement avec `-j`). Défaut : jamais, parce que la simulation montre qu'économiser ne fait jamais gagner (chaque slot coûte ×5 le précédent pour un gain linéaire ; 16 jobs atteints vers 3 h 30 sans épargne ; 30 s retarde l'arbre de ~10 min, 5 min de ~2 h). C'est une préférence de joueur, pas une optimisation. Sim : `JOBSPRIO=<s>`.
 
 Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doublon avec l'Auto-Scaling.
 

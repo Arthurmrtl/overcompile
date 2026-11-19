@@ -85,6 +85,24 @@ export function eventBonusText(id: string): string {
   }
 }
 
+/** "never", "30 s", "1 min", "always" */
+export function jobsPrioText(v: number): string {
+  if (v === 0) return t("jp.never");
+  if (v < 0) return t("jp.always");
+  return v >= 60 && v % 60 === 0 ? `${v / 60} min` : `${v} s`;
+}
+
+/** Parses "off", "30", "30s", "5m", "always" (FR words too). Returns null if invalid. */
+export function parseJobsPrio(arg: string): number | null {
+  const a = arg.toLowerCase();
+  if (["off", "never", "jamais", "0"].includes(a)) return 0;
+  if (["always", "toujours", "on"].includes(a)) return -1;
+  const m = /^(\d+(?:\.\d+)?)\s*(s|sec|m|min)?$/.exec(a);
+  if (!m) return null;
+  const n = Number(m[1]) * (m[2]?.startsWith("m") ? 60 : 1);
+  return n > 0 ? Math.round(n) : null;
+}
+
 export const challengeName = (id: string) => t(`ch.${id}`);
 
 /** "+5 cr" or "+2 % rewards" */
@@ -194,7 +212,7 @@ export function createCommands(c: GameCtx) {
         ["compile", t("help.compile")], ["stop", t("help.stop")], ["buy", t("help.buy")],
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
         ["status", t("help.status")], ["goals", t("help.goals")], ["claim", t("help.claim")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
-        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ["events", t("help.events")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
+        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ...(on(e().s, "as_jobs") ? [["autoscale", t("help.autoscale")] as [string, string]] : []), ["events", t("help.events")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
       ];
@@ -483,6 +501,20 @@ export function createCommands(c: GameCtx) {
     clear() {
       term.clear();
     },
+    autoscale(args) {
+      const en = e();
+      const [what, val] = args;
+      if (what !== "jobs") return void say(t("jp.usage"));
+      if (val === undefined) {
+        say(t("jp.now", { v: jobsPrioText(en.s.jobsPrio) }));
+        say([t("jp.help"), "c-dim"]);
+        return;
+      }
+      const v = parseJobsPrio(val);
+      if (v === null) return void say(t("jp.usage"));
+      en.setJobsPrio(v);
+      say(OK, " " + t("jp.set", { v: jobsPrioText(v) }));
+    },
     events() {
       const en = e();
       say(["[EVENTS]", "c-bold"]);
@@ -543,6 +575,7 @@ export function createCommands(c: GameCtx) {
     const en = e();
     if (["tree", "talent", "optimize"].includes(name)) return starsRevealed(en.s);
     if (name === "gen") return gensRevealed(en.s);
+    if (name === "autoscale") return on(en.s, "as_jobs");
     if (name === "challenge") return en.challengesUnlocked;
     return true;
   }
@@ -566,9 +599,9 @@ export function createCommands(c: GameCtx) {
     buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "auto_cpu", "auto_ram", "auto_disk", "auto_jobs", "release_bot"],
     optimize: UPGRADES.map(u => u.id), gen: GEN_KEYS, challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
-    cargo: ["update"], git: ["merge"],
+    cargo: ["update"], git: ["merge"], autoscale: ["jobs"],
   };
-  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
+  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "autoscale", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
     ...new Set(BUILD_EVENTS.map(ev => ev.cmd.split(" ")[0]))];
 
   function complete(line: string): string[] {

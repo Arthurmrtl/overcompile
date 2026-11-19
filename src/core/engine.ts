@@ -343,6 +343,25 @@ export class Engine {
   }
 
   /** Whether Auto-Scaling may buy this resource (the `ctrl` talent adds per-resource switches). */
+  /**
+   * Is the Auto-Scaling saving up for the next job slot? True when `-j` may buy jobs, a slot
+   * is left, and its price is at most `jobsPrio` seconds of income (always when -1).
+   */
+  jobSaving(): { price: Decimal; progress: number; next: number } | null {
+    const s = this.s;
+    if (!s.perks.auto_scaling.enabled || !this.autoAllowed("jobs") || s.jobsPrio === 0) return null;
+    const max = HW.jobs.max ?? Infinity;
+    if (s.hw.jobs >= max) return null;
+    const p = price("jobs", s.hw.jobs);
+    if (s.jobsPrio > 0 && p.gt(expectedRate(s).mul(s.jobsPrio))) return null;
+    return { price: p, progress: Math.min(1, s.credits.div(p).toNumber()), next: s.hw.jobs + 1 };
+  }
+
+  /** Sets the job priority threshold (seconds of income, 0 = never, -1 = always). */
+  setJobsPrio(v: number) {
+    this.s.jobsPrio = v;
+  }
+
   autoAllowed(key: HwKey) {
     const s = this.s;
     if (this.hwLocked(key)) return false;
@@ -353,10 +372,15 @@ export class Engine {
   autoScale() {
     const s = this.s;
     const bought: Partial<Record<HwKey, number>> = {};
-    // `-j`: job slots first, as soon as one is affordable
+    // `-j`: job slots first, as soon as one is affordable…
     if (this.autoAllowed("jobs")) {
       const r = this.buyHw("jobs", "max");
       if (r.ok) bought.jobs = r.n;
+    }
+    // …and while the next one is within the player's threshold, save up for it
+    if (this.jobSaving()) {
+      for (const [key, n] of Object.entries(bought)) this.emit({ t: "autobuy", key: key as HwKey, n: n! });
+      return;
     }
     // then the cheapest of CPU / RAM / Disk, again and again
     const pool = (["cpu", "ram", "disk"] as HwKey[]).filter(k => this.autoAllowed(k));

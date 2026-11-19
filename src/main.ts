@@ -3,7 +3,7 @@ import Decimal from "break_eternity.js";
 import { Engine, type GameEvent } from "./core/engine";
 import { ACHIEVEMENTS } from "./core/achievements";
 import {
-  HW, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
+  HW, JOBS_PRIO_STEPS, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
   failProbability, genRequired, gensRevealed, has, maxAffordable, totalGens, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
   reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
 } from "./core/formulas";
@@ -13,7 +13,7 @@ import { GEN_KEYS, type GenKey, HW_KEYS, PERK_KEYS, type HwKey, exportSave, impo
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import {
   LOGO, achDesc, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, genBonusText, nextGoals, progressText,
-  eventBonusText, rewardText, upgradeNow, version,
+  eventBonusText, jobsPrioText, rewardText, upgradeNow, version,
 } from "./commands";
 import { achProgress } from "./core/achievements";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
@@ -22,7 +22,7 @@ import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/term
 import { type Advice, ReleaseAdvisor } from "./core/advisor";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.3.2";
+const GAME_VERSION = "0.3.3";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -242,6 +242,24 @@ function buildHardware() {
     auto.addEventListener("click", ev => ev.stopPropagation());
     auto.querySelector("input")!.addEventListener("change", () => cmd.run(`toggle auto_${k}`, true));
     card.querySelector(".hw-top")!.append(auto);
+    if (k === "jobs") {
+      // `-j`: threshold under which Auto-Scaling saves up for the next slot (not a <button>: the card is one)
+      const prio = h("span", { class: "prio-btn", role: "button", tabindex: "0", "data-f": "prio", hidden: "" });
+      const next = (ev: Event) => {
+        ev.stopPropagation();
+        const steps = JOBS_PRIO_STEPS;
+        const i = steps.indexOf(engine.s.jobsPrio);
+        const v = steps[(i + 1) % steps.length];
+        cmd.run(`autoscale jobs ${v === 0 ? "off" : v < 0 ? "always" : v}`, true);
+      };
+      prio.addEventListener("click", next);
+      prio.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); next(ev); } });
+      card.querySelector(".hw-top")!.append(prio);
+      card.append(h("div", { class: "job-save", "data-f": "save", hidden: "" },
+        h("span", { class: "job-save-t", "data-f": "saveT" }),
+        h("span", { class: "job-save-bar" }, h("i", { "data-f": "saveBar" })),
+      ));
+    }
     if ((GEN_KEYS as HwKey[]).includes(k)) {
       // Not a <button>: the card itself is one
       const genBtn = h("span", { class: "gen-btn", role: "button", tabindex: "0", "data-f": "genBtn", hidden: "" });
@@ -401,6 +419,7 @@ function render() {
     const cb = $<HTMLInputElement>("input", auto);
     if (cb.checked !== s.autobuy[k]) cb.checked = s.autobuy[k];
     renderGen(card, k);
+    if (k === "jobs") renderJobsPrio(card);
   }
 
   // Perks
@@ -492,6 +511,25 @@ function renderEvents() {
   const showRc = s.rcPending && !s.challenge;
   if (rc.hidden === showRc) rc.hidden = !showRc;
   if (showRc) setText(rc, t("ev.rc_pending", { p: RC_STARS_PCT }));
+}
+
+/** Jobs card: priority threshold button (with `-j`) and the "saving up for job N" bar. */
+function renderJobsPrio(card: HTMLElement) {
+  const s = engine.s;
+  const prio = $("[data-f=prio]", card);
+  const owns = on(s, "as_jobs");
+  if (prio.hidden === owns) prio.hidden = !owns;
+  if (owns) {
+    setText(prio, t("jp.btn", { v: jobsPrioText(s.jobsPrio) }));
+    prio.title = t("jp.help");
+  }
+  const sv = engine.jobSaving();
+  const row = $("[data-f=save]", card);
+  if (row.hidden === !!sv) row.hidden = !sv;
+  if (sv) {
+    setText($("[data-f=saveT]", card), t("jp.saving", { n: sv.next, p: Math.floor(sv.progress * 100) }));
+    $("[data-f=saveBar]", card).style.width = `${sv.progress * 100}%`;
+  }
 }
 
 /** Generation row of a hardware card: current generation, then the next requirement or the button. */

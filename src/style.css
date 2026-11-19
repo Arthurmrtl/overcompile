@@ -425,3 +425,16 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .buff { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--amber); color: var(--amber); font-variant-numeric: tabular-nums; }
 .rel-rc { margin-top: 4px; color: var(--amber); }
 @media (max-width: 900px) { .ev-pill { top: 64px; } }
+
+/* ---------- v0.3.3 job priority (talent -j) ---------- */
+.prio-btn {
+  font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--violet); color: var(--violet);
+  white-space: nowrap; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.prio-btn:hover, .prio-btn:focus-visible { background: var(--violet); color: var(--bg); outline: none; }
+.prio-btn[hidden] { display: none; }
+.job-save { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--border); font-size: 11px; color: var(--violet); }
+.job-save[hidden] { display: none; }
+.job-save-t { white-space: nowrap; }
+.job-save-bar { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.job-save-bar i { display: block; height: 100%; background: var(--violet); transition: width .2s linear; }

@@ -39,6 +39,9 @@ export const PERK_PRICE = { ci_cd: new Decimal(10), auto_scaling: new Decimal(10
  * purchase at the start of each run until the permanent `as` talent.
  */
 export const AS_PRICE_SHARE = 0.25;
+
+/** Choices for the job priority threshold (seconds of income; 0 = never, -1 = always). */
+export const JOBS_PRIO_STEPS = [0, 10, 30, 60, 300, -1];
 export const perkLocked = (s: GameState, k: PerkKey) => k === "auto_scaling" && s.releases === 0 && !s.perks.auto_scaling.unlocked;
 export function perkPrice(s: GameState, k: PerkKey): Decimal {
   return k === "auto_scaling" ? releaseBase(s).mul(AS_PRICE_SHARE).floor() : PERK_PRICE[k];

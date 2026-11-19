@@ -48,13 +48,13 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## Content (v0.3.2)
+## Content (v0.3.3)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (buys the cheapest upgrade every 2 s): not sold before the first release (the first run is played by hand), then priced at 25 % of the current release threshold until the permanent `as` talent (10★)
 - Prestige layer 1 — Release: ⭐ Stars, lifetime bonus; each version needs more credits per star; generous early star curve (2★ at ×1.6, 3★ at ×2.5, 4★ at ×4…)
 - Release tree (15 talents), including the Auto-Scaling branch (`as` permanent, `fast` 4×/s,
-  `ctrl` per-resource switches, `-j` job slots) and `off` (offline progress)
+  `ctrl` per-resource switches, `-j` job slots, with a player-set priority: save up for the next slot when it costs ≤ N s of income, from the `prio` button on the Jobs card or `autoscale jobs <off|10|30|60|300|always>`) and `off` (offline progress)
 - Release advisor: stars/min of the current run; the Release button pulses (and the journal says so) when shipping is worth it
 - Optimizations: infinite star upgrades, price ×3 per level (rewards, build speed, warm start, offline efficiency/duration)
 - Hardware generations (`gen`, inspired by Revolution Idle's ascension): once CPU, RAM or Disk reaches the required level (75, then ×1.4 each time), move it to the next generation. Its level restarts, but the bonus is permanent and never reset (CPU: builds ×1.15 faster · RAM: rewards ×1.3 · Disk: rewards ×1.15, failures ×0.85)
