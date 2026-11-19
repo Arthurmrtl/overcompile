@@ -32,10 +32,11 @@ src/
     engine.ts        Engine : tick, compile, autoScale, achats, release, challenges, hors ligne ; émet des événements
     talents.ts       arbre de release (15 talents, payés en étoiles)
     upgrades.ts      optimisations rachetables à l'infini (étoiles, coût ×3 par niveau)
-    advisor.ts       conseiller de release (étoiles/min, bon moment pour publier)
+    advisor.ts       conseillers de release (étoiles/min) et de fork (contributeurs/h)
+    fork.ts          couche Fork : contributeurs, arbre Fork, pull requests, réglages FORK
     challenges.ts    4 challenges (releases sous contrainte → bonus permanent)
     events.ts        événements de build (liste, poids, effets, délais)
-    achievements.ts  61 succès, avec récompense à récupérer
+    achievements.ts  68 succès, avec récompense à récupérer
   ui/terminal.ts   widget terminal (flux de build, ligne de statut, journal, prompt, historique, Tab)
   commands.ts      toutes les commandes du terminal
   main.ts          mise en page, rendu des panneaux, journal d'événements, boucle (100 ms), GAME_VERSION
@@ -46,7 +47,7 @@ scripts/sim.ts     simulateur d'équilibrage (headless)
 ```
 
 Règles d'architecture :
-- `src/core` ne touche **jamais** au DOM. L'UI écoute les événements de l'`Engine` (`builds`, `pipeline_done`, `release`, `achievement`, `autobuy`, `challenge_*`, `generation`, `event_*`…).
+- `src/core` ne touche **jamais** au DOM. L'UI écoute les événements de l'`Engine` (`builds`, `pipeline_done`, `release`, `achievement`, `autobuy`, `challenge_*`, `generation`, `event_*`, `fork`, `fork_talent`, `pr_open`, `pr_merged`…).
 - Les grands nombres utilisent **break_eternity.js** (`Decimal`). Ne mélange pas `number` et `Decimal` pour les crédits ou les gains.
 - **Chaque texte affiché passe par `i18n.ts`**, en EN **et** en FR. Pas de chaîne en dur dans l'UI.
 - Le build produit **un seul fichier HTML** (`vite-plugin-singlefile`) : pas d'assets externes ni de CDN.
@@ -54,13 +55,13 @@ Règles d'architecture :
 ## Sauvegarde : à ne pas casser
 
 - Stockage dans `localStorage`, clé `overcompile-save`. Sauvegarde automatique ; export/import en texte dans les paramètres.
-- `SAVE_VERSION` vaut actuellement **5**. Si tu changes la forme de `GameState` :
+- `SAVE_VERSION` vaut actuellement **6**. Si tu changes la forme de `GameState` :
   1. incrémente `SAVE_VERSION` ;
   2. ajoute une étape dans `migrate()` qui convertit les anciennes sauvegardes ;
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.3.6)
+## Mécaniques actuelles (v0.4.0)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -101,11 +102,23 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 
 **Événements de build** (`src/core/events.ts`, v0.3.1, façon « golden cookie »). Une fois la CI/CD active, un événement apparaît toutes les 3 à 6 minutes et reste 12 s : une pastille en haut de l'écran (visible quel que soit l'onglet) et une ligne `[ EVENT ]` dans le journal. On l'attrape en cliquant ou en tapant sa commande. **Tranché par Arthur :** tous positifs (pas de pénalité, la CVE est « CVE patchée ») et **pas d'option pour les désactiver**. Liste : Pause café `coffee` (builds ×2, 30 s), `cargo update` (+1 min de revenu), Test instable `retry` (0 % d'échec, 45 s), Code review express `approve` (gains ×3, 20 s), Conflit de merge `git merge` (tous les jobs terminent instantanément, 3 fois), CVE patchée `patch` (+5 min de revenu), Prod en feu `hotfix` (gains ×7, 15 s, rare), Release candidate `rc` (+10 % d'étoiles sur la prochaine release, rare, après la 1re release). Rien hors ligne ni pendant un challenge. Talent `pgr` (Astreinte, 3★, après `ci`) : fenêtre de 20 s et événements 25 % plus fréquents. Succès : 10 / 100 / 500 événements attrapés. La commande `events` les liste. Simulation : le joueur simulé en attrape 70 % (`EVENTS=0..1`, `NOEVENTS=1` pour les couper) ; arbre complet ~3 h 15–3 h 25 contre 3 h 35 sans, 1re étoile inchangée.
 
+**Fork** (`src/core/fork.ts`, v0.4.0, 2e couche de prestige). **Tranché (Arthur) :**
+- Condition : **arbre de release complet** (les 15 talents). Teaser « Fork → ??? » dans l'onglet Release dès que le dernier talent (`bot`) est visible.
+- Forker remet à zéro crédits, matériel, releases, étoiles (dont le total, qui sert au calcul), arbre de release, optimisations, challenges et générations. Restent : contributeurs, arbre Fork, succès, stats d'événements, paramètres. Fenêtre de confirmation, commande `fork --yes`.
+- **Contributeurs** = f(étoiles gagnées depuis le dernier fork), sur le modèle des étoiles : `max(1 + 2·log2(étoiles/200), (étoiles/200)^0,6)`, ×(1 + 5 % par génération) ×(1 + 10 % par challenge fait dans le cycle). Le total gagné donne un bonus permanent : gains ×(1 + 0,4·total^0,8), étoiles ×(1 + 2 %·total). Les non dépensés achètent l'arbre Fork.
+- **Chaque fork multiplie le seuil de release par 10** (`FORK.releaseBaseMult`). Sans ça, la 1re release d'un cycle rapportait des centaines d'étoiles et les forks s'enchaînaient toutes les minutes.
+- **Arbre Fork** (10 talents, 1 à 13 contributeurs, 43 au total, jamais remis à zéro) : `tpl` 5★ au départ de chaque fork ; `iac` Auto-Scaling achetable dès le début d'un fork (1 000 cr) ; `spn` gains ×2 ; `lts` seuil ×1,15 par release au lieu de ×1,2 ; `mir` garde la moitié des générations ; `bch` builds ×1,5 ; `dpb` attrape seul les événements courants ; `awe` étoiles ×1,5 ; `kp` garde les talents CI et Auto-Scaling ; `ups` contributeurs ×1,5. Affiché en liste de cartes (pas encore en arbre graphique).
+- **Pull requests** (après le 1er fork) : une PR s'ouvre toutes les 600 s / √(1 + contributeurs gagnés), 3 ouvertes au maximum, ni hors ligne ni en challenge. Fusionner (`gh pr merge <n>` ou bouton) donne un bonus jusqu'à la prochaine release : perf builds ×1,2, feat gains ×1,25, ci étoiles ×1,05 ; docs donne +2 min de revenu. Fusionner est gratuit et **ne rapporte jamais de contributeurs** (seul le fork en donne).
+- **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
+- Nouvel onglet Fork (après le 1er fork), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
+- Simulation (`npm run sim -- 7`, le joueur forke quand le conseiller le dit et fusionne toutes les PR) : 1er fork vers 2 h 35–3 h avec 3 à 5 contributeurs ; cycles 2 et 3 en ~35–45 min (jusqu'à 1 h 47 si le 1er fork n'a donné que 3 contributeurs) ; une fois l'arbre Fork complet, cycles de ~1 h 40. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
+- Pas encore fait : `crontab` (prévu en v0.4.1), arbre Fork affiché en arbre, lien avec les générations au-delà de `mir`.
+
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
 **Challenges** (débloqués après 3 releases) : Single-core, Debug build -O0, Friday deploy, No cache. Ce sont des releases sous contrainte qui donnent un bonus permanent.
 
-**Succès.** 61 succès qui fusionnent les anciens « objectifs » et « succès ». **Tranché** (idée d'Arthur) :
+**Succès.** 68 succès qui fusionnent les anciens « objectifs » et « succès ». **Tranché** (idée d'Arthur) :
 - jamais remis à zéro ;
 - récompense à récupérer quand on veut (bouton Claim, commande `claim`) ;
 - petites sommes en crédits au début, puis bonus permanents du type « +2 % de gains » ;
@@ -125,7 +138,8 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
   - `ADV_<clé>=valeur` pour régler le conseiller (`peakDrop`, `lifetimeShare`, `minWindowMin`) ;
   - `NOCHAL=1` pour désactiver les challenges ;
   - `NOGEN=1` pour désactiver les générations de matériel ;
-  - `EVENTS=0..1` pour la part d'événements attrapés (0,7 par défaut), `NOEVENTS=1` pour les couper.
+  - `EVENTS=0..1` pour la part d'événements attrapés (0,7 par défaut), `NOEVENTS=1` pour les couper ;
+  - `NOFORK=1` pour ne jamais forker, `FORK_<clé>=valeur` et `FADV_<clé>=valeur` pour régler Fork et son conseiller.
   - Sous WSL, `npx` lance le Node de Windows : passe les variables avec `WSLENV` (ex. `WSLENV=BAL_genBase BAL_genBase=60 npm run sim -- 6`).
 - Rythme visé, et validé par Arthur en jouant :
   - 1re étoile en ~20–35 min. Arthur trouve ce début « vraiment bien ».
@@ -162,7 +176,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 ## Feuille de route
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
-- **v0.4** : nouvelle couche de prestige **Fork**, au-dessus des releases, avec des contributeurs, des PR (commande `gh pr`) et son propre arbre. Plus une commande **`crontab`** pour l'automatisation scriptée.
+- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), puis **`crontab`** pour l'automatisation scriptée (v0.4.1).
 - **v0.5** : couche **Distro** (idée encore vague).
 
 ## Façon de travailler avec Arthur

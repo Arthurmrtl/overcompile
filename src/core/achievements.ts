@@ -12,7 +12,7 @@ export type BonusStat = "gains" | "speed" | "fail" | "stars";
 export type Reward = { credits: number } | { stat: BonusStat; pct: number };
 
 export type Metric = "builds" | "fails" | "earned" | "perk_ci" | "perk_as" | "cpu" | "ram" | "disk" | "jobs"
-  | "streak" | "releases" | "stars" | "tree" | "opt" | "challenges" | "gens" | "events";
+  | "streak" | "releases" | "stars" | "tree" | "opt" | "challenges" | "gens" | "events" | "forks" | "contributors" | "prs";
 
 export interface Achievement {
   id: string;
@@ -23,7 +23,7 @@ export interface Achievement {
   chain: string;
   reward: Reward;
   /** Hidden (shown as ???) until the feature is discovered. */
-  reveal?: "stars" | "challenges";
+  reveal?: "stars" | "challenges" | "fork";
   secret?: boolean;
   check: (s: GameState) => boolean;
 }
@@ -44,6 +44,9 @@ export function metricValue(s: GameState, m: Metric): Decimal {
     case "opt": return new Decimal(Object.values(s.upgrades).reduce((a, b) => a + b, 0));
     case "challenges": return new Decimal(s.challengesDone.length);
     case "events": return new Decimal(s.stats.events ?? 0);
+    case "forks": return new Decimal(s.forks ?? 0);
+    case "contributors": return new Decimal(s.lifetimeContributors ?? 0);
+    case "prs": return new Decimal(s.stats.prsMerged ?? 0);
     case "gens": return new Decimal((s.gens?.cpu ?? 0) + (s.gens?.ram ?? 0) + (s.gens?.disk ?? 0));
   }
 }
@@ -59,7 +62,7 @@ export function achProgress(s: GameState, a: Achievement): number {
 }
 
 /** Builds a tier: reaching `target` on `metric`. */
-function tier(id: string, chain: string, metric: Metric, target: number, reward: Reward, reveal?: "stars" | "challenges"): Achievement {
+function tier(id: string, chain: string, metric: Metric, target: number, reward: Reward, reveal?: "stars" | "challenges" | "fork"): Achievement {
   return { id, chain, metric, target, reward, reveal, check: s => metricValue(s, metric).gte(target) };
 }
 const cr = (credits: number): Reward => ({ credits });
@@ -126,6 +129,14 @@ export const ACHIEVEMENTS: Achievement[] = [
   tier("tree_full", "tree", "tree", TALENTS.length, gains(5), "stars"),
   tier("opt_25", "opt", "opt", 25, speed(3), "stars"),
   tier("opt_100", "opt", "opt", 100, speed(5), "stars"),
+  // Fork (v0.4)
+  tier("fork_1", "forks", "forks", 1, stars(5), "fork"),
+  tier("fork_5", "forks", "forks", 5, gains(5), "fork"),
+  tier("fork_20", "forks", "forks", 20, stars(5), "fork"),
+  tier("contrib_10", "contributors", "contributors", 10, gains(3), "fork"),
+  tier("contrib_100", "contributors", "contributors", 100, stars(3), "fork"),
+  tier("prs_10", "prs", "prs", 10, gains(2), "fork"),
+  tier("prs_100", "prs", "prs", 100, speed(3), "fork"),
   // Build events
   tier("events_10", "events", "events", 10, gains(2)),
   tier("events_100", "events", "events", 100, gains(3)),

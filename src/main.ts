@@ -19,10 +19,14 @@ import { achProgress } from "./core/achievements";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
-import { type Advice, ReleaseAdvisor } from "./core/advisor";
+import { type Advice, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
+import {
+  FORK_TALENTS, FORK_TALENT_BY_ID, PR_EFFECTS, contribGainsMult, contribStarsMult, contributorsOnFork, forkRevealed, hasFork,
+  starsForFirstContributor, treeComplete,
+} from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.3.6";
+const GAME_VERSION = "0.4.0";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -73,11 +77,14 @@ function toggleClass(el: Element | null, cls: string, on: boolean) {
 /* ================= Layout ================= */
 const app = document.getElementById("app")!;
 let selectedTalent: string = "warm_cache";
-let sideTab: "release" | "challenges" | "achievements" | "stats" = "release";
+let sideTab: "release" | "challenges" | "fork" | "achievements" | "stats" = "release";
 let mobilePanel: "center" | "shop" | "side" = "center";
 const advisor = new ReleaseAdvisor();
 let advice: Advice = advisor.update(engine.s);
 let advisedLogged = false; // one journal line per run when the advice turns on
+const forkAdvisor = new ForkAdvisor();
+let forkAdvice: ForkAdvice = forkAdvisor.update(engine.s);
+let forkAdvisedLogged = false;
 let lastAchCount = "";
 let lastSlotCount = -1;
 let lastTalentKey = "";
@@ -92,6 +99,7 @@ function buildLayout() {
     <div class="hud">
       <div class="hud-credits"><div class="big" data-r="credits">0</div><div class="sub"><span data-r="rate">0</span> ${t("credits")}${t("per_sec")}</div></div>
       <div class="hud-stars" data-reveal="stars" title="${t("rel.stars")}"><span class="star">⭐</span><span data-r="stars">0</span></div>
+      <div class="hud-contrib" data-reveal="forked" title="${t("fk.contributors")}"><span class="fk-glyph">⑂</span><span data-r="contrib">0</span></div>
     </div>
     <div class="actions">
       <button class="icon-btn" data-a="save" title="${t("save")}">💾</button>
@@ -143,6 +151,7 @@ function buildLayout() {
       <div class="tabs" role="tablist">
         <button data-tab="release">${t("tab.release")} <span class="badge new" data-r="relBadge" hidden>!</span></button>
         <button data-tab="challenges" data-reveal="challenges">${t("tab.challenges")} <span class="badge new" data-r="chNew">${t("rev.new")}</span></button>
+        <button data-tab="fork" data-reveal="forked">${t("tab.fork")} <span class="badge new" data-r="forkBadge" hidden></span></button>
         <button data-tab="achievements">${t("tab.achievements")} <span class="badge" data-r="achBadge"></span></button>
         <button data-tab="stats">${t("tab.stats")}</button>
       </div>
@@ -159,6 +168,12 @@ function buildLayout() {
         <div class="rel-rc small" data-r="relRc" hidden></div>
         <div class="rel-rate small" data-r="relRate" hidden></div>
         <button class="ch-nudge" data-r="chNudge" hidden></button>
+        <div class="fork-card" data-r="forkCard" hidden>
+          <div class="fork-title"><span class="fk-glyph">⑂</span> <span data-r="forkTitle"></span></div>
+          <div class="muted small" data-r="forkDesc"></div>
+          <button class="fork-btn" data-r="forkBtn" hidden></button>
+          <div class="rel-rate small" data-r="forkRate" hidden></div>
+        </div>
         <div class="bot" data-r="bot" hidden>
           <label class="switch"><input type="checkbox" data-r="botOn"><span>${t("rel.bot")}</span></label>
           <label class="small">${t("rel.bot.threshold")} <input type="number" min="1" step="1" data-r="botThr"> ⭐</label>
@@ -175,6 +190,16 @@ function buildLayout() {
       <div class="card tab-body" data-body="challenges">
         <p class="muted small">${t("ch.desc")}</p>
         <div class="ch-list" data-r="chList"></div>
+      </div>
+      <div class="card tab-body" data-body="fork">
+        <div class="fork-sum" data-r="forkSum"></div>
+        <h3>${t("fk.prs")}</h3>
+        <p class="muted small">${t("fk.prs.desc")}</p>
+        <div class="pr-list" data-r="prList"></div>
+        <div class="pr-boost small" data-r="prBoost"></div>
+        <h3>${t("fk.tree")}</h3>
+        <p class="muted small">${t("fk.tree.desc")}</p>
+        <div class="ft-list" data-r="ftList"></div>
       </div>
       <div class="card tab-body" data-body="achievements">
         <div class="muted small" data-r="achHead"></div>
@@ -381,6 +406,7 @@ function bindLayout() {
     const cur = engine.activeEvent;
     if (cur) cmd.run(EVENT_BY_ID[cur.id].cmd, true);
   });
+  $("[data-r=forkBtn]").addEventListener("click", confirmFork);
   $("[data-r=chNudge]").addEventListener("click", () => {
     sideTab = "challenges";
     if (!engine.s.seen.includes("challenges")) engine.s.seen.push("challenges");
@@ -470,7 +496,7 @@ function render() {
   renderChallengeBanner();
 
   // Progressive reveal
-  const revealed = { stars: starsRevealed(s), pre: !starsRevealed(s), challenges: engine.challengesUnlocked };
+  const revealed = { stars: starsRevealed(s), pre: !starsRevealed(s), challenges: engine.challengesUnlocked, forked: s.forks > 0 };
   app.querySelectorAll<HTMLElement>("[data-reveal]").forEach(el => {
     const show = revealed[el.dataset.reveal as keyof typeof revealed];
     if (el.hidden === show) el.hidden = !show;
@@ -479,6 +505,7 @@ function render() {
   const showNew = engine.challengesUnlocked && !s.seen.includes("challenges");
   if (chNew.hidden === showNew) chNew.hidden = !showNew;
   if (sideTab === "challenges" && !engine.challengesUnlocked) sideTab = "release";
+  if (sideTab === "fork" && s.forks === 0) sideTab = "release";
 
   // Side tabs
   app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b => toggleClass(b, "on", b.dataset.tab === sideTab));
@@ -491,6 +518,13 @@ function render() {
   if (sideTab === "challenges") renderChallenges();
   renderAchievements();
   if (sideTab === "stats") renderStats();
+  renderForkCard();
+  if (sideTab === "fork") renderForkTab();
+  setText($("[data-r=contrib]"), fmtInt(s.contributors));
+  const fb = $("[data-r=forkBadge]");
+  const fbOn = s.prs.length > 0;
+  if (fb.hidden === fbOn) fb.hidden = !fbOn;
+  if (fbOn) setText(fb, `${s.prs.length}`);
   renderEvents();
 }
 
@@ -885,6 +919,97 @@ function updateAchBars() {
   }
 }
 
+/** Release tab: Fork teaser, then the fork button once the release tree is complete. */
+function renderForkCard() {
+  const s = engine.s;
+  const card = $("[data-r=forkCard]");
+  const show = forkRevealed(s) && !s.challenge;
+  if (card.hidden === show) card.hidden = !show;
+  if (!show) return;
+  const done = treeComplete(s);
+  const pending = contributorsOnFork(s).toNumber();
+  const btn = $<HTMLButtonElement>("[data-r=forkBtn]");
+  const rate = $("[data-r=forkRate]");
+  if (!done) {
+    // Teaser: no detail before the tree is done (like "Ship v1.0.0 → ???")
+    setText($("[data-r=forkTitle]"), s.forks ? t("fk.title") : t("fk.teaser"));
+    setText($("[data-r=forkDesc]"), t("fk.need_tree"));
+    if (!btn.hidden) btn.hidden = true;
+    if (!rate.hidden) rate.hidden = true;
+    return;
+  }
+  setText($("[data-r=forkTitle]"), t("fk.title"));
+  setText($("[data-r=forkDesc]"), pending >= 1 ? t("fk.desc") : t("fk.need_stars", { n: fmtInt(starsForFirstContributor()), c: fmt(s.lifetimeStars) }));
+  if (btn.hidden) btn.hidden = false;
+  setText(btn, pending >= 1 ? t("fk.btn", { n: fmtInt(pending) }) : t("fk.btn0"));
+  btn.disabled = pending < 1;
+  toggleClass(btn, "advised", forkAdvice.advised);
+  const showRate = pending >= 1;
+  if (rate.hidden === showRate) rate.hidden = !showRate;
+  if (showRate) setText(rate, t("fk.rate", { r: forkAdvice.rate.toFixed(forkAdvice.rate < 10 ? 1 : 0), p: forkAdvice.peak.toFixed(forkAdvice.peak < 10 ? 1 : 0) })
+    + (forkAdvice.advised ? ` · ${t("fk.adv.now")}` : ""));
+}
+
+let forkTabKey = "";
+/** Fork tab: summary, open pull requests, Fork talents. */
+function renderForkTab() {
+  const s = engine.s;
+  setText($("[data-r=forkSum]"), t("fk.sum", {
+    c: fmtInt(s.contributors), l: fmtInt(s.lifetimeContributors), f: fmtInt(s.forks),
+    g: `×${fmt(new Decimal(contribGainsMult(s)))}`, st: `×${contribStarsMult(s).toFixed(2)}`,
+  }));
+  const b = s.prBoost;
+  setText($("[data-r=prBoost]"), b.speed > 1 || b.gains > 1 || b.stars > 1
+    ? t("fk.boost", { sp: b.speed.toFixed(2), g: b.gains.toFixed(2), st: b.stars.toFixed(2) }) : "");
+  const key = `${s.prs.map(p => p.n).join(",")}|${s.forkTalents.join(",")}|${s.contributors}|${s.settings.lang}`;
+  if (key === forkTabKey) return;
+  forkTabKey = key;
+  $("[data-r=prList]").replaceChildren(...(s.prs.length ? s.prs.map(pr => {
+    const merge = h("button", { class: "claim-btn" }, t("fk.merge"));
+    merge.addEventListener("click", () => cmd.run(`gh pr merge ${pr.n}`, true));
+    return h("div", { class: "pr" },
+      h("span", { class: "pr-n" }, `#${pr.n}`),
+      h("span", { class: "pr-t" }, t(`pr.${pr.kind}.${pr.title}`)),
+      h("span", { class: "pr-fx" }, prEffectText(pr.kind)),
+      merge);
+  }) : [h("p", { class: "muted small" }, t("fk.no_pr"))]));
+  $("[data-r=ftList]").replaceChildren(...FORK_TALENTS.map(ft => {
+    const owned = hasFork(s, ft.id);
+    const reqOk = ft.req.every(r => hasFork(s, r));
+    const btn = h("button", { class: "claim-btn" }, owned ? t("fk.owned") : `${t("fk.buy")} · ${ft.cost} ⑂`) as HTMLButtonElement;
+    btn.disabled = owned || !reqOk || s.contributors < ft.cost;
+    btn.addEventListener("click", () => cmd.run(`fork buy ${ft.id}`, true));
+    return h("div", { class: "ft" + (owned ? " owned" : reqOk ? "" : " locked") },
+      h("div", { class: "ft-top" }, h("span", { class: "ft-tag" }, `[${ft.tag}]`), h("span", { class: "ft-name" }, t(`ft.${ft.id}`))),
+      h("div", { class: "ft-desc" }, t(`ft.${ft.id}.desc`)),
+      ft.req.length && !owned ? h("div", { class: "ft-req" }, t("fk.req", { r: ft.req.map(r => FORK_TALENT_BY_ID[r].tag).join(" + ") })) : "",
+      btn);
+  }));
+}
+
+/** "builds ×1.2 until the release" … */
+function prEffectText(kind: keyof typeof PR_EFFECTS): string {
+  const fx = PR_EFFECTS[kind];
+  return kind === "docs" ? t("pr.fx.docs", { m: fx.seconds! / 60 }) : t(`pr.fx.${kind}`, { x: fx.mult! });
+}
+
+function confirmFork() {
+  const s = engine.s;
+  const n = contributorsOnFork(s).toNumber();
+  const go = h("button", { class: "fork-btn" }, t("fk.btn", { n: fmtInt(n) }));
+  go.addEventListener("click", () => { closeModal(); cmd.run("fork --yes", true); });
+  const cancel = h("button", { class: "claim-btn" }, t("fk.cancel"));
+  cancel.addEventListener("click", closeModal);
+  openModal(
+    h("h2", {}, `⑂ ${t("fk.title")}`),
+    h("p", {}, t("fk.confirm", { n: fmtInt(n) })),
+    h("ul", { class: "small" },
+      h("li", {}, t("fk.resets")),
+      h("li", {}, t("fk.keeps"))),
+    h("div", { class: "modal-actions" }, cancel, go),
+  );
+}
+
 function renderStats() {
   const s = engine.s;
   const rows: [string, string][] = [
@@ -900,6 +1025,14 @@ function renderStats() {
     ["st.releases", fmtInt(s.releases)],
     ["st.lifetime_stars", fmt(s.lifetimeStars)],
     ["st.events", fmtInt(s.stats.events)],
+    ...(s.forks > 0 ? [
+      ["st.forks", fmtInt(s.forks)],
+      ["st.contributors", fmtInt(s.lifetimeContributors)],
+      ["st.fastest_fork", s.stats.fastestFork === null ? "—" : fmtTime(s.stats.fastestFork)],
+      ["st.fork_time", fmtTime(s.stats.forkTime)],
+      ["st.prs", fmtInt(s.stats.prsMerged)],
+      ["st.all_stars", fmt(new Decimal(s.stats.allStars))],
+    ] as [string, string][] : []),
     ...(gensRevealed(s) ? [["st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`] as [string, string]] : []),
     ["st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease)],
     ["st.streak", fmtInt(s.stats.bestStreak)],
@@ -1153,6 +1286,25 @@ engine.on((e: GameEvent) => {
     }
     case "buff_end":
       break;
+    case "fork":
+      term.banner(t("fk.banner", { n: fmtInt(e.contributors), f: fmtInt(engine.s.forks) }));
+      toast(`⑂ ${t("fk.title")}`, t("fk.toast", { n: fmtInt(e.contributors) }));
+      buildTree();
+      forkTabKey = "";
+      lastAchCount = "";
+      break;
+    case "fork_talent":
+      term.println(OK, " " + t("fk.bought", { t: t(`ft.${e.id}`) }));
+      forkTabKey = "";
+      break;
+    case "pr_open":
+      term.println(["[ PR ]", "c-violet"], " " + t("fk.pr_open", { n: e.pr.n, title: t(`pr.${e.pr.kind}.${e.pr.title}`), fx: prEffectText(e.pr.kind) }));
+      forkTabKey = "";
+      break;
+    case "pr_merged":
+      term.println(OK, " " + t("fk.pr_merged", { n: e.pr.n, fx: e.credits ? `+${fmt(e.credits)} cr` : prEffectText(e.pr.kind) }));
+      forkTabKey = "";
+      break;
     case "generation": {
       const r = t(`hw.${e.key}`);
       const b = genBonusText(e.key);
@@ -1250,6 +1402,12 @@ function loop() {
   }
 
   advice = advisor.update(engine.s);
+  forkAdvice = forkAdvisor.update(engine.s);
+  if (!forkAdvice.advised) forkAdvisedLogged = false;
+  else if (!forkAdvisedLogged) {
+    forkAdvisedLogged = true;
+    term.println(["[ FORK ]", "c-violet"], " " + t("fk.adv.log", { n: fmtInt(forkAdvice.pending) }));
+  }
   if (!advice.advised) advisedLogged = false;
   else if (!advisedLogged && starsRevealed(engine.s) && !has(engine.s, "release_bot")) {
     advisedLogged = true;

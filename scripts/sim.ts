@@ -3,6 +3,8 @@
 import { Engine } from "../src/core/engine";
 import { perkLocked, perkPrice, price, starsOnRelease, expectedRate, releaseBase } from "../src/core/formulas";
 import { TALENTS } from "../src/core/talents";
+import { FORK, FORK_TALENTS } from "../src/core/fork";
+import { FORK_ADV, ForkAdvisor } from "../src/core/advisor";
 import { UPGRADES, upgradePrice } from "../src/core/upgrades";
 import { CHALLENGES } from "../src/core/challenges";
 import { ADV, ReleaseAdvisor } from "../src/core/advisor";
@@ -25,6 +27,19 @@ if (process.env.JOBSPRIO !== undefined) s.jobsPrio = Number(process.env.JOBSPRIO
 let manualTimer = 0;
 const catchRate = Number(process.env.EVENTS ?? 0.7);
 let lastEvent: unknown = null;
+const forkAdvisor = new ForkAdvisor();
+let treeLoggedForks = -1;
+let cycleStart = 0;
+for (const [k, v] of Object.entries(process.env)) if (k.startsWith("FORK_")) (FORK as any)[k.slice(5)] = Number(v);
+for (const [k, v] of Object.entries(process.env)) if (k.startsWith("FADV_")) (FORK_ADV as any)[k.slice(5)] = Number(v);
+
+function spendContributors() {
+  for (;;) {
+    const ft = FORK_TALENTS.filter(x => e.canBuyForkTalent(x.id).ok).sort((a, b) => a.cost - b.cost)[0];
+    if (!ft) break;
+    e.buyForkTalent(ft.id);
+  }
+}
 
 function spendStars() {
   for (;;) {
@@ -64,6 +79,8 @@ while (t < H * 3600) {
     if (!process.env.NOEVENTS && Math.random() < catchRate) e.catchEvent();
   }
   e.claimAchievements();
+  // Pull requests: merged as soon as they open (NOFORK=1 to never fork)
+  while (s.prs.length) e.mergePr();
   t += dt;
 
   if (!firstStarLogged && starsOnRelease(s).gte(1) && s.releases === 0) { firstStarLogged = true; milestones.push(`1st star possible ${fmt(t)} (${Math.round(t / 60)} min)`); }
@@ -84,9 +101,28 @@ while (t < H * 3600) {
     e.release();
     console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/${TALENTS.length}, jobs ${jobsAtRelease}, gens ${s.gens.cpu}/${s.gens.ram}/${s.gens.disk}, next base ${releaseBase(s).toExponential(1)})`);
     spendStars();
-    if (s.talents.length === TALENTS.length && !milestones.some(m => m.startsWith("tree"))) milestones.push(`tree complete ${fmt(t)}`);
+    if (s.talents.length === TALENTS.length && treeLoggedForks !== s.forks) {
+      treeLoggedForks = s.forks;
+      milestones.push(`tree complete ${fmt(t)}${s.forks ? ` (cycle ${s.forks + 1}, ${fmt(t - cycleStart)} after the fork)` : ""}`);
+    }
+  }
+  // Fork when the fork advisor says so
+  if (!process.env.NOFORK) {
+    const fa = forkAdvisor.update(s);
+    if (fa.advised) {
+      const cycle = t - cycleStart;
+      const stars = s.lifetimeStars.toNumber();
+      const gain = e.fork();
+      if (gain !== null) {
+        cycleStart = t;
+        spendContributors();
+        const line = `${fmt(t)}  FORK #${s.forks}  +${gain} contributors after ${fmt(cycle)} (cycle stars ${Math.round(stars)}, lifetime contributors ${s.lifetimeContributors}, fork talents ${s.forkTalents.length}/${FORK_TALENTS.length})`;
+        console.log(line);
+        milestones.push(line.trim());
+      }
+    }
   }
 }
 for (const c of s.challengesDone) milestones.push(`challenge done: ${c}`);
 console.log(milestones.join("\n"));
-console.log("events caught", s.stats.events, "optimizations", JSON.stringify(s.upgrades), "achievements", s.achievements.length, "rate", expectedRate(s).toExponential(2));
+console.log("forks", s.forks, "contributors", s.lifetimeContributors, "PRs merged", s.stats.prsMerged, "events caught", s.stats.events, "optimizations", JSON.stringify(s.upgrades), "achievements", s.achievements.length, "rate", expectedRate(s).toExponential(2));

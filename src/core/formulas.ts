@@ -4,6 +4,7 @@ import { achBonus } from "./achievements";
 import { CHALLENGES } from "./challenges";
 import { TALENTS } from "./talents";
 import { EVENT_BY_ID, RC_STARS_PCT } from "./events";
+import { FORK, contribGainsMult, contribStarsMult, hasFork } from "./fork";
 const TALENT_REQ: Record<string, string[]> = Object.fromEntries(TALENTS.map(t => [t.id, t.req]));
 import { offlineCapHours, offlineEff, optRewardMult, optSpeedMult } from "./upgrades";
 
@@ -16,7 +17,7 @@ export const challengeDone = (s: GameState, id: string) => s.challengesDone.incl
 
 /* ---------- Progressive reveal ---------- */
 /** Stars, the release tree and optimizations stay hidden until the first release. */
-export const starsRevealed = (s: GameState) => s.releases > 0 || s.lifetimeStars.gt(0);
+export const starsRevealed = (s: GameState) => s.releases > 0 || s.lifetimeStars.gt(0) || s.forks > 0;
 /** Tree fog of war: "shown" = owned or buyable; "fog" = next tier, shown as ???; "hidden" = further away. */
 export function talentVisibility(s: GameState, id: string, req: string[]): "shown" | "fog" | "hidden" {
   if (s.talents.includes(id) || req.every(r => s.talents.includes(r))) return "shown";
@@ -42,9 +43,13 @@ export const AS_PRICE_SHARE = 0.25;
 
 /** Choices for the job priority threshold (seconds of income; 0 = never, -1 = always). */
 export const JOBS_PRIO_STEPS = [0, 10, 30, 60, 300, -1];
-export const perkLocked = (s: GameState, k: PerkKey) => k === "auto_scaling" && s.releases === 0 && !s.perks.auto_scaling.unlocked;
+export const perkLocked = (s: GameState, k: PerkKey) =>
+  k === "auto_scaling" && s.releases === 0 && !s.perks.auto_scaling.unlocked && !hasFork(s, "f_iac");
 export function perkPrice(s: GameState, k: PerkKey): Decimal {
-  return k === "auto_scaling" ? releaseBase(s).mul(AS_PRICE_SHARE).floor() : PERK_PRICE[k];
+  if (k !== "auto_scaling") return PERK_PRICE[k];
+  // Fork talent "iac": sold from the start of a fork, at the old 1 000 cr before the first release
+  if (s.releases === 0 && hasFork(s, "f_iac")) return PERK_PRICE.auto_scaling;
+  return releaseBase(s).mul(AS_PRICE_SHARE).floor();
 }
 
 /** Price of the next level when currently at `level`. */
@@ -77,6 +82,7 @@ export const BAL = {
   ltoReward: 2,        // lto: rewards
   distSpeed: 2,        // dist_cache: build speed
   releaseGrowth: 1.2,    // each released version needs ×N more credits per star
+  releaseGrowthLts: 1.15, // …×N instead with the Fork talent "lts"
   starExp: 0.36,        // stars = (earned / base) ^ starExp
   lifeCoef: 0.25,       // lifetime star bonus: 1 + lifeCoef × lifetime ^ lifeExp
   lifeExp: 0.35,       // was 0.5: with infinite optimizations the √ bonus made late game explode
@@ -131,6 +137,8 @@ export function buildTime(s: GameState): number {
   t /= achSpeedMult(s);
   t /= genSpeedMult(s);
   t /= eventSpeedMult(s);
+  if (hasFork(s, "f_bench")) t /= 1.5;
+  t /= s.prBoost.speed;
   if (challengeDone(s, "single_core")) t /= 1.5;
   if (inChallenge(s, "debug_build")) t *= 10;
   return t;
@@ -159,7 +167,9 @@ export const achFailMult = (s: GameState) => Math.max(0.5, 1 - achBonus(s, "fail
 export const achStarsMult = (s: GameState) => 1 + achBonus(s, "stars") / 100;
 
 export function rewardMultiplier(s: GameState): Decimal {
-  let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s)).mul(genRewardMult(s)).mul(eventGainsMult(s));
+  let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s)).mul(genRewardMult(s)).mul(eventGainsMult(s))
+    .mul(contribGainsMult(s)).mul(s.prBoost.gains);
+  if (hasFork(s, "f_sponsors")) m = m.mul(2);
   if (on(s, "code_review")) m = m.mul(BAL.revReward);
   if (on(s, "lto")) m = m.mul(BAL.ltoReward);
   if (challengeDone(s, "debug_build")) m = m.mul(2);
@@ -181,7 +191,8 @@ export const RELEASE_BASE = new Decimal(2e4);
 
 /** Credits per star² for the next release: grows with every version shipped. */
 export function releaseBase(s: GameState): Decimal {
-  return Decimal.pow(BAL.releaseGrowth, s.releases).mul(RELEASE_BASE);
+  const growth = hasFork(s, "f_lts") ? BAL.releaseGrowthLts : BAL.releaseGrowth;
+  return Decimal.pow(growth, s.releases).mul(RELEASE_BASE).mul(Decimal.pow(FORK.releaseBaseMult, s.forks));
 }
 
 export function starGainMultiplier(s: GameState): number {
@@ -189,6 +200,8 @@ export function starGainMultiplier(s: GameState): number {
   if (on(s, "semver")) m *= 2;
   if (challengeDone(s, "no_cache")) m *= 1.5;
   if (s.rcPending) m *= 1 + RC_STARS_PCT / 100; // "Release candidate" event
+  m *= contribStarsMult(s) * s.prBoost.stars;
+  if (hasFork(s, "f_awesome")) m *= 1.5;
   return m;
 }
 

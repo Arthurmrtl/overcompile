@@ -447,3 +447,34 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .ach-prog .progress { flex: 1; margin: 0; height: 4px; }
 .ach-prog .progress .fill { background: var(--green); }
 .ach-val { flex: none; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* ---------- v0.4 Fork ---------- */
+.hud-contrib { display: flex; align-items: center; gap: 6px; font-size: 22px; font-weight: 700; color: var(--violet); }
+.hud-contrib[hidden] { display: none; }
+.fk-glyph { color: var(--violet); font-weight: 700; }
+.fork-card { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--violet); border-radius: 8px; background: var(--panel-2); }
+.fork-card[hidden] { display: none; }
+.fork-title { font-weight: 700; margin-bottom: 4px; }
+.fork-btn {
+  display: block; width: 100%; margin-top: 8px; padding: 10px; border-radius: 6px; font: inherit; font-weight: 700; cursor: pointer;
+  background: var(--violet); color: var(--bg); border: 1px solid var(--violet);
+}
+.fork-btn[hidden] { display: none; }
+.fork-btn:disabled { opacity: .4; cursor: default; }
+.fork-btn.advised { animation: pulse 1.6s ease-in-out infinite; }
+.fork-sum { font-size: 12px; color: var(--dim); }
+.pr { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 8px; padding: 6px 0; border-bottom: 1px dotted var(--border); font-size: 12px; }
+.pr-n { color: var(--violet); font-variant-numeric: tabular-nums; }
+.pr-fx { grid-column: 2; color: var(--amber); font-size: 11px; }
+.pr .claim-btn { grid-column: 3; grid-row: 1 / span 2; }
+.pr-boost { margin-top: 6px; color: var(--amber); }
+.ft-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+.ft { display: flex; flex-direction: column; gap: 3px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2); font-size: 12px; }
+.ft.owned { border-color: var(--violet); }
+.ft.locked { opacity: .5; }
+.ft-tag { color: var(--violet); font-weight: 700; margin-right: 6px; }
+.ft-name { font-weight: 700; }
+.ft-desc, .ft-req { color: var(--dim); font-size: 11px; }
+.ft .claim-btn { margin-top: auto; align-self: flex-start; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.modal-actions .fork-btn { width: auto; margin: 0; padding: 8px 14px; }

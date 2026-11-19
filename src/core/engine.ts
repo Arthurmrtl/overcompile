@@ -7,6 +7,10 @@ import {
 } from "./formulas";
 import { TALENT_BY_ID } from "./talents";
 import {
+  FORK, FORK_TALENT_BY_ID, KEPT_BY_F_KEEP, PR_EFFECTS, PR_TITLES, type PullRequest, TEMPLATE_STARS,
+  canFork, contributorsOnFork, hasFork, pickPrKind, prGap,
+} from "./fork";
+import {
   type BuildEvent, EVENT_BY_ID, EVENT_GAP, EVENT_WINDOW, PAGER_GAP_MULT, PAGER_WINDOW, eligibleEvents, pickEvent,
 } from "./events";
 import { UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
@@ -30,9 +34,13 @@ export type GameEvent =
   | { t: "event_caught"; id: string; credits?: Decimal; builds?: number }
   | { t: "event_missed"; id: string }
   | { t: "buff_end"; id: string }
+  | { t: "fork"; contributors: number }
+  | { t: "fork_talent"; id: string }
+  | { t: "pr_open"; pr: PullRequest }
+  | { t: "pr_merged"; pr: PullRequest; credits?: Decimal }
 
 
-export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" };
+export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" | "contributors" };
 
 export class Engine {
   s: GameState;
@@ -116,9 +124,11 @@ export class Engine {
     const s = this.s;
     s.stats.playTime += dt;
     s.stats.runTime += dt;
+    s.stats.forkTime += dt;
 
     if (s.pipeline) this.advanceBuilds(dt);
     this.tickEvents(dt);
+    this.tickPrs(dt);
 
     // Auto-Scaling: buys the cheapest affordable upgrade (every 2 s, 0.25 s with `fast`)
     this.autoScaleTimer += dt;
@@ -264,6 +274,8 @@ export class Engine {
     const window = pager ? PAGER_WINDOW : EVENT_WINDOW;
     this.activeEvent = { id: e.id, left: window };
     this.emit({ t: "event_spawn", id: e.id, window });
+    // Fork talent "dpb": common events (the most frequent ones) are caught automatically
+    if (hasFork(s, "f_dependabot") && e.weight >= 10) this.catchEvent(e.id);
   }
 
   /** Catches the event on screen (if `id` is given, only that one). */
@@ -445,6 +457,8 @@ export class Engine {
     s.lifetimeStars = s.lifetimeStars.add(gain);
     s.releases++;
     s.rcPending = false;
+    s.stats.allStars += gain.toNumber();
+    s.prBoost = { speed: 1, gains: 1, stars: 1 }; // merged PRs last until the release
     if (s.stats.fastestRelease === null || s.stats.runTime < s.stats.fastestRelease) s.stats.fastestRelease = s.stats.runTime;
     this.resetRun();
     this.emit({ t: "release", stars: gain, auto });
@@ -518,7 +532,7 @@ export class Engine {
 
   /* ---------------- Challenges ---------------- */
   get challengesUnlocked() {
-    return this.s.releases >= CHALLENGES_UNLOCK_AT;
+    return this.s.releases >= CHALLENGES_UNLOCK_AT || this.s.forks > 0;
   }
 
   startChallenge(id: string): "ok" | "locked" | "unknown" | "done" | "active" {
@@ -543,6 +557,96 @@ export class Engine {
       this.s.slots.push({ progress: 0, running: this.s.pipeline && this.ciActive });
     }
     this.emit({ t: "challenge_exit", id });
+    return true;
+  }
+
+  /* ---------------- Fork (prestige layer 2) ---------------- */
+  /** Resets releases, stars, the release tree, optimizations, challenges and generations for contributors. */
+  fork(): number | null {
+    const s = this.s;
+    if (!canFork(s)) return null;
+    const gain = contributorsOnFork(s).toNumber();
+    s.contributors += gain;
+    s.lifetimeContributors += gain;
+    s.forks++;
+    if (s.stats.fastestFork === null || s.stats.forkTime < s.stats.fastestFork) s.stats.fastestFork = s.stats.forkTime;
+    s.stats.forkTime = 0;
+    // What the next cycle starts with
+    s.stars = new Decimal(hasFork(s, "f_template") ? TEMPLATE_STARS : 0);
+    s.lifetimeStars = new Decimal(0);
+    s.releases = 0;
+    s.talents = hasFork(s, "f_keep") ? s.talents.filter(id => KEPT_BY_F_KEEP.includes(id)) : [];
+    s.upgrades = {};
+    s.challenge = null;
+    s.challengesDone = [];
+    const keep = hasFork(s, "f_mirrors") ? 0.5 : 0;
+    s.gens = { cpu: Math.floor(s.gens.cpu * keep), ram: Math.floor(s.gens.ram * keep), disk: Math.floor(s.gens.disk * keep) };
+    s.rcPending = false;
+    s.buffs = [];
+    s.prBoost = { speed: 1, gains: 1, stars: 1 };
+    this.activeEvent = null;
+    this.resetRun();
+    this.emit({ t: "fork", contributors: gain });
+    this.checkAchievements();
+    return gain;
+  }
+
+  canBuyForkTalent(id: string): BuyResult {
+    const t = FORK_TALENT_BY_ID[id];
+    if (!t) return { ok: false, reason: "locked" };
+    if (hasFork(this.s, id)) return { ok: false, reason: "owned" };
+    if (!t.req.every(r => hasFork(this.s, r))) return { ok: false, reason: "req" };
+    if (this.s.contributors < t.cost) return { ok: false, reason: "contributors" };
+    return { ok: true, n: 1 };
+  }
+
+  buyForkTalent(id: string): BuyResult {
+    const r = this.canBuyForkTalent(id);
+    if (!r.ok) return r;
+    this.s.contributors -= FORK_TALENT_BY_ID[id].cost;
+    this.s.forkTalents.push(id);
+    // "iac" makes Auto-Scaling buyable at once; "keep"/others act on the next fork or run
+    this.emit({ t: "fork_talent", id });
+    this.checkAchievements();
+    return r;
+  }
+
+  /** After the first fork, contributors open pull requests from time to time (not offline, not in a challenge). */
+  private tickPrs(dt: number) {
+    const s = this.s;
+    if (s.forks === 0 || this.offline || s.challenge) return;
+    if (s.prs.length >= FORK.prMax) return;
+    s.prNext -= dt;
+    if (s.prNext > 0) return;
+    s.prNext = prGap(s);
+    const pr: PullRequest = { n: ++s.prSeq, kind: pickPrKind(), title: Math.floor(Math.random() * PR_TITLES) };
+    s.prs.push(pr);
+    this.emit({ t: "pr_open", pr });
+  }
+
+  /** Merges an open PR (by number, or the oldest one). */
+  mergePr(n?: number): PullRequest | null {
+    const s = this.s;
+    const i = n === undefined ? 0 : s.prs.findIndex(p => p.n === n);
+    if (i < 0 || !s.prs[i]) return null;
+    const [pr] = s.prs.splice(i, 1);
+    const fx = PR_EFFECTS[pr.kind];
+    let credits: Decimal | undefined;
+    if (pr.kind === "perf") s.prBoost.speed *= fx.mult!;
+    else if (pr.kind === "feat") s.prBoost.gains *= fx.mult!;
+    else if (pr.kind === "ci") s.prBoost.stars *= fx.mult!;
+    else { credits = expectedRate(s).mul(fx.seconds!); this.addCredits(credits); }
+    s.stats.prsMerged++;
+    this.emit({ t: "pr_merged", pr, credits });
+    this.checkAchievements();
+    return pr;
+  }
+
+  /** Closes an open PR without merging it. */
+  closePr(n: number): boolean {
+    const i = this.s.prs.findIndex(p => p.n === n);
+    if (i < 0) return false;
+    this.s.prs.splice(i, 1);
     return true;
   }
 

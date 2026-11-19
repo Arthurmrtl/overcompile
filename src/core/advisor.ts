@@ -1,6 +1,7 @@
 import Decimal from "break_eternity.js";
 import type { GameState } from "./state";
 import { starsExact, starsOnRelease } from "./formulas";
+import { contributorsExact, contributorsOnFork } from "./fork";
 
 /**
  * Release advisor: tracks how fast the current run produces stars and says when
@@ -49,6 +50,36 @@ export class ReleaseAdvisor {
     if (!s.challenge && pending.gte(1)) {
       advised = rate < this.peak * ADV.peakDrop || pending.gte(s.lifetimeStars.mul(ADV.lifetimeShare).max(1));
     }
+    return { pending, rate, peak: this.peak, advised };
+  }
+}
+
+/**
+ * Fork advisor (v0.4): same idea one layer up. Contributors per minute of the current cycle
+ * (time since the last fork, 20 min minimum); advised once the tree is complete and the rate
+ * falls under its peak, or when the fork alone adds half the contributors ever earned.
+ */
+export const FORK_ADV = { peakDrop: 0.9, lifetimeShare: 1, minWindowMin: 30 };
+
+export interface ForkAdvice {
+  pending: number;   // contributors on fork now (rounded down)
+  rate: number;      // contributors per hour, this cycle
+  peak: number;
+  advised: boolean;
+}
+
+export class ForkAdvisor {
+  private peak = 0;
+  private lastForks = -1;
+
+  update(s: GameState): ForkAdvice {
+    if (s.forks !== this.lastForks) { this.peak = 0; this.lastForks = s.forks; }
+    const pending = contributorsOnFork(s).toNumber();
+    const hours = Math.max(s.stats.forkTime / 60, FORK_ADV.minWindowMin) / 60;
+    const rate = contributorsExact(s).toNumber() / hours;
+    if (pending >= 1 && rate > this.peak) this.peak = rate;
+    const advised = pending >= 1 && !s.challenge &&
+      (rate < this.peak * FORK_ADV.peakDrop || pending >= Math.max(1, s.lifetimeContributors * FORK_ADV.lifetimeShare));
     return { pending, rate, peak: this.peak, advised };
   }
 }
