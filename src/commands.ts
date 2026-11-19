@@ -5,6 +5,9 @@ import {
 import { CHALLENGES } from "./core/challenges";
 import { BUILD_EVENTS, EVENT_BY_ID, eventForCommand } from "./core/events";
 import {
+  FORK, FORK_TALENTS, PR_EFFECTS, contributorsOnFork, forkRevealed, hasFork, treeComplete,
+} from "./core/fork";
+import {
   BAL, HW, autoScaleInterval, perkLocked, perkPrice, genRequired, gensRevealed, totalGens, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
   maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
 } from "./core/formulas";
@@ -132,6 +135,7 @@ export function achVisible(e: Engine, a: Achievement): boolean {
   if (a.secret) return false;
   if (a.reveal === "stars") return starsRevealed(e.s);
   if (a.reveal === "challenges") return e.challengesUnlocked;
+  if (a.reveal === "fork") return forkRevealed(e.s);
   return true;
 }
 
@@ -212,7 +216,8 @@ export function createCommands(c: GameCtx) {
         ["compile", t("help.compile")], ["stop", t("help.stop")], ["buy", t("help.buy")],
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
         ["status", t("help.status")], ["goals", t("help.goals")], ["claim", t("help.claim")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
-        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ...(on(e().s, "as_jobs") ? [["autoscale", t("help.autoscale")] as [string, string]] : []), ["events", t("help.events")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
+        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ...(forkRevealed(e().s) ? [["fork", t("help.fork")] as [string, string]] : []),
+    ...(e().s.forks > 0 ? [["gh pr", t("help.gh")] as [string, string]] : []), ...(on(e().s, "as_jobs") ? [["autoscale", t("help.autoscale")] as [string, string]] : []), ["events", t("help.events")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
       ];
@@ -350,6 +355,65 @@ export function createCommands(c: GameCtx) {
       else if (r.reason === "locked") say(FAIL, " " + t("term.opt_locked", { t: u.req ?? "" }));
       else if (r.reason === "max") say(t("term.opt_max"));
       else say(FAIL, " " + t("term.talent_stars"));
+    },
+    fork(args) {
+      const en = e();
+      const s = en.s;
+      const [sub, arg] = args;
+      if (sub === "buy") {
+        const ft = FORK_TALENTS.find(x => x.id === arg || x.tag === arg);
+        if (!ft) return void say(t("fk.usage"));
+        const r = en.buyForkTalent(ft.id);
+        if (!r.ok) say(INFO, " " + t(r.reason === "contributors" ? "fk.no_contrib" : r.reason === "req" ? "fk.no_req" : "fk.owned"));
+        return;
+      }
+      if (sub === "tree") {
+        say(["[FORK TREE]", "c-bold"], `  ${t("fk.contributors")}: ${fmtInt(s.contributors)}`);
+        for (const ft of FORK_TALENTS) {
+          const state = hasFork(s, ft.id) ? ["[✓]", "c-green"] : ft.req.every(r => hasFork(s, r)) ? ["[ ]", ""] : ["[-]", "c-dim"];
+          say("  ", state as Seg, " ", [pad(ft.tag, 5), "c-violet"], pad(t(`ft.${ft.id}`), 22), [`${ft.cost} ⑂  `, "c-amber"], [t(`ft.${ft.id}.desc`), "c-dim"]);
+        }
+        say(["  fork buy <tag>", "c-dim"]);
+        return;
+      }
+      if (sub === "--yes" || sub === "-y") {
+        if (s.challenge) return void say(INFO, " " + t("fk.in_challenge"));
+        if (!treeComplete(s)) return void say(INFO, " " + t("fk.need_tree"));
+        const gain = en.fork();
+        if (gain === null) say(INFO, " " + t("fk.need_stars", { n: FORK.starsBase, c: fmt(s.lifetimeStars) }));
+        return;
+      }
+      // Status
+      say(["[FORK]", "c-bold"]);
+      if (!treeComplete(s)) return void say("  " + t("fk.need_tree"));
+      const n = contributorsOnFork(s).toNumber();
+      say("  " + (n >= 1 ? t("fk.status", { n: fmtInt(n) }) : t("fk.need_stars", { n: FORK.starsBase, c: fmt(s.lifetimeStars) })));
+      say(["  " + t("fk.resets"), "c-dim"]);
+      say(["  " + t("fk.keeps"), "c-dim"]);
+      if (n >= 1) say(["  fork --yes", "c-green"]);
+    },
+    gh(args) {
+      const en = e();
+      const s = en.s;
+      const [a, b, c] = args;
+      if (a !== "pr") return void say(t("gh.usage"));
+      if (b === "merge") {
+        const pr = en.mergePr(c === undefined ? undefined : Number(c.replace("#", "")));
+        if (!pr) say(INFO, " " + t("fk.no_pr"));
+        return;
+      }
+      if (b === "close") {
+        if (!en.closePr(Number((c ?? "").replace("#", "")))) say(INFO, " " + t("fk.no_pr"));
+        else say(t("gh.closed", { n: c }));
+        return;
+      }
+      if (!s.prs.length) return void say(t("fk.no_pr"));
+      for (const pr of s.prs) {
+        const fx = PR_EFFECTS[pr.kind];
+        say(["  #" + pad(String(pr.n), 5), "c-violet"], pad(t(`pr.${pr.kind}.${pr.title}`), 40),
+          [pr.kind === "docs" ? t("pr.fx.docs", { m: fx.seconds! / 60 }) : t(`pr.fx.${pr.kind}`, { x: fx.mult! }), "c-amber"]);
+      }
+      say(["  gh pr merge <n> · gh pr close <n>", "c-dim"]);
     },
     gen(args) {
       const en = e();
@@ -575,6 +639,8 @@ export function createCommands(c: GameCtx) {
     const en = e();
     if (["tree", "talent", "optimize"].includes(name)) return starsRevealed(en.s);
     if (name === "gen") return gensRevealed(en.s);
+    if (name === "fork") return forkRevealed(en.s);
+    if (name === "gh") return en.s.forks > 0;
     if (name === "autoscale") return on(en.s, "as_jobs");
     if (name === "challenge") return en.challengesUnlocked;
     return true;
@@ -599,9 +665,9 @@ export function createCommands(c: GameCtx) {
     buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "auto_cpu", "auto_ram", "auto_disk", "auto_jobs", "release_bot"],
     optimize: UPGRADES.map(u => u.id), gen: GEN_KEYS, challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
-    cargo: ["update"], git: ["merge"], autoscale: ["jobs"],
+    cargo: ["update"], git: ["merge"], autoscale: ["jobs"], fork: ["tree", "buy", "--yes"], gh: ["pr"],
   };
-  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "autoscale", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
+  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "autoscale", "fork", "gh", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
     ...new Set(BUILD_EVENTS.map(ev => ev.cmd.split(" ")[0]))];
 
   function complete(line: string): string[] {

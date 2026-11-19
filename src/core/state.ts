@@ -1,4 +1,5 @@
 import Decimal from "break_eternity.js";
+import type { PullRequest } from "./fork";
 
 export type HwKey = "cpu" | "ram" | "disk" | "jobs";
 export const HW_KEYS: HwKey[] = ["cpu", "ram", "disk", "jobs"];
@@ -63,13 +64,30 @@ export interface GameState {
     bestStreak: number;
     fastestRelease: number | null;
     events: number; // build events caught (never reset)
+    forkTime: number;          // time since the last fork (or since the start)
+    fastestFork: number | null;
+    prsMerged: number;
+    allStars: number;          // stars earned over every fork (stats only)
   };
   settings: { lang: Lang; notation: Notation; logLevel: "full" | "reduced" | "minimal"; buyAmount: BuyAmount };
+  /* ---------- Fork (v0.4, prestige layer 2) ---------- */
+  forks: number;
+  /** Unspent contributors (Fork talents). */
+  contributors: number;
+  /** Every contributor ever earned (passive bonus, never reset). */
+  lifetimeContributors: number;
+  /** Fork talents, never reset. */
+  forkTalents: string[];
+  /** Open pull requests, and the boosts of merged ones (until the next release). */
+  prs: PullRequest[];
+  prNext: number;      // seconds before the next PR
+  prSeq: number;       // last PR number
+  prBoost: { speed: number; gains: number; stars: number };
   lastSeen: number;
   createdAt: number;
 }
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -107,8 +125,16 @@ export function newState(): GameState {
     seen: [],
     achClaimed: [],
     achievements: [],
-    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0 },
+    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0, forkTime: 0, fastestFork: null, prsMerged: 0, allStars: 0 },
     settings: { lang: browserLang(), notation: "standard", logLevel: "reduced", buyAmount: 1 },
+    forks: 0,
+    contributors: 0,
+    lifetimeContributors: 0,
+    forkTalents: [],
+    prs: [],
+    prNext: 600,
+    prSeq: 0,
+    prBoost: { speed: 1, gains: 1, stars: 1 },
     lastSeen: now,
     createdAt: now,
   };
@@ -147,6 +173,9 @@ export function deserialize(json: string): GameState {
   if (raw.settings?.verbose === false && !raw.settings?.logLevel) s.settings.logLevel = "minimal";
   delete (s.settings as Record<string, unknown>).verbose;
   s.achClaimed = [...(raw.achClaimed ?? [])];
+  s.forkTalents = [...(raw.forkTalents ?? [])];
+  s.prs = Array.isArray(raw.prs) ? raw.prs.map((p: PullRequest) => ({ ...p })) : [];
+  s.prBoost = { ...base.prBoost, ...raw.prBoost };
   // v0.2.2–0.2.4 first-run objectives became the first tiers of the achievement chains
   if (!raw.achClaimed) {
     const map: Record<string, string> = {
@@ -192,6 +221,21 @@ function migrate(s: GameState, from: number) {
   if (from < 5) {
     // v0.3.2 → v0.3.3: job priority threshold of the Auto-Scaling
     s.jobsPrio = 0;
+  }
+  if (from < 6) {
+    // v0.3 → v0.4: Fork layer. The current cycle started with the save, so its time is the play time.
+    s.forks = 0;
+    s.contributors = 0;
+    s.lifetimeContributors = 0;
+    s.forkTalents = [];
+    s.prs = [];
+    s.prNext = 600;
+    s.prSeq = 0;
+    s.prBoost = { speed: 1, gains: 1, stars: 1 };
+    s.stats.forkTime = s.stats.playTime;
+    s.stats.fastestFork = null;
+    s.stats.prsMerged = 0;
+    s.stats.allStars = s.lifetimeStars.toNumber();
   }
   s.version = SAVE_VERSION;
 }
