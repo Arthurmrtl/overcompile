@@ -3,6 +3,7 @@ import type { GameState, GenKey, HwKey } from "./state";
 import { achBonus } from "./achievements";
 import { CHALLENGES } from "./challenges";
 import { TALENTS } from "./talents";
+import { EVENT_BY_ID, RC_STARS_PCT } from "./events";
 const TALENT_REQ: Record<string, string[]> = Object.fromEntries(TALENTS.map(t => [t.id, t.req]));
 import { offlineCapHours, offlineEff, optRewardMult, optSpeedMult } from "./upgrades";
 
@@ -89,6 +90,20 @@ export const genSpeedMult = (s: GameState) => Math.pow(BAL.genCpu, s.gens.cpu);
 export const genFailMult = (s: GameState) => Math.pow(BAL.genDiskFail, s.gens.disk);
 export const genRewardMult = (s: GameState) => Decimal.pow(BAL.genRam, s.gens.ram).mul(Decimal.pow(BAL.genDisk, s.gens.disk));
 
+/* ---------- Build events (active boosts) ---------- */
+// The boosts of caught events, multiplied together if several of the same kind run at once.
+function buffMult(s: GameState, kind: "speed" | "gains"): number {
+  let m = 1;
+  for (const b of s.buffs) {
+    const e = EVENT_BY_ID[b.id]?.effect;
+    if (e && e.kind === kind) m *= e.mult;
+  }
+  return m;
+}
+export const eventSpeedMult = (s: GameState) => buffMult(s, "speed");
+export const eventGainsMult = (s: GameState) => buffMult(s, "gains");
+export const eventNoFail = (s: GameState) => s.buffs.some(b => EVENT_BY_ID[b.id]?.effect.kind === "nofail");
+
 /* ---------- Build parameters ---------- */
 // CPU   : faster builds, slightly more failures
 // RAM   : bigger rewards, slightly slower builds
@@ -101,6 +116,7 @@ export function buildTime(s: GameState): number {
   t *= optSpeedMult(s);
   t /= achSpeedMult(s);
   t /= genSpeedMult(s);
+  t /= eventSpeedMult(s);
   if (challengeDone(s, "single_core")) t /= 1.5;
   if (inChallenge(s, "debug_build")) t *= 10;
   return t;
@@ -114,6 +130,7 @@ export function failProbability(s: GameState): number {
   p *= genFailMult(s);
   p = Math.min(Math.max(p, 0.01), 0.9);
   if (inChallenge(s, "friday")) p = Math.max(p, 0.5);
+  if (eventNoFail(s)) p = 0;
   return p;
 }
 
@@ -128,7 +145,7 @@ export const achFailMult = (s: GameState) => Math.max(0.5, 1 - achBonus(s, "fail
 export const achStarsMult = (s: GameState) => 1 + achBonus(s, "stars") / 100;
 
 export function rewardMultiplier(s: GameState): Decimal {
-  let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s)).mul(genRewardMult(s));
+  let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s)).mul(genRewardMult(s)).mul(eventGainsMult(s));
   if (on(s, "code_review")) m = m.mul(BAL.revReward);
   if (on(s, "lto")) m = m.mul(BAL.ltoReward);
   if (challengeDone(s, "debug_build")) m = m.mul(2);
@@ -157,6 +174,7 @@ export function starGainMultiplier(s: GameState): number {
   let m = achStarsMult(s);
   if (on(s, "semver")) m *= 2;
   if (challengeDone(s, "no_cache")) m *= 1.5;
+  if (s.rcPending) m *= 1 + RC_STARS_PCT / 100; // "Release candidate" event
   return m;
 }
 

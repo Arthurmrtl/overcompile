@@ -13,15 +13,16 @@ import { GEN_KEYS, type GenKey, HW_KEYS, PERK_KEYS, type HwKey, exportSave, impo
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import {
   LOGO, achDesc, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, genBonusText, nextGoals, progressText,
-  rewardText, upgradeNow, version,
+  eventBonusText, rewardText, upgradeNow, version,
 } from "./commands";
 import { achProgress } from "./core/achievements";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 import { type Advice, ReleaseAdvisor } from "./core/advisor";
+import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.3.0";
+const GAME_VERSION = "0.3.1";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -125,6 +126,7 @@ function buildLayout() {
           <div><span class="k">${t("pipe.rate")}</span><span class="v" data-r="pRate"></span></div>
         </div>
         <div class="slots" data-r="slots"></div>
+        <div class="buffs" data-r="buffs" hidden></div>
         <div class="ch-banner" data-r="chBanner" hidden>
           <div class="ch-banner-top"><span class="ch-banner-name" data-r="chName"></span><button class="btn small-btn" data-r="chExit">${t("ch.exit")}</button></div>
           <div class="muted small" data-r="chRule"></div>
@@ -154,6 +156,7 @@ function buildLayout() {
         <button class="release-btn" data-r="relBtn"></button>
         <div class="progress"><div class="fill" data-r="relProg"></div></div>
         <div class="muted small" data-r="relHint"></div>
+        <div class="rel-rc small" data-r="relRc" hidden></div>
         <div class="rel-rate small" data-r="relRate" hidden></div>
         <button class="ch-nudge" data-r="chNudge" hidden></button>
         <div class="bot" data-r="bot" hidden>
@@ -196,6 +199,11 @@ function buildLayout() {
   </nav>
   <footer class="foot"><a href="https://github.com/Antiz96/incrust" target="_blank" rel="noopener noreferrer">${t("fork_of")}</a></footer>
   <div class="toasts" data-r="toasts"></div>
+  <button class="ev-pill" data-r="evPill" hidden>
+    <span class="ev-pill-t" data-r="evText"></span>
+    <span class="ev-pill-h" data-r="evHint"></span>
+    <span class="ev-bar"><i data-r="evBar"></i></span>
+  </button>
   <div class="modal" data-r="modal" hidden><div class="modal-box" data-r="modalBox"></div></div>`;
 
   $("[data-r=termHost]").append(term.root);
@@ -338,6 +346,10 @@ function bindLayout() {
     else cmd.run("compile", true);
   });
   $("[data-r=relBtn]").addEventListener("click", () => cmd.run("release", true));
+  $("[data-r=evPill]").addEventListener("click", () => {
+    const cur = engine.activeEvent;
+    if (cur) cmd.run(EVENT_BY_ID[cur.id].cmd, true);
+  });
   $("[data-r=chNudge]").addEventListener("click", () => {
     sideTab = "challenges";
     if (!engine.s.seen.includes("challenges")) engine.s.seen.push("challenges");
@@ -444,6 +456,39 @@ function render() {
   if (sideTab === "challenges") renderChallenges();
   renderAchievements();
   if (sideTab === "stats") renderStats();
+  renderEvents();
+}
+
+/** Floating event to catch, and the boosts running in the Pipeline card. */
+function renderEvents() {
+  const s = engine.s;
+  const pill = $<HTMLButtonElement>("[data-r=evPill]");
+  const cur = engine.activeEvent;
+  if (pill.hidden === !!cur) pill.hidden = !cur;
+  if (cur) {
+    const ev = EVENT_BY_ID[cur.id];
+    setText($("[data-r=evText]"), `${ev.icon} ${t(`ev.${ev.id}`)} · ${eventBonusText(ev.id)}`);
+    setText($("[data-r=evHint]"), t("ev.hint", { c: ev.cmd }));
+    const total = has(s, "pager") ? PAGER_WINDOW : EVENT_WINDOW;
+    $("[data-r=evBar]").style.width = `${Math.max(0, Math.min(100, (cur.left / total) * 100))}%`;
+  }
+  const box = $("[data-r=buffs]");
+  const show = s.buffs.length > 0;
+  if (box.hidden === show) box.hidden = !show;
+  if (show) {
+    const key = s.buffs.map(b => `${b.id}:${Math.ceil(b.left)}`).join("|");
+    if (box.dataset.k !== key) {
+      box.dataset.k = key;
+      box.replaceChildren(...s.buffs.map(b => {
+        const ev = EVENT_BY_ID[b.id];
+        return h("span", { class: "buff" }, `${ev.icon} ${eventBonusText(ev.id).split(" · ")[0]} · ${Math.ceil(b.left)} s`);
+      }));
+    }
+  }
+  const rc = $("[data-r=relRc]");
+  const showRc = s.rcPending && !s.challenge;
+  if (rc.hidden === showRc) rc.hidden = !showRc;
+  if (showRc) setText(rc, t("ev.rc_pending", { p: RC_STARS_PCT }));
 }
 
 /** Generation row of a hardware card: current generation, then the next requirement or the button. */
@@ -778,6 +823,7 @@ function renderStats() {
     ["st.runtime", fmtTime(s.stats.runTime)],
     ["st.releases", fmtInt(s.releases)],
     ["st.lifetime_stars", fmt(s.lifetimeStars)],
+    ["st.events", fmtInt(s.stats.events)],
     ...(gensRevealed(s) ? [["st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`] as [string, string]] : []),
     ["st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease)],
     ["st.streak", fmtInt(s.stats.bestStreak)],
@@ -1007,6 +1053,29 @@ engine.on((e: GameEvent) => {
       break;
     case "challenge_exit":
       term.println(["[ CH ]", "c-dim"], " " + t("term.ch_exit", { c: challengeName(e.id) }));
+      break;
+    case "event_spawn": {
+      const ev = EVENT_BY_ID[e.id];
+      term.println(["[ EVENT ]", "c-amber"], " " + t("ev.spawn", { i: ev.icon, n: t(`ev.${ev.id}`), c: ev.cmd, w: Math.round(e.window) }));
+      break;
+    }
+    case "event_caught": {
+      const ev = EVENT_BY_ID[e.id];
+      const n = t(`ev.${ev.id}`);
+      const line = e.credits ? t("ev.got_credits", { i: ev.icon, n, c: fmt(e.credits) })
+        : e.builds ? t("ev.got_builds", { i: ev.icon, n, b: fmtInt(e.builds) })
+        : t("ev.got", { i: ev.icon, n, b: eventBonusText(ev.id) });
+      term.println(OK, " " + line);
+      toast(`${ev.icon} ${n}`, e.credits ? `+${fmt(e.credits)} cr` : eventBonusText(ev.id));
+      break;
+    }
+    case "event_missed": {
+      if (logLevel() === "minimal") break;
+      const ev = EVENT_BY_ID[e.id];
+      term.println(["[ EVENT ]", "c-dim"], [" " + t("ev.missed", { i: ev.icon, n: t(`ev.${ev.id}`) }), "c-dim"]);
+      break;
+    }
+    case "buff_end":
       break;
     case "generation": {
       const r = t(`hw.${e.key}`);

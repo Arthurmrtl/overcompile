@@ -20,6 +20,7 @@ export const TALENTS: Talent[] = [
   { id: "rust_rewrite", cost: 5, req: ["code_review"], row: 2, col: 1, icon: "rs" },
   { id: "offline_runners", cost: 2, req: ["ci_preinstalled"], row: 2, col: 2, icon: "off" },
   { id: "as_perm", cost: 3, req: ["ci_preinstalled"], row: 2, col: 3, icon: "as" },
+  { id: "pager", cost: 3, req: ["ci_preinstalled"], row: 2, col: 4, icon: "pgr" },
 
   { id: "lto", cost: 15, req: ["monorepo"], row: 3, col: 0, icon: "lto" },
   { id: "dist_cache", cost: 15, req: ["rust_rewrite"], row: 3, col: 1, icon: "dst" },

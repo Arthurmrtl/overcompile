@@ -24,6 +24,10 @@ export interface GameState {
   hw: Record<HwKey, number>;
   /** Hardware generations: permanent, kept across releases (never reset). */
   gens: Record<GenKey, number>;
+  /** "Release candidate" event caught: the next release gives more stars. */
+  rcPending: boolean;
+  /** Active event boosts, with the seconds left. Short-lived; saved so a reload does not drop them. */
+  buffs: { id: string; left: number }[];
   perks: Record<PerkKey, { unlocked: boolean; enabled: boolean }>;
   pipeline: boolean; // a compile pipeline is currently running
   slots: Slot[];
@@ -52,13 +56,14 @@ export interface GameState {
     streak: number;
     bestStreak: number;
     fastestRelease: number | null;
+    events: number; // build events caught (never reset)
   };
   settings: { lang: Lang; notation: Notation; logLevel: "full" | "reduced" | "minimal"; buyAmount: BuyAmount };
   lastSeen: number;
   createdAt: number;
 }
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -78,6 +83,8 @@ export function newState(): GameState {
     totalEarned: new Decimal(0),
     hw: { cpu: 1, ram: 1, disk: 1, jobs: 1 },
     gens: { cpu: 0, ram: 0, disk: 0 },
+    rcPending: false,
+    buffs: [],
     perks: { ci_cd: { unlocked: false, enabled: false }, auto_scaling: { unlocked: false, enabled: false } },
     pipeline: false,
     slots: [{ progress: 0, running: false }],
@@ -93,7 +100,7 @@ export function newState(): GameState {
     seen: [],
     achClaimed: [],
     achievements: [],
-    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null },
+    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0 },
     settings: { lang: browserLang(), notation: "standard", logLevel: "reduced", buyAmount: 1 },
     lastSeen: now,
     createdAt: now,
@@ -129,6 +136,7 @@ export function deserialize(json: string): GameState {
   s.upgrades = { ...(raw.upgrades ?? {}) };
   s.challengesDone = [...(raw.challengesDone ?? [])];
   s.seen = [...(raw.seen ?? [])];
+  s.buffs = Array.isArray(raw.buffs) ? raw.buffs.map((b: { id: string; left: number }) => ({ ...b })) : [];
   if (raw.settings?.verbose === false && !raw.settings?.logLevel) s.settings.logLevel = "minimal";
   delete (s.settings as Record<string, unknown>).verbose;
   s.achClaimed = [...(raw.achClaimed ?? [])];
@@ -167,6 +175,12 @@ function migrate(s: GameState, from: number) {
   if (from < 3) {
     // v0.2 → v0.3: hardware generations start at 0 for everyone
     s.gens = { cpu: 0, ram: 0, disk: 0 };
+  }
+  if (from < 4) {
+    // v0.3.0 → v0.3.1: build events
+    s.rcPending = false;
+    s.buffs = [];
+    s.stats.events = 0;
   }
   s.version = SAVE_VERSION;
 }

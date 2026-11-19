@@ -20,6 +20,8 @@ let t = 0;
 let firstStarLogged = false;
 const milestones: string[] = [];
 const advisor = new ReleaseAdvisor();
+const catchRate = Number(process.env.EVENTS ?? 0.7);
+let lastEvent: unknown = null;
 
 function spendStars() {
   for (;;) {
@@ -44,6 +46,11 @@ while (t < H * 3600) {
   // Hardware generations: taken as soon as available (NOGEN=1 to disable)
   if (!process.env.NOGEN) for (const k of GEN_KEYS) e.generate(k);
   e.tick(dt);
+  // Build events: the player catches a share of them (EVENTS=0..1, default 0.7; NOEVENTS=1 to turn them off)
+  if (e.activeEvent && e.activeEvent !== lastEvent) {
+    lastEvent = e.activeEvent;
+    if (!process.env.NOEVENTS && Math.random() < catchRate) e.catchEvent();
+  }
   e.claimAchievements();
   t += dt;
 
@@ -62,11 +69,11 @@ while (t < H * 3600) {
   if (adv.advised) {
     const rt = s.stats.runTime;
     e.release();
-    console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/14, gens ${s.gens.cpu}/${s.gens.ram}/${s.gens.disk}, next base ${releaseBase(s).toExponential(1)})`);
+    console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/${TALENTS.length}, gens ${s.gens.cpu}/${s.gens.ram}/${s.gens.disk}, next base ${releaseBase(s).toExponential(1)})`);
     spendStars();
     if (s.talents.length === TALENTS.length && !milestones.some(m => m.startsWith("tree"))) milestones.push(`tree complete ${fmt(t)}`);
   }
 }
 for (const c of s.challengesDone) milestones.push(`challenge done: ${c}`);
 console.log(milestones.join("\n"));
-console.log("optimizations", JSON.stringify(s.upgrades), "achievements", s.achievements.length, "rate", expectedRate(s).toExponential(2));
+console.log("events caught", s.stats.events, "optimizations", JSON.stringify(s.upgrades), "achievements", s.achievements.length, "rate", expectedRate(s).toExponential(2));

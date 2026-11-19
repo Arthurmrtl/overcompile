@@ -30,11 +30,12 @@ src/
     state.ts         GameState, sérialisation, SAVE_VERSION, migrate()
     formulas.ts      toutes les formules (prix, temps de build, échecs, gains, étoiles) + BAL
     engine.ts        Engine : tick, compile, autoScale, achats, release, challenges, hors ligne ; émet des événements
-    talents.ts       arbre de release (14 talents, payés en étoiles)
+    talents.ts       arbre de release (15 talents, payés en étoiles)
     upgrades.ts      optimisations rachetables à l'infini (étoiles, coût ×3 par niveau)
     advisor.ts       conseiller de release (étoiles/min, bon moment pour publier)
     challenges.ts    4 challenges (releases sous contrainte → bonus permanent)
-    achievements.ts  58 succès, avec récompense à récupérer
+    events.ts        événements de build (liste, poids, effets, délais)
+    achievements.ts  61 succès, avec récompense à récupérer
   ui/terminal.ts   widget terminal (flux de build, ligne de statut, journal, prompt, historique, Tab)
   commands.ts      toutes les commandes du terminal
   main.ts          mise en page, rendu des panneaux, journal d'événements, boucle (100 ms), GAME_VERSION
@@ -45,7 +46,7 @@ scripts/sim.ts     simulateur d'équilibrage (headless)
 ```
 
 Règles d'architecture :
-- `src/core` ne touche **jamais** au DOM. L'UI écoute les événements de l'`Engine` (`builds`, `pipeline_done`, `release`, `achievement`, `autobuy`, `challenge_*`, `generation`…).
+- `src/core` ne touche **jamais** au DOM. L'UI écoute les événements de l'`Engine` (`builds`, `pipeline_done`, `release`, `achievement`, `autobuy`, `challenge_*`, `generation`, `event_*`…).
 - Les grands nombres utilisent **break_eternity.js** (`Decimal`). Ne mélange pas `number` et `Decimal` pour les crédits ou les gains.
 - **Chaque texte affiché passe par `i18n.ts`**, en EN **et** en FR. Pas de chaîne en dur dans l'UI.
 - Le build produit **un seul fichier HTML** (`vite-plugin-singlefile`) : pas d'assets externes ni de CDN.
@@ -53,13 +54,13 @@ Règles d'architecture :
 ## Sauvegarde : à ne pas casser
 
 - Stockage dans `localStorage`, clé `overcompile-save`. Sauvegarde automatique ; export/import en texte dans les paramètres.
-- `SAVE_VERSION` vaut actuellement **3**. Si tu changes la forme de `GameState` :
+- `SAVE_VERSION` vaut actuellement **4**. Si tu changes la forme de `GameState` :
   1. incrémente `SAVE_VERSION` ;
   2. ajoute une étape dans `migrate()` qui convertit les anciennes sauvegardes ;
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.3.0)
+## Mécaniques actuelles (v0.3.1)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -81,7 +82,7 @@ La courbe est volontairement généreuse au début : 2★ à ×1,6 le seuil, 3�
 
 **Découverte progressive.** Avant la 1re release, le joueur ne voit que l'objectif (« Publier v1.0.0 → ??? ») : ni étoiles, ni arbre, ni optimisations. Les challenges apparaissent après 3 releases. Une commande pas encore débloquée répond `bash: X: command not found`. L'arbre a un « brouillard » : seuls les talents adjacents à ceux qu'on possède sont visibles. Ne divulgue rien de verrouillé (UI, aide, `guide`, succès cachés).
 
-**Arbre de release (talents).** 14 talents, du premier (`inc`, Cache chaud, 1★) au dernier (`bot`, Release bot, 100★). Ils sont identifiés par des **tags texte**, et **Tranché :** pas d'emojis dans l'arbre (« ça fait gamin / IA »). Les autres emojis de l'interface (💾 ⚙ 🏆 🔒 🛒 ⌨️ 🚀 ⭐) restent.
+**Arbre de release (talents).** 15 talents, du premier (`inc`, Cache chaud, 1★) au dernier (`bot`, Release bot, 100★). Ils sont identifiés par des **tags texte**, et **Tranché :** pas d'emojis dans l'arbre (« ça fait gamin / IA »). Les autres emojis de l'interface (💾 ⚙ 🏆 🔒 🛒 ⌨️ 🚀 ⭐) restent.
 
 Branche Auto-Scaling :
 - `as` : Auto-Scaling permanent (conservé après une release) ;
@@ -95,11 +96,13 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 
 **Générations de matériel** (commande `gen`, inspirées de l'Ascension de Revolution Idle). Quand le CPU, la RAM ou le Disk atteint le niveau requis (75, puis ×1,4 à chaque fois : 75, 105, 145…), on peut le passer à la génération suivante. Son niveau repart au niveau de départ de la run, mais le bonus est permanent et n'est jamais remis à zéro : CPU builds ×1,15 plus rapides, RAM gains ×1,3, Disk gains ×1,15 et échecs ×0,85. Visibles après la 1re release. Simulation v0.3.0 (sur la base v0.2.8) : 1re génération vers 2 h 40 (Disk), arbre complet en 3 h 31 au lieu de 4 h 08 sans générations, 1re étoile inchangée. Une 1re génération plus tôt (niveau 50–60) ramenait l'arbre à 3 h 00–3 h 17. Réglages : `BAL.gen*`. Le simulateur les prend dès qu'elles sont disponibles (`NOGEN=1` pour les désactiver).
 
+**Événements de build** (`src/core/events.ts`, v0.3.1, façon « golden cookie »). Une fois la CI/CD active, un événement apparaît toutes les 3 à 6 minutes et reste 12 s : une pastille en haut de l'écran (visible quel que soit l'onglet) et une ligne `[ EVENT ]` dans le journal. On l'attrape en cliquant ou en tapant sa commande. **Tranché par Arthur :** tous positifs (pas de pénalité, la CVE est « CVE patchée ») et **pas d'option pour les désactiver**. Liste : Pause café `coffee` (builds ×2, 30 s), `cargo update` (+1 min de revenu), Test instable `retry` (0 % d'échec, 45 s), Code review express `approve` (gains ×3, 20 s), Conflit de merge `git merge` (tous les jobs terminent instantanément, 3 fois), CVE patchée `patch` (+5 min de revenu), Prod en feu `hotfix` (gains ×7, 15 s, rare), Release candidate `rc` (+10 % d'étoiles sur la prochaine release, rare, après la 1re release). Rien hors ligne ni pendant un challenge. Talent `pgr` (Astreinte, 3★, après `ci`) : fenêtre de 20 s et événements 25 % plus fréquents. Succès : 10 / 100 / 500 événements attrapés. La commande `events` les liste. Simulation : le joueur simulé en attrape 70 % (`EVENTS=0..1`, `NOEVENTS=1` pour les couper) ; arbre complet ~3 h 15–3 h 25 contre 3 h 35 sans, 1re étoile inchangée.
+
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
 **Challenges** (débloqués après 3 releases) : Single-core, Debug build -O0, Friday deploy, No cache. Ce sont des releases sous contrainte qui donnent un bonus permanent.
 
-**Succès.** 58 succès qui fusionnent les anciens « objectifs » et « succès ». **Tranché** (idée d'Arthur) :
+**Succès.** 61 succès qui fusionnent les anciens « objectifs » et « succès ». **Tranché** (idée d'Arthur) :
 - jamais remis à zéro ;
 - récompense à récupérer quand on veut (bouton Claim, commande `claim`) ;
 - petites sommes en crédits au début, puis bonus permanents du type « +2 % de gains » ;
@@ -118,7 +121,8 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
   - `BAL_<clé>=valeur` pour tester un réglage sans toucher au code ;
   - `ADV_<clé>=valeur` pour régler le conseiller (`peakDrop`, `lifetimeShare`, `minWindowMin`) ;
   - `NOCHAL=1` pour désactiver les challenges ;
-  - `NOGEN=1` pour désactiver les générations de matériel.
+  - `NOGEN=1` pour désactiver les générations de matériel ;
+  - `EVENTS=0..1` pour la part d'événements attrapés (0,7 par défaut), `NOEVENTS=1` pour les couper.
   - Sous WSL, `npx` lance le Node de Windows : passe les variables avec `WSLENV` (ex. `WSLENV=BAL_genBase BAL_genBase=60 npm run sim -- 6`).
 - Rythme visé, et validé par Arthur en jouant :
   - 1re étoile en ~20–35 min. Arthur trouve ce début « vraiment bien ».
@@ -149,14 +153,11 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 ## Pas encore décidé (demander à Arthur avant de coder)
 
 1. **Seuil de la 1re release à 8 000 au lieu de 20 000**, pour raccourcir l'attente avant la 1re étoile après l'achat de l'Auto-Scaling.
-2. **Événements de build aléatoires**, façon « golden cookie » : un événement apparaît brièvement dans la console et le joueur clique dessus (ou tape la commande) pour un bonus temporaire. Idées : `cargo update`, test instable, code review, CVE, conflit de merge, prod en feu, pause café. Il faudrait une option pour les désactiver, et une progression liée (talents ou succès). Questions ouvertes :
-   - faire les deux (seuil à 8K et événements) ou seulement les événements ?
-   - la CVE garde-t-elle une pénalité possible, ou tous les événements sont-ils positifs ?
-3. Mettre à jour les actions GitHub signalées comme utilisant Node 20 (fin de vie). Ce n'est pas bloquant.
+2. Mettre à jour les actions GitHub signalées comme utilisant Node 20 (fin de vie). Ce n'est pas bloquant.
 
 ## Feuille de route
 
-- **v0.3** (en cours) : générations de matériel (`gen`), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
+- **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
 - **v0.4** : nouvelle couche de prestige **Fork**, au-dessus des releases, avec des contributeurs, des PR (commande `gh pr`) et son propre arbre. Plus une commande **`crontab`** pour l'automatisation scriptée.
 - **v0.5** : couche **Distro** (idée encore vague).
 

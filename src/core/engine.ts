@@ -3,9 +3,12 @@ import { ACHIEVEMENTS, ACH_BY_ID, type Reward } from "./achievements";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./challenges";
 import {
   HW, PERK_PRICE, OFFLINE_GRACE_SECONDS, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
-  genRequired, gensRevealed, has, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
+  expectedRate, genRequired, gensRevealed, has, starsRevealed, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
 } from "./formulas";
 import { TALENT_BY_ID } from "./talents";
+import {
+  type BuildEvent, EVENT_BY_ID, EVENT_GAP, EVENT_WINDOW, PAGER_GAP_MULT, PAGER_WINDOW, eligibleEvents, pickEvent,
+} from "./events";
 import { UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
 import {
   type BuyAmount, type GameState, type GenKey, type HwKey, type PerkKey, SAVE_KEY, deserialize, newState, serialize,
@@ -23,6 +26,10 @@ export type GameEvent =
   | { t: "challenge_done"; id: string }
   | { t: "challenge_exit"; id: string }
   | { t: "generation"; key: GenKey; gen: number }
+  | { t: "event_spawn"; id: string; window: number }
+  | { t: "event_caught"; id: string; credits?: Decimal; builds?: number }
+  | { t: "event_missed"; id: string }
+  | { t: "buff_end"; id: string }
 
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" };
@@ -32,6 +39,15 @@ export class Engine {
   private listeners: ((e: GameEvent) => void)[] = [];
   private muted = false;
   private autoScaleTimer = 0;
+  private offline = false;
+  /** Build events: countdown to the next one, and the one on screen (not saved). */
+  private eventTimer = Engine.nextGap(false);
+  activeEvent: { id: string; left: number } | null = null;
+
+  static nextGap(pager: boolean, rnd = Math.random()) {
+    const [a, b] = EVENT_GAP;
+    return (a + (b - a) * rnd) * (pager ? PAGER_GAP_MULT : 1);
+  }
 
   constructor(state?: GameState) {
     this.s = state ?? newState();
@@ -102,6 +118,7 @@ export class Engine {
     s.stats.runTime += dt;
 
     if (s.pipeline) this.advanceBuilds(dt);
+    this.tickEvents(dt);
 
     // Auto-Scaling: buys the cheapest affordable upgrade (every 2 s, 0.25 s with `fast`)
     this.autoScaleTimer += dt;
@@ -207,12 +224,97 @@ export class Engine {
     }
     const fail = n - ok;
     const credits = reward(s).mul(ok);
-    s.credits = s.credits.add(credits);
-    s.runEarned = s.runEarned.add(credits);
-    s.totalEarned = s.totalEarned.add(credits);
+    this.addCredits(credits);
     s.stats.builds += n;
     s.stats.fails += fail;
     this.emit({ t: "builds", ok, fail, credits });
+  }
+
+  /* ---------------- Build events ---------------- */
+  /** Events start once CI/CD runs the builds; never offline nor during a challenge. */
+  get eventsActive() {
+    const s = this.s;
+    return !this.offline && !s.challenge && s.pipeline && this.ciActive;
+  }
+
+  private tickEvents(dt: number) {
+    const s = this.s;
+    // Boosts run out
+    if (s.buffs.length) {
+      for (const b of s.buffs) b.left -= dt;
+      for (const b of s.buffs.filter(x => x.left <= 0)) this.emit({ t: "buff_end", id: b.id });
+      s.buffs = s.buffs.filter(x => x.left > 0);
+    }
+    // The event on screen fades away
+    if (this.activeEvent) {
+      this.activeEvent.left -= dt;
+      if (this.activeEvent.left <= 0) {
+        const id = this.activeEvent.id;
+        this.activeEvent = null;
+        this.emit({ t: "event_missed", id });
+      }
+      return;
+    }
+    if (!this.eventsActive) return;
+    this.eventTimer -= dt;
+    if (this.eventTimer > 0) return;
+    const pager = has(s, "pager");
+    this.eventTimer = Engine.nextGap(pager);
+    const e = pickEvent(eligibleEvents(s, starsRevealed(s)));
+    const window = pager ? PAGER_WINDOW : EVENT_WINDOW;
+    this.activeEvent = { id: e.id, left: window };
+    this.emit({ t: "event_spawn", id: e.id, window });
+  }
+
+  /** Catches the event on screen (if `id` is given, only that one). */
+  catchEvent(id?: string): "ok" | "none" | "other" {
+    const cur = this.activeEvent;
+    if (!cur) return "none";
+    if (id && cur.id !== id) return "other";
+    this.activeEvent = null;
+    const e = EVENT_BY_ID[cur.id] as BuildEvent;
+    const s = this.s;
+    s.stats.events++;
+    const fx = e.effect;
+    let credits: Decimal | undefined;
+    let builds: number | undefined;
+    switch (fx.kind) {
+      case "speed": case "gains": case "nofail": {
+        const same = s.buffs.find(b => b.id === e.id);
+        if (same) same.left = Math.max(same.left, fx.seconds); // catching it again refreshes it
+        else s.buffs.push({ id: e.id, left: fx.seconds });
+        break;
+      }
+      case "income":
+        credits = expectedRate(s).mul(fx.seconds);
+        this.addCredits(credits);
+        break;
+      case "instant": {
+        builds = s.hw.jobs * fx.rounds;
+        this.resolveBuilds(builds);
+        break;
+      }
+      case "stars":
+        s.rcPending = true;
+        break;
+    }
+    this.emit({ t: "event_caught", id: e.id, credits, builds });
+    this.checkAchievements();
+    return "ok";
+  }
+
+  /** Spawns an event right away (tests and the sim). */
+  forceEvent(id: string) {
+    if (!EVENT_BY_ID[id]) return;
+    this.activeEvent = { id, left: has(this.s, "pager") ? PAGER_WINDOW : EVENT_WINDOW };
+    this.emit({ t: "event_spawn", id, window: this.activeEvent.left });
+  }
+
+  private addCredits(c: Decimal) {
+    const s = this.s;
+    s.credits = s.credits.add(c);
+    s.runEarned = s.runEarned.add(c);
+    s.totalEarned = s.totalEarned.add(c);
   }
 
   /* ---------------- Shop ---------------- */
@@ -316,6 +418,7 @@ export class Engine {
     s.stars = s.stars.add(gain);
     s.lifetimeStars = s.lifetimeStars.add(gain);
     s.releases++;
+    s.rcPending = false;
     if (s.stats.fastestRelease === null || s.stats.runTime < s.stats.fastestRelease) s.stats.fastestRelease = s.stats.runTime;
     this.resetRun();
     this.emit({ t: "release", stars: gain, auto });
@@ -398,6 +501,8 @@ export class Engine {
     if (this.s.challengesDone.includes(id)) return "done";
     if (this.s.challenge) return "active";
     this.s.challenge = id;
+    this.s.buffs = []; // events stay out of challenges
+    this.activeEvent = null;
     this.resetRun();
     this.emit({ t: "challenge_start", id });
     return "ok";
@@ -450,7 +555,10 @@ export class Engine {
     const collect = (e: GameEvent) => { if (e.t === "achievement") newAchievements.push(e.id); };
     this.listeners.push(collect);
     this.muted = true;
+    this.offline = true; // no events while away
+    this.activeEvent = null;
     for (let i = 0; i < steps; i++) this.tick(dt);
+    this.offline = false;
     this.muted = false;
     this.listeners = this.listeners.filter(l => l !== collect);
     // Play time counts real time, not simulated time
