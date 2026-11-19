@@ -3,6 +3,7 @@ import {
   ACHIEVEMENTS, type Achievement, type Reward, PER_RUN_METRICS, achBonus, achProgress, metricValue,
 } from "./core/achievements";
 import { CHALLENGES } from "./core/challenges";
+import { BUILD_EVENTS, EVENT_BY_ID, eventForCommand } from "./core/events";
 import {
   BAL, HW, PERK_PRICE, autoScaleInterval, genRequired, gensRevealed, totalGens, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
   maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
@@ -69,6 +70,19 @@ export function genBonusText(k: GenKey, n = 1): string {
   if (k === "cpu") return t("gen.cpu.bonus", { x: x(BAL.genCpu) });
   if (k === "ram") return t("gen.ram.bonus", { x: x(BAL.genRam) });
   return t("gen.disk.bonus", { x: x(BAL.genDisk), y: Math.pow(BAL.genDiskFail, n).toFixed(2) });
+}
+
+/** "builds ×2 faster · 30 s", "+5 min of income"… */
+export function eventBonusText(id: string): string {
+  const fx = EVENT_BY_ID[id].effect;
+  switch (fx.kind) {
+    case "speed": return t("ev.fx.speed", { x: fx.mult, s: fx.seconds });
+    case "gains": return t("ev.fx.gains", { x: fx.mult, s: fx.seconds });
+    case "nofail": return t("ev.fx.nofail", { s: fx.seconds });
+    case "income": return fx.seconds >= 60 ? t("ev.fx.income_min", { m: fx.seconds / 60 }) : t("ev.fx.income_s", { s: fx.seconds });
+    case "instant": return t("ev.fx.instant", { n: fx.rounds });
+    case "stars": return t("ev.fx.stars", { p: fx.pct });
+  }
 }
 
 export const challengeName = (id: string) => t(`ch.${id}`);
@@ -180,7 +194,7 @@ export function createCommands(c: GameCtx) {
         ["compile", t("help.compile")], ["stop", t("help.stop")], ["buy", t("help.buy")],
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
         ["status", t("help.status")], ["goals", t("help.goals")], ["claim", t("help.claim")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
-        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
+        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ["events", t("help.events")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
       ];
@@ -467,6 +481,16 @@ export function createCommands(c: GameCtx) {
     clear() {
       term.clear();
     },
+    events() {
+      const en = e();
+      say(["[EVENTS]", "c-bold"]);
+      say(["  " + t("ev.desc"), "c-dim"]);
+      for (const ev of BUILD_EVENTS) {
+        if (ev.needsStars && !starsRevealed(en.s)) continue;
+        say("  " + ev.icon + " ", [pad(ev.cmd, 14), "c-green"], pad(t(`ev.${ev.id}`), 24), [eventBonusText(ev.id), "c-amber"]);
+      }
+      say(["  " + t("ev.caught", { n: fmtInt(en.s.stats.events) }), "c-dim"]);
+    },
     sudo() {
       say(t("term.sudo1"));
       say(t("term.sudo2"));
@@ -492,6 +516,20 @@ export function createCommands(c: GameCtx) {
       c.halt();
     },
   };
+
+  // Every event is caught with its own command ("coffee", "git merge"…): one handler per first word.
+  for (const word of new Set(BUILD_EVENTS.map(ev => ev.cmd.split(" ")[0]))) {
+    commands[word] = (args: string[]) => {
+      const en = e();
+      const ev = eventForCommand([word, ...args].join(" "));
+      const cur = en.activeEvent;
+      if (!ev) return void say(t("ev.usage", { c: BUILD_EVENTS.filter(x => x.cmd.startsWith(word)).map(x => x.cmd).join(", ") }));
+      const r = en.catchEvent(ev.id);
+      if (r === "none") say(INFO, " " + t("ev.none"));
+      else if (r === "other" && cur) say(INFO, " " + t("ev.other", { c: EVENT_BY_ID[cur.id].cmd }));
+      // "ok": the event_caught handler prints the result
+    };
+  }
 
   const aliases: Record<string, string> = {
     make: "compile", build: "compile", upgrade: "shop", manage: "toggle", ach: "achievements",
@@ -526,8 +564,10 @@ export function createCommands(c: GameCtx) {
     buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "auto_cpu", "auto_ram", "auto_disk", "auto_jobs", "release_bot"],
     optimize: UPGRADES.map(u => u.id), gen: GEN_KEYS, challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
+    cargo: ["update"], git: ["merge"],
   };
-  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "challenge", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
+  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
+    ...new Set(BUILD_EVENTS.map(ev => ev.cmd.split(" ")[0]))];
 
   function complete(line: string): string[] {
     const parts = line.trimStart().split(/\s+/);
