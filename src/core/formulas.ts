@@ -63,6 +63,11 @@ export const BAL = {
   distSpeed: 2,        // dist_cache: build speed
   releaseGrowth: 1.2,    // each released version needs ×N more credits per star
   starExp: 0.36,        // stars = (earned / base) ^ starExp
+  lifeCoef: 0.25,       // lifetime star bonus: 1 + lifeCoef × lifetime ^ lifeExp
+  lifeExp: 0.35,       // was 0.5: with infinite optimizations the √ bonus made late game explode
+  optReward: 1.25,      // Optimization "rewards": × per level
+  optCostRatio: 3,      // infinite Optimizations: price × N per level (was 2)
+  earlyK: 1.5,          // early star curve: 1 + earlyK × log2(earned / base) (was 1)
 };
 
 /* ---------- Build parameters ---------- */
@@ -92,7 +97,7 @@ export function failProbability(s: GameState): number {
 }
 
 export function starMultiplier(s: GameState): Decimal {
-  return s.lifetimeStars.sqrt().mul(0.25).add(1);
+  return s.lifetimeStars.pow(BAL.lifeExp).mul(BAL.lifeCoef).add(1);
 }
 
 /** Claimed achievement bonuses, as multipliers. */
@@ -136,20 +141,27 @@ export function starGainMultiplier(s: GameState): number {
 
 /**
  * Stars for a run that earned `ratio` × the release base. Two curves, the best wins:
- * - early: 1 + log2(ratio) → 2 stars at ×2, 3 at ×4, 4 at ×8 (the first releases stay generous)
- * - late:  ratio ^ starExp  → takes over around ×700 and keeps big runs rewarding
+ * - early: 1 + 1.5·log2(ratio) → 2 stars at ×1.6, 3 at ×2.5, 4 at ×4 (the first releases stay generous)
+ * - late:  ratio ^ starExp  → takes over for very big runs and keeps them rewarding
  */
 function starCurve(ratio: Decimal): Decimal {
-  const early = ratio.log2().add(1);
+  const early = ratio.log2().mul(BAL.earlyK).add(1);
   const late = ratio.pow(BAL.starExp);
   return early.max(late);
 }
 
 /** Inverse of starCurve: the ratio needed for a curve value of `v`. */
 function ratioFor(v: Decimal): Decimal {
-  const early = Decimal.pow(2, v.sub(1));
+  const early = Decimal.pow(2, v.sub(1).div(BAL.earlyK));
   const late = v.pow(1 / BAL.starExp);
   return early.min(late).max(1);
+}
+
+/** Stars the run is worth right now, before rounding down (used for the stars/min rate). */
+export function starsExact(s: GameState): Decimal {
+  const base = releaseBase(s);
+  if (s.challenge || s.runEarned.lt(base)) return new Decimal(0);
+  return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s));
 }
 
 export function starsOnRelease(s: GameState): Decimal {

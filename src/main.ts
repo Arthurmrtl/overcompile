@@ -19,8 +19,9 @@ import { achProgress } from "./core/achievements";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
+import { type Advice, ReleaseAdvisor } from "./core/advisor";
 
-const GAME_VERSION = "0.2.7";
+const GAME_VERSION = "0.2.8";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -73,6 +74,9 @@ const app = document.getElementById("app")!;
 let selectedTalent: string = "warm_cache";
 let sideTab: "release" | "challenges" | "achievements" | "stats" = "release";
 let mobilePanel: "center" | "shop" | "side" = "center";
+const advisor = new ReleaseAdvisor();
+let advice: Advice = advisor.update(engine.s);
+let advisedLogged = false; // one journal line per run when the advice turns on
 let lastAchCount = "";
 let lastSlotCount = -1;
 let lastTalentKey = "";
@@ -135,7 +139,7 @@ function buildLayout() {
     </section>
     <section class="col col-side">
       <div class="tabs" role="tablist">
-        <button data-tab="release">${t("tab.release")}</button>
+        <button data-tab="release">${t("tab.release")} <span class="badge new" data-r="relBadge" hidden>!</span></button>
         <button data-tab="challenges" data-reveal="challenges">${t("tab.challenges")} <span class="badge new" data-r="chNew">${t("rev.new")}</span></button>
         <button data-tab="achievements">${t("tab.achievements")} <span class="badge" data-r="achBadge"></span></button>
         <button data-tab="stats">${t("tab.stats")}</button>
@@ -150,6 +154,8 @@ function buildLayout() {
         <button class="release-btn" data-r="relBtn"></button>
         <div class="progress"><div class="fill" data-r="relProg"></div></div>
         <div class="muted small" data-r="relHint"></div>
+        <div class="rel-rate small" data-r="relRate" hidden></div>
+        <button class="ch-nudge" data-r="chNudge" hidden></button>
         <div class="bot" data-r="bot" hidden>
           <label class="switch"><input type="checkbox" data-r="botOn"><span>${t("rel.bot")}</span></label>
           <label class="small">${t("rel.bot.threshold")} <input type="number" min="1" step="1" data-r="botThr"> ⭐</label>
@@ -320,6 +326,11 @@ function bindLayout() {
     else cmd.run("compile", true);
   });
   $("[data-r=relBtn]").addEventListener("click", () => cmd.run("release", true));
+  $("[data-r=chNudge]").addEventListener("click", () => {
+    sideTab = "challenges";
+    if (!engine.s.seen.includes("challenges")) engine.s.seen.push("challenges");
+    render();
+  });
   $("[data-r=chExit]").addEventListener("click", () => cmd.run("challenge exit", true));
   $("[data-a=save]").addEventListener("click", () => cmd.run("save", true));
   $("[data-a=settings]").addEventListener("click", () => openSettings());
@@ -451,6 +462,11 @@ function renderSlots(T: number) {
   });
 }
 
+function fmtRate(r: number): string {
+  if (!Number.isFinite(r)) return "∞";
+  return r >= 100 ? fmt(new Decimal(r)) : r >= 10 ? r.toFixed(0) : r.toFixed(r >= 1 ? 1 : 2);
+}
+
 function renderRelease() {
   const s = engine.s;
   setText($("[data-r=relStars]"), fmt(s.stars));
@@ -464,6 +480,27 @@ function renderRelease() {
     : can ? (firstRelease ? t("rev.button") : t("rel.button", { v: version(engine), n: fmt(gain) }))
     : `🔒 ${t("rel.title")}`);
   toggleClass(btn, "ready", can);
+  const advised = advice.advised && starsRevealed(s);
+  toggleClass(btn, "advised", advised);
+  const relBadge = $("[data-r=relBadge]");
+  if (relBadge.hidden === advised) relBadge.hidden = !advised;
+
+  // Stars per minute, once stars are known
+  const rateEl = $("[data-r=relRate]");
+  const showRate = starsRevealed(s) && can && !s.challenge;
+  if (rateEl.hidden === showRate) rateEl.hidden = !showRate;
+  if (showRate) {
+    const r = t("adv.rate", { r: fmtRate(advice.rate), p: fmtRate(advice.peak) });
+    setText(rateEl, advised ? `${r} · ${t(advice.rate < advice.peak * 0.9 ? "adv.now_slow" : "adv.now_big")}` : r);
+    toggleClass(rateEl, "on", advised);
+  }
+
+  // Challenges waiting to be done
+  const nudge = $<HTMLButtonElement>("[data-r=chNudge]");
+  const todo = engine.challengesUnlocked ? CHALLENGES.filter(c => !s.challengesDone.includes(c.id)) : [];
+  const showNudge = todo.length > 0 && !s.challenge;
+  if (nudge.hidden === showNudge) nudge.hidden = !showNudge;
+  if (showNudge) setText(nudge, t("adv.ch", { n: todo.length, c: t(`ch.${todo[0].id}`), r: t(`ch.${todo[0].id}.reward`) }));
   let prog: number;
   const base = releaseBase(s);
   if (s.challenge) {
@@ -665,7 +702,8 @@ function renderAchievements() {
   setText($("[data-r=achBadge]"), pendingCount ? `${pendingCount}!` : `${n}/${ACHIEVEMENTS.length}`);
   toggleClass($("[data-r=achBadge]"), "new", pendingCount > 0);
   const dot = $("[data-r=mDot]");
-  if (dot.hidden === pendingCount > 0) dot.hidden = pendingCount === 0;
+  const dotOn = pendingCount > 0 || (advice.advised && starsRevealed(s));
+  if (dot.hidden === dotOn) dot.hidden = !dotOn;
   const achKey = `${n}|${s.achClaimed.length}|${starsRevealed(s)}|${engine.challengesUnlocked}|${s.settings.lang}`;
   if (achKey === lastAchCount) return;
   lastAchCount = achKey;
@@ -908,6 +946,10 @@ engine.on((e: GameEvent) => {
         term.println(["[ NEW ]", "c-green"], " " + t("rev.cmds", { c: "challenge" }));
         toast(t("rev.new"), t("tab.challenges"));
       }
+      if (engine.challengesUnlocked) {
+        const next = CHALLENGES.find(c => !engine.s.challengesDone.includes(c.id));
+        if (next) term.println(["[ TIP ]", "c-violet"], " " + t("adv.ch_tip", { c: t(`ch.${next.id}`), r: t(`ch.${next.id}.reward`), id: next.id }));
+      }
       engine.save();
       break;
     }
@@ -1012,6 +1054,13 @@ function loop() {
     const step = Math.min(dt, 1);
     engine.tick(step);
     dt -= step;
+  }
+
+  advice = advisor.update(engine.s);
+  if (!advice.advised) advisedLogged = false;
+  else if (!advisedLogged && starsRevealed(engine.s) && !has(engine.s, "release_bot")) {
+    advisedLogged = true;
+    term.println(STAR, " " + t("adv.log", { n: fmt(advice.pending) }));
   }
 
   const summaryEvery = logLevel() === "minimal" ? 300 : 60;
