@@ -2,6 +2,9 @@ import Decimal from "break_eternity.js";
 
 export type HwKey = "cpu" | "ram" | "disk" | "jobs";
 export const HW_KEYS: HwKey[] = ["cpu", "ram", "disk", "jobs"];
+/** Hardware that can move to a new generation (Jobs are capped at 16). */
+export type GenKey = "cpu" | "ram" | "disk";
+export const GEN_KEYS: GenKey[] = ["cpu", "ram", "disk"];
 export type PerkKey = "ci_cd" | "auto_scaling";
 export const PERK_KEYS: PerkKey[] = ["ci_cd", "auto_scaling"];
 export type Lang = "en" | "fr";
@@ -19,6 +22,8 @@ export interface GameState {
   runEarned: Decimal;
   totalEarned: Decimal;
   hw: Record<HwKey, number>;
+  /** Hardware generations: permanent, kept across releases (never reset). */
+  gens: Record<GenKey, number>;
   perks: Record<PerkKey, { unlocked: boolean; enabled: boolean }>;
   pipeline: boolean; // a compile pipeline is currently running
   slots: Slot[];
@@ -53,7 +58,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -72,6 +77,7 @@ export function newState(): GameState {
     runEarned: new Decimal(0),
     totalEarned: new Decimal(0),
     hw: { cpu: 1, ram: 1, disk: 1, jobs: 1 },
+    gens: { cpu: 0, ram: 0, disk: 0 },
     perks: { ci_cd: { unlocked: false, enabled: false }, auto_scaling: { unlocked: false, enabled: false } },
     pipeline: false,
     slots: [{ progress: 0, running: false }],
@@ -109,6 +115,7 @@ export function deserialize(json: string): GameState {
     ...base,
     ...raw,
     hw: { ...base.hw, ...raw.hw },
+    gens: { ...base.gens, ...raw.gens },
     perks: {
       ci_cd: { ...base.perks.ci_cd, ...raw.perks?.ci_cd },
       auto_scaling: { ...base.perks.auto_scaling, ...raw.perks?.auto_scaling },
@@ -156,6 +163,10 @@ function migrate(s: GameState, from: number) {
     // Offline progress used to be 50% for everyone (100% with the talent): owners keep 50%
     if (s.talents.includes("offline_runners")) s.upgrades.off_eff = Math.max(s.upgrades.off_eff ?? 0, 4);
     s.challenge = null;
+  }
+  if (from < 3) {
+    // v0.2 → v0.3: hardware generations start at 0 for everyone
+    s.gens = { cpu: 0, ram: 0, disk: 0 };
   }
   s.version = SAVE_VERSION;
 }

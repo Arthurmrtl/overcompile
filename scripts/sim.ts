@@ -6,6 +6,7 @@ import { TALENTS } from "../src/core/talents";
 import { UPGRADES, upgradePrice } from "../src/core/upgrades";
 import { CHALLENGES } from "../src/core/challenges";
 import { ADV, ReleaseAdvisor } from "../src/core/advisor";
+import { GEN_KEYS } from "../src/core/state";
 
 import { BAL } from "../src/core/formulas";
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("BAL_")) (BAL as any)[k.slice(4)] = Number(v);
@@ -40,6 +41,8 @@ while (t < H * 3600) {
     else if (s.hw.cpu + s.hw.ram < 24) e.autoScale(); // manual buying until saving for the perk
   }
   if (!s.talents.includes("as_jobs") && s.credits.gte(price("jobs", s.hw.jobs).mul(1.2))) e.buyHw("jobs", 1);
+  // Hardware generations: taken as soon as available (NOGEN=1 to disable)
+  if (!process.env.NOGEN) for (const k of GEN_KEYS) e.generate(k);
   e.tick(dt);
   e.claimAchievements();
   t += dt;
@@ -59,7 +62,7 @@ while (t < H * 3600) {
   if (adv.advised) {
     const rt = s.stats.runTime;
     e.release();
-    console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/14, next base ${releaseBase(s).toExponential(1)})`);
+    console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/14, gens ${s.gens.cpu}/${s.gens.ram}/${s.gens.disk}, next base ${releaseBase(s).toExponential(1)})`);
     spendStars();
     if (s.talents.length === TALENTS.length && !milestones.some(m => m.startsWith("tree"))) milestones.push(`tree complete ${fmt(t)}`);
   }

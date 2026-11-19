@@ -91,6 +91,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .hw.afford:hover { border-color: var(--green); }
 .hw:active { transform: scale(.99); }
 .hw.maxed { opacity: .5; }
+.hw.gen-ready { opacity: 1; }
 .hw-top { display: flex; align-items: center; gap: 8px; }
 .hw-name { font-weight: 700; }
 .hw-lvl { color: var(--blue); margin-left: auto; font-variant-numeric: tabular-nums; }
@@ -105,6 +106,16 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 }
 .auto-pill input { accent-color: var(--violet); margin: 0; width: 11px; height: 11px; }
 .auto-pill[hidden] { display: none; }
+.hw-gen { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--border); font-size: 11px; }
+.hw-gen[hidden], .gen-btn[hidden], .hw-gen-next[hidden] { display: none; }
+.hw-gen-lbl { color: var(--violet); font-weight: 600; white-space: nowrap; flex: none; }
+.hw-gen-next { color: var(--dim); margin-left: auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hw-gen-next.ready { color: var(--amber); }
+.gen-btn {
+  flex: none; border: 1px solid var(--amber); color: var(--amber); border-radius: 4px;
+  padding: 1px 6px; cursor: pointer; white-space: nowrap;
+}
+.gen-btn:hover, .gen-btn:focus-visible { background: var(--amber); color: var(--bg); outline: none; }
 
 /* ---------- Perks ---------- */
 .perk { display: flex; gap: 10px; align-items: center; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px; }

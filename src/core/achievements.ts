@@ -12,7 +12,7 @@ export type BonusStat = "gains" | "speed" | "fail" | "stars";
 export type Reward = { credits: number } | { stat: BonusStat; pct: number };
 
 export type Metric = "builds" | "fails" | "earned" | "perk_ci" | "perk_as" | "cpu" | "ram" | "disk" | "jobs"
-  | "streak" | "releases" | "stars" | "tree" | "opt" | "challenges";
+  | "streak" | "releases" | "stars" | "tree" | "opt" | "challenges" | "gens";
 
 export interface Achievement {
   id: string;
@@ -43,6 +43,7 @@ export function metricValue(s: GameState, m: Metric): Decimal {
     case "tree": return new Decimal(TALENTS.filter(t => s.talents.includes(t.id)).length);
     case "opt": return new Decimal(Object.values(s.upgrades).reduce((a, b) => a + b, 0));
     case "challenges": return new Decimal(s.challengesDone.length);
+    case "gens": return new Decimal((s.gens?.cpu ?? 0) + (s.gens?.ram ?? 0) + (s.gens?.disk ?? 0));
   }
 }
 export const PER_RUN_METRICS: Metric[] = ["cpu", "ram", "disk", "jobs"];
@@ -124,6 +125,11 @@ export const ACHIEVEMENTS: Achievement[] = [
   tier("tree_full", "tree", "tree", TALENTS.length, gains(5), "stars"),
   tier("opt_25", "opt", "opt", 25, speed(3), "stars"),
   tier("opt_100", "opt", "opt", 100, speed(5), "stars"),
+  // Hardware generations
+  tier("gen_1", "gens", "gens", 1, gains(2), "stars"),
+  tier("gen_5", "gens", "gens", 5, speed(3), "stars"),
+  tier("gen_10", "gens", "gens", 10, gains(5), "stars"),
+  tier("gen_20", "gens", "gens", 20, stars(5), "stars"),
   // Challenges
   tier("challenge_1", "challenges", "challenges", 1, gains(3), "challenges"),
   tier("challenge_all", "challenges", "challenges", CHALLENGES.length, stars(5), "challenges"),
