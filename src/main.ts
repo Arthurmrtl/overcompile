@@ -22,7 +22,7 @@ import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/term
 import { type Advice, ReleaseAdvisor } from "./core/advisor";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.3.3";
+const GAME_VERSION = "0.3.4";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -298,11 +298,28 @@ function buildPerks() {
   }
 }
 
+const TREE_COLS = 5;
+let treeRows = 0;
+
+/**
+ * Sizes the tree to the rows the player can see (owned, buyable or in the fog): hidden rows
+ * below would otherwise leave a big empty gap, very visible on phones.
+ */
+function layoutTree(rows: number) {
+  if (rows === treeRows) return;
+  treeRows = rows;
+  const tree = $("[data-r=tree]");
+  tree.style.aspectRatio = `${TREE_COLS} / ${rows}`;
+  $(".tree-lines", tree).setAttribute("viewBox", `0 0 ${TREE_COLS * 100} ${rows * 100}`);
+  for (const tal of TALENTS) $(`[data-t=${tal.id}]`, tree).style.top = `${(tal.row + 0.5) * (100 / rows)}%`;
+}
+
 function buildTree() {
+  treeRows = 0;
   const tree = $("[data-r=tree]");
   tree.replaceChildren();
   const rows = Math.max(...TALENTS.map(x => x.row)) + 1;
-  const COLS = 5;
+  const COLS = TREE_COLS;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${COLS * 100} ${rows * 100}`);
   svg.setAttribute("preserveAspectRatio", "none");
@@ -320,7 +337,6 @@ function buildTree() {
       svg.append(line);
     }
   }
-  tree.style.aspectRatio = `${COLS} / ${rows}`;
   tree.append(svg);
   for (const tal of TALENTS) {
     const node = h("button", { class: "node", "data-t": tal.id, title: t(`t.${tal.id}`) },
@@ -328,7 +344,6 @@ function buildTree() {
       h("span", { class: "node-cost" }, `${tal.cost}★`),
     );
     node.style.left = `${(tal.col + 0.5) * (100 / COLS)}%`;
-    node.style.top = `${(tal.row + 0.5) * (100 / rows)}%`;
     node.addEventListener("click", () => {
       selectedTalent = tal.id;
       lastTalentKey = "";
@@ -656,6 +671,7 @@ function renderRelease() {
   lastTalentKey = key;
   const vis = Object.fromEntries(TALENTS.map(x => [x.id, talentVisibility(s, x.id, x.req)]));
   if (vis[selectedTalent] === "hidden") selectedTalent = "warm_cache";
+  layoutTree(Math.max(...TALENTS.filter(x => vis[x.id] !== "hidden").map(x => x.row)) + 1);
   for (const tal of TALENTS) {
     const node = $(`[data-t=${tal.id}]`);
     toggleClass(node, "hidden", vis[tal.id] === "hidden");
