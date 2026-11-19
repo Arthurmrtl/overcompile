@@ -26,6 +26,12 @@ export interface GameState {
   gens: Record<GenKey, number>;
   /** "Release candidate" event caught: the next release gives more stars. */
   rcPending: boolean;
+  /**
+   * `-j` talent: Auto-Scaling saves up for the next job slot when it costs at most this many
+   * seconds of income (0 = never saves, -1 = always). Set by the player. Default 0: the sim shows
+   * saving up never helps (each slot costs ×5 the previous one for a linear gain), it is a preference.
+   */
+  jobsPrio: number;
   /** Active event boosts, with the seconds left. Short-lived; saved so a reload does not drop them. */
   buffs: { id: string; left: number }[];
   perks: Record<PerkKey, { unlocked: boolean; enabled: boolean }>;
@@ -63,7 +69,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -85,6 +91,7 @@ export function newState(): GameState {
     gens: { cpu: 0, ram: 0, disk: 0 },
     rcPending: false,
     buffs: [],
+    jobsPrio: 0,
     perks: { ci_cd: { unlocked: false, enabled: false }, auto_scaling: { unlocked: false, enabled: false } },
     pipeline: false,
     slots: [{ progress: 0, running: false }],
@@ -181,6 +188,10 @@ function migrate(s: GameState, from: number) {
     s.rcPending = false;
     s.buffs = [];
     s.stats.events = 0;
+  }
+  if (from < 5) {
+    // v0.3.2 → v0.3.3: job priority threshold of the Auto-Scaling
+    s.jobsPrio = 0;
   }
   s.version = SAVE_VERSION;
 }

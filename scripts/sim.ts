@@ -21,6 +21,7 @@ let firstStarLogged = false;
 const milestones: string[] = [];
 const advisor = new ReleaseAdvisor();
 let asLogged = false;
+if (process.env.JOBSPRIO !== undefined) s.jobsPrio = Number(process.env.JOBSPRIO); // -j saving threshold (s of income; 0 never, -1 always)
 let manualTimer = 0;
 const catchRate = Number(process.env.EVENTS ?? 0.7);
 let lastEvent: unknown = null;
@@ -79,8 +80,9 @@ while (t < H * 3600) {
   const gain = adv.pending.toNumber();
   if (adv.advised) {
     const rt = s.stats.runTime;
+    const jobsAtRelease = s.hw.jobs;
     e.release();
-    console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/${TALENTS.length}, gens ${s.gens.cpu}/${s.gens.ram}/${s.gens.disk}, next base ${releaseBase(s).toExponential(1)})`);
+    console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/${TALENTS.length}, jobs ${jobsAtRelease}, gens ${s.gens.cpu}/${s.gens.ram}/${s.gens.disk}, next base ${releaseBase(s).toExponential(1)})`);
     spendStars();
     if (s.talents.length === TALENTS.length && !milestones.some(m => m.startsWith("tree"))) milestones.push(`tree complete ${fmt(t)}`);
   }
