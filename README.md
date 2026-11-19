@@ -48,7 +48,7 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## Content (v0.2.8)
+## Content (v0.3.0)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (1 000 cr, buys the cheapest upgrade every 2 s)
@@ -57,21 +57,22 @@ scripts/sim.ts     pacing simulation
   `ctrl` per-resource switches, `-j` job slots) and `off` (offline progress)
 - Release advisor: stars/min of the current run; the Release button pulses (and the journal says so) when shipping is worth it
 - Optimizations: infinite star upgrades, price ×3 per level (rewards, build speed, warm start, offline efficiency/duration)
+- Hardware generations (`gen`, inspired by Revolution Idle's ascension): once CPU, RAM or Disk reaches the required level (75, then ×1.4 each time), move it to the next generation. Its level restarts, but the bonus is permanent and never reset (CPU: builds ×1.15 faster · RAM: rewards ×1.3 · Disk: rewards ×1.15, failures ×0.85)
 - Offline progress: the first 5 minutes of absence always count; beyond that it must be unlocked
   (`off`: 10 %, 2 h) and improved with Optimizations
 - Challenges (after 3 releases): Single-core, Debug build, Friday deploy, No cache — each grants a
   permanent bonus
 - Progressive reveal: stars, the tree (with fog of war), optimizations and challenges — and their terminal commands — appear as they are unlocked
 - Terminal: a short build stream + live status line on top, a readable journal below (commands, events, one summary per minute, income records); 3 log levels
-- 54 achievements in tiered chains, never reset; the Achievements tab shows rewards to claim, then the next tier of each chain with its progress. Each pays a reward claimed whenever you want (`claim`): credits early, permanent bonuses later (+x% rewards / speed / stars, −x% failures)
+- 58 achievements in tiered chains, never reset; the Achievements tab shows rewards to claim, then the next tier of each chain with its progress. Each pays a reward claimed whenever you want (`claim`): credits early, permanent bonuses later (+x% rewards / speed / stars, −x% failures)
 - Mobile: bottom tab bar; the on-screen keyboard only opens when you tap the prompt, and the terminal takes the full height while typing
 - Stats, EN/FR, standard/scientific notation
-- v0.1 saves are migrated (old autobuyers become the Auto-Scaling talents)
+- v0.1 saves are migrated (old autobuyers become the Auto-Scaling talents); v0.2 saves start with every hardware at generation 0
 
 ## Roadmap
 
-- v0.3 — Prestige layer 2: Fork (Contributors, PRs) + `crontab` automation scripting
-- v0.4 — Prestige layer 3: Distro (Arch / Debian / NixOS rule sets)
+- v0.4 — Prestige layer 2: Fork (Contributors, PRs) + `crontab` automation scripting
+- v0.5 — Prestige layer 3: Distro (Arch / Debian / NixOS rule sets)
 
 ## License
 

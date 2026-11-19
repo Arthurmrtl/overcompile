@@ -4,15 +4,15 @@ import { Engine, type GameEvent } from "./core/engine";
 import { ACHIEVEMENTS } from "./core/achievements";
 import {
   HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
-  failProbability, has, maxAffordable, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
+  failProbability, genRequired, gensRevealed, has, maxAffordable, totalGens, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
   reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./core/challenges";
 import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
-import { HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
+import { GEN_KEYS, type GenKey, HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import {
-  LOGO, achDesc, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, nextGoals, progressText,
+  LOGO, achDesc, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, genBonusText, nextGoals, progressText,
   rewardText, upgradeNow, version,
 } from "./commands";
 import { achProgress } from "./core/achievements";
@@ -21,7 +21,7 @@ import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 import { type Advice, ReleaseAdvisor } from "./core/advisor";
 
-const GAME_VERSION = "0.2.8";
+const GAME_VERSION = "0.3.0";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -234,6 +234,18 @@ function buildHardware() {
     auto.addEventListener("click", ev => ev.stopPropagation());
     auto.querySelector("input")!.addEventListener("change", () => cmd.run(`toggle auto_${k}`, true));
     card.querySelector(".hw-top")!.append(auto);
+    if ((GEN_KEYS as HwKey[]).includes(k)) {
+      // Not a <button>: the card itself is one
+      const genBtn = h("span", { class: "gen-btn", role: "button", tabindex: "0", "data-f": "genBtn", hidden: "" });
+      const go = (ev: Event) => { ev.stopPropagation(); cmd.run(`gen ${k}`, true); };
+      genBtn.addEventListener("click", go);
+      genBtn.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(ev); } });
+      card.append(h("div", { class: "hw-gen", "data-f": "gen", hidden: "" },
+        h("span", { class: "hw-gen-lbl", "data-f": "genLbl" }),
+        h("span", { class: "hw-gen-next", "data-f": "genNext" }),
+        genBtn,
+      ));
+    }
     card.addEventListener("click", () => {
       const a = engine.s.settings.buyAmount;
       cmd.run(`buy ${k}${a === 1 ? "" : " " + a}`, true);
@@ -376,6 +388,7 @@ function render() {
     if (auto.hidden === ownsAuto) auto.hidden = !ownsAuto;
     const cb = $<HTMLInputElement>("input", auto);
     if (cb.checked !== s.autobuy[k]) cb.checked = s.autobuy[k];
+    renderGen(card, k);
   }
 
   // Perks
@@ -431,6 +444,32 @@ function render() {
   if (sideTab === "challenges") renderChallenges();
   renderAchievements();
   if (sideTab === "stats") renderStats();
+}
+
+/** Generation row of a hardware card: current generation, then the next requirement or the button. */
+function renderGen(card: HTMLElement, k: HwKey) {
+  const row = card.querySelector<HTMLElement>("[data-f=gen]");
+  if (!row) return;
+  const s = engine.s;
+  const show = gensRevealed(s);
+  if (row.hidden === show) row.hidden = !show;
+  if (!show) return;
+  const g = k as GenKey;
+  const state = engine.canGenerate(g);
+  setText($("[data-f=genLbl]", row), t("gen.label", { n: s.gens[g] }));
+  const next = $("[data-f=genNext]", row);
+  setText(next, state === "locked" ? "🔒" : t("gen.next", { l: genRequired(s, g) }));
+  const btn = $("[data-f=genBtn]", row);
+  const ready = state === "ok";
+  if (btn.hidden === ready) btn.hidden = !ready;
+  toggleClass(card, "gen-ready", ready);
+  toggleClass(next, "ready", ready);
+  // Ready: the requirement gives way to the bonus of the next generation
+  if (ready) {
+    setText(next, genBonusText(g));
+    setText(btn, t("gen.btn", { n: s.gens[g] + 1 }));
+  }
+  row.title = s.gens[g] > 0 ? t("gen.now", { b: genBonusText(g, s.gens[g]) }) : t("gen.desc");
 }
 
 function hwEffect(k: HwKey): string {
@@ -739,6 +778,7 @@ function renderStats() {
     ["st.runtime", fmtTime(s.stats.runTime)],
     ["st.releases", fmtInt(s.releases)],
     ["st.lifetime_stars", fmt(s.lifetimeStars)],
+    ...(gensRevealed(s) ? [["st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`] as [string, string]] : []),
     ["st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease)],
     ["st.streak", fmtInt(s.stats.bestStreak)],
     ["st.interrupts", fmtInt(s.stats.interrupts)],
@@ -940,7 +980,7 @@ engine.on((e: GameEvent) => {
       toast("🚀 Release", `v${v} · +${fmt(e.stars)} ⭐`);
       if (engine.s.releases === 1) {
         term.println(STAR, " " + t("rev.first"));
-        term.println(["[ NEW ]", "c-green"], " " + t("rev.cmds", { c: "tree, talent, optimize" }));
+        term.println(["[ NEW ]", "c-green"], " " + t("rev.cmds", { c: "tree, talent, optimize, gen" }));
       }
       if (engine.s.releases === CHALLENGES_UNLOCK_AT) {
         term.println(["[ NEW ]", "c-green"], " " + t("rev.cmds", { c: "challenge" }));
@@ -968,6 +1008,14 @@ engine.on((e: GameEvent) => {
     case "challenge_exit":
       term.println(["[ CH ]", "c-dim"], " " + t("term.ch_exit", { c: challengeName(e.id) }));
       break;
+    case "generation": {
+      const r = t(`hw.${e.key}`);
+      const b = genBonusText(e.key);
+      term.println(["[ GEN ]", "c-violet"], " " + t("term.gen_ok", { r, n: e.gen, f: t(`gen.flavor.${e.key}`), b, l: engine.s.hw[e.key] }));
+      toast(`⬆ ${r} · ${t("gen.label", { n: e.gen })}`, b);
+      engine.save();
+      break;
+    }
     case "pipeline_start":
     case "pipeline_done":
       break;

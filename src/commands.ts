@@ -4,11 +4,11 @@ import {
 } from "./core/achievements";
 import { CHALLENGES } from "./core/challenges";
 import {
-  HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
+  BAL, HW, PERK_PRICE, autoScaleInterval, genRequired, gensRevealed, totalGens, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
   maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { UPGRADES, UPGRADE_BY_ID, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
-import { type HwKey, HW_KEYS, PERK_KEYS, type PerkKey, exportSave, importSave } from "./core/state";
+import { GEN_KEYS, type GenKey, type HwKey, HW_KEYS, PERK_KEYS, type PerkKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
@@ -61,6 +61,14 @@ export function upgradeNow(e: Engine, id: string): string {
     case "off_dur": return `${offlineCapHours(s)} h`;
   }
   return String(n);
+}
+
+/** Bonus of `n` generations of a hardware, e.g. "rewards ×1.5" (n = 1: one more generation). */
+export function genBonusText(k: GenKey, n = 1): string {
+  const x = (base: number) => fmt(Math.pow(base, n));
+  if (k === "cpu") return t("gen.cpu.bonus", { x: x(BAL.genCpu) });
+  if (k === "ram") return t("gen.ram.bonus", { x: x(BAL.genRam) });
+  return t("gen.disk.bonus", { x: x(BAL.genDisk), y: Math.pow(BAL.genDiskFail, n).toFixed(2) });
 }
 
 export const challengeName = (id: string) => t(`ch.${id}`);
@@ -124,7 +132,8 @@ export function printStatus(c: GameCtx) {
   const { s } = c.engine;
   const p = (a: string, b: string) => c.term.println(pad(a, 26) + b);
   c.term.println(["[RESOURCES]", "c-bold"]);
-  for (const k of HW_KEYS) p(t(`hw.${k}`), `${s.hw[k]} ${hwUnit(k)}`);
+  const genTag = (k: HwKey) => gensRevealed(s) && k !== "jobs" ? ` · ${t("gen.label", { n: s.gens[k as GenKey] })}` : "";
+  for (const k of HW_KEYS) p(t(`hw.${k}`), `${s.hw[k]} ${hwUnit(k)}${genTag(k)}`);
   p(t("credits").toUpperCase(), fmt(s.credits));
   if (starsRevealed(s)) p(t("rel.stars"), fmt(s.stars));
   c.term.println("");
@@ -171,7 +180,7 @@ export function createCommands(c: GameCtx) {
         ["compile", t("help.compile")], ["stop", t("help.stop")], ["buy", t("help.buy")],
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
         ["status", t("help.status")], ["goals", t("help.goals")], ["claim", t("help.claim")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
-        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
+        ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
       ];
@@ -308,6 +317,30 @@ export function createCommands(c: GameCtx) {
       else if (r.reason === "max") say(t("term.opt_max"));
       else say(FAIL, " " + t("term.talent_stars"));
     },
+    gen(args) {
+      const en = e();
+      const { s } = en;
+      const arg = args[0]?.toLowerCase();
+      if (!arg) {
+        say(["[GENERATIONS]", "c-bold"]);
+        say(["  " + t("gen.desc"), "c-dim"]);
+        for (const k of GEN_KEYS) {
+          const ready = en.canGenerate(k) === "ok";
+          const lvl = `${s.hw[k]} / ${genRequired(s, k)}`;
+          say(ready ? ["[+]", "c-amber"] : ["[ ]", "c-dim"], " ", [pad(k, 6), "c-green"], pad(t("gen.label", { n: s.gens[k] }), 10),
+            pad(lvl, 12), ["→ " + genBonusText(k), "c-amber"]);
+          if (s.gens[k] > 0) say(["      " + t("gen.now", { b: genBonusText(k, s.gens[k]) }), "c-dim"]);
+        }
+        say(["gen <cpu|ram|disk>", "c-dim"]);
+        return;
+      }
+      if (!GEN_KEYS.includes(arg as GenKey)) return void say(t("term.usage_gen"));
+      const k = arg as GenKey;
+      const r = en.generate(k);
+      // On success, the "generation" event handler prints the result.
+      if (r === "locked") say(FAIL, " " + t("term.hw_locked", { r: hwDisplayName(k) }));
+      else if (r === "level") say(INFO, " " + t("term.gen_level", { r: hwDisplayName(k), l: genRequired(s, k), n: s.gens[k] + 1, c: s.hw[k] }));
+    },
     challenge(args) {
       const en = e();
       const arg = args[0];
@@ -388,6 +421,7 @@ export function createCommands(c: GameCtx) {
       p("st.runtime", fmtTime(s.stats.runTime));
       p("st.releases", fmtInt(s.releases));
       p("st.lifetime_stars", fmt(s.lifetimeStars));
+      if (gensRevealed(s)) p("st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`);
       p("st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease));
       p("st.streak", fmtInt(s.stats.bestStreak));
       p("st.interrupts", fmtInt(s.stats.interrupts));
@@ -461,13 +495,14 @@ export function createCommands(c: GameCtx) {
 
   const aliases: Record<string, string> = {
     make: "compile", build: "compile", upgrade: "shop", manage: "toggle", ach: "achievements",
-    prestige: "release", objectives: "goals", goal: "goals", opt: "optimize", optimise: "optimize", ch: "challenge", ship: "release", quit: "exit", shutdown: "exit", cls: "clear", "?": "help",
+    prestige: "release", ascend: "gen", generation: "gen", objectives: "goals", goal: "goals", opt: "optimize", optimise: "optimize", ch: "challenge", ship: "release", quit: "exit", shutdown: "exit", cls: "clear", "?": "help",
   };
 
   /** Commands appear as the game reveals their feature. */
   function available(name: string) {
     const en = e();
     if (["tree", "talent", "optimize"].includes(name)) return starsRevealed(en.s);
+    if (name === "gen") return gensRevealed(en.s);
     if (name === "challenge") return en.challengesUnlocked;
     return true;
   }
@@ -489,10 +524,10 @@ export function createCommands(c: GameCtx) {
 
   const ARGS: Record<string, string[]> = {
     buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "auto_cpu", "auto_ram", "auto_disk", "auto_jobs", "release_bot"],
-    optimize: UPGRADES.map(u => u.id), challenge: [...CHALLENGES.map(c => c.id), "exit"],
+    optimize: UPGRADES.map(u => u.id), gen: GEN_KEYS, challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
   };
-  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "challenge", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
+  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "challenge", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit"];
 
   function complete(line: string): string[] {
     const parts = line.trimStart().split(/\s+/);

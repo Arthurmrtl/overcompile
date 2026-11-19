@@ -34,7 +34,7 @@ src/
     upgrades.ts      optimisations rachetables à l'infini (étoiles, coût ×3 par niveau)
     advisor.ts       conseiller de release (étoiles/min, bon moment pour publier)
     challenges.ts    4 challenges (releases sous contrainte → bonus permanent)
-    achievements.ts  54 succès, avec récompense à récupérer
+    achievements.ts  58 succès, avec récompense à récupérer
   ui/terminal.ts   widget terminal (flux de build, ligne de statut, journal, prompt, historique, Tab)
   commands.ts      toutes les commandes du terminal
   main.ts          mise en page, rendu des panneaux, journal d'événements, boucle (100 ms), GAME_VERSION
@@ -45,7 +45,7 @@ scripts/sim.ts     simulateur d'équilibrage (headless)
 ```
 
 Règles d'architecture :
-- `src/core` ne touche **jamais** au DOM. L'UI écoute les événements de l'`Engine` (`builds`, `pipeline_done`, `release`, `achievement`, `autobuy`, `challenge_*`…).
+- `src/core` ne touche **jamais** au DOM. L'UI écoute les événements de l'`Engine` (`builds`, `pipeline_done`, `release`, `achievement`, `autobuy`, `challenge_*`, `generation`…).
 - Les grands nombres utilisent **break_eternity.js** (`Decimal`). Ne mélange pas `number` et `Decimal` pour les crédits ou les gains.
 - **Chaque texte affiché passe par `i18n.ts`**, en EN **et** en FR. Pas de chaîne en dur dans l'UI.
 - Le build produit **un seul fichier HTML** (`vite-plugin-singlefile`) : pas d'assets externes ni de CDN.
@@ -53,13 +53,13 @@ Règles d'architecture :
 ## Sauvegarde : à ne pas casser
 
 - Stockage dans `localStorage`, clé `overcompile-save`. Sauvegarde automatique ; export/import en texte dans les paramètres.
-- `SAVE_VERSION` vaut actuellement **2**. Si tu changes la forme de `GameState` :
+- `SAVE_VERSION` vaut actuellement **3**. Si tu changes la forme de `GameState` :
   1. incrémente `SAVE_VERSION` ;
   2. ajoute une étape dans `migrate()` qui convertit les anciennes sauvegardes ;
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.2.8)
+## Mécaniques actuelles (v0.3.0)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -93,11 +93,13 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 
 **Optimisations** (étoiles, coût ×3 à chaque niveau depuis la v0.2.8, rachetables à l'infini) : gains, vitesse, boot (+3 niveaux de matériel au début de chaque run), efficacité hors ligne, durée hors ligne. Elles existent parce qu'après l'arbre, les étoiles s'accumulaient sans rien sur quoi les dépenser.
 
+**Générations de matériel** (commande `gen`, inspirées de l'Ascension de Revolution Idle). Quand le CPU, la RAM ou le Disk atteint le niveau requis (75, puis ×1,4 à chaque fois : 75, 105, 145…), on peut le passer à la génération suivante. Son niveau repart au niveau de départ de la run, mais le bonus est permanent et n'est jamais remis à zéro : CPU builds ×1,15 plus rapides, RAM gains ×1,3, Disk gains ×1,15 et échecs ×0,85. Visibles après la 1re release. Simulation v0.3.0 (sur la base v0.2.8) : 1re génération vers 2 h 40 (Disk), arbre complet en 3 h 31 au lieu de 4 h 08 sans générations, 1re étoile inchangée. Une 1re génération plus tôt (niveau 50–60) ramenait l'arbre à 3 h 00–3 h 17. Réglages : `BAL.gen*`. Le simulateur les prend dès qu'elles sont disponibles (`NOGEN=1` pour les désactiver).
+
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
 **Challenges** (débloqués après 3 releases) : Single-core, Debug build -O0, Friday deploy, No cache. Ce sont des releases sous contrainte qui donnent un bonus permanent.
 
-**Succès.** 54 succès qui fusionnent les anciens « objectifs » et « succès ». **Tranché** (idée d'Arthur) :
+**Succès.** 58 succès qui fusionnent les anciens « objectifs » et « succès ». **Tranché** (idée d'Arthur) :
 - jamais remis à zéro ;
 - récompense à récupérer quand on veut (bouton Claim, commande `claim`) ;
 - petites sommes en crédits au début, puis bonus permanents du type « +2 % de gains » ;
@@ -115,7 +117,9 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - `npm run sim -- <heures>` simule un joueur (achats, claims, challenges, releases quand le conseiller le dit). Options :
   - `BAL_<clé>=valeur` pour tester un réglage sans toucher au code ;
   - `ADV_<clé>=valeur` pour régler le conseiller (`peakDrop`, `lifetimeShare`, `minWindowMin`) ;
-  - `NOCHAL=1` pour désactiver les challenges.
+  - `NOCHAL=1` pour désactiver les challenges ;
+  - `NOGEN=1` pour désactiver les générations de matériel.
+  - Sous WSL, `npx` lance le Node de Windows : passe les variables avec `WSLENV` (ex. `WSLENV=BAL_genBase BAL_genBase=60 npm run sim -- 6`).
 - Rythme visé, et validé par Arthur en jouant :
   - 1re étoile en ~20–35 min. Arthur trouve ce début « vraiment bien ».
   - Ensuite, des releases rapprochées au début, puis des runs de 15–20 min en milieu de partie.
@@ -152,9 +156,9 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 
 ## Feuille de route
 
-- **v0.2.x** : correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
-- **v0.3** : nouvelle couche de prestige **Fork**, au-dessus des releases, avec des contributeurs, des PR (commande `gh pr`) et son propre arbre. Plus une commande **`crontab`** pour l'automatisation scriptée.
-- **v0.4** : couche **Distro** (idée encore vague).
+- **v0.3** (en cours) : générations de matériel (`gen`), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
+- **v0.4** : nouvelle couche de prestige **Fork**, au-dessus des releases, avec des contributeurs, des PR (commande `gh pr`) et son propre arbre. Plus une commande **`crontab`** pour l'automatisation scriptée.
+- **v0.5** : couche **Distro** (idée encore vague).
 
 ## Façon de travailler avec Arthur
 

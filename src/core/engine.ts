@@ -3,12 +3,12 @@ import { ACHIEVEMENTS, ACH_BY_ID, type Reward } from "./achievements";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./challenges";
 import {
   HW, PERK_PRICE, OFFLINE_GRACE_SECONDS, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
-  has, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
+  genRequired, gensRevealed, has, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
 } from "./formulas";
 import { TALENT_BY_ID } from "./talents";
 import { UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
 import {
-  type BuyAmount, type GameState, type HwKey, type PerkKey, SAVE_KEY, deserialize, newState, serialize,
+  type BuyAmount, type GameState, type GenKey, type HwKey, type PerkKey, SAVE_KEY, deserialize, newState, serialize,
 } from "./state";
 
 export type GameEvent =
@@ -22,6 +22,7 @@ export type GameEvent =
   | { t: "challenge_start"; id: string }
   | { t: "challenge_done"; id: string }
   | { t: "challenge_exit"; id: string }
+  | { t: "generation"; key: GenKey; gen: number }
 
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" };
@@ -268,6 +269,25 @@ export class Engine {
       bought[best.k] = (bought[best.k] ?? 0) + 1;
     }
     for (const [key, n] of Object.entries(bought)) this.emit({ t: "autobuy", key: key as HwKey, n: n! });
+  }
+
+  /* ---------------- Hardware generations ---------------- */
+  canGenerate(key: GenKey): "ok" | "locked" | "level" {
+    const s = this.s;
+    if (!gensRevealed(s) || this.hwLocked(key)) return "locked";
+    return s.hw[key] >= genRequired(s, key) ? "ok" : "level";
+  }
+
+  /** Moves a hardware to its next generation: its level restarts, the bonus is permanent. */
+  generate(key: GenKey): "ok" | "locked" | "level" {
+    const r = this.canGenerate(key);
+    if (r !== "ok") return r;
+    const s = this.s;
+    s.gens[key]++;
+    s.hw[key] = 1 + optBootLevels(s);
+    this.emit({ t: "generation", key, gen: s.gens[key] });
+    this.checkAchievements();
+    return "ok";
   }
 
   buyPerk(key: PerkKey): BuyResult {

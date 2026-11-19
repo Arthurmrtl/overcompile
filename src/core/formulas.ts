@@ -1,5 +1,5 @@
 import Decimal from "break_eternity.js";
-import type { GameState, HwKey } from "./state";
+import type { GameState, GenKey, HwKey } from "./state";
 import { achBonus } from "./achievements";
 import { CHALLENGES } from "./challenges";
 import { TALENTS } from "./talents";
@@ -68,7 +68,26 @@ export const BAL = {
   optReward: 1.25,      // Optimization "rewards": × per level
   optCostRatio: 3,      // infinite Optimizations: price × N per level (was 2)
   earlyK: 1.5,          // early star curve: 1 + earlyK × log2(earned / base) (was 1)
+  genBase: 75,         // first generation needs this level of the hardware (late mid-game)…
+  genGrowth: 1.4,      // …and each next one ×N more levels (75, 105, 145, 205…)
+  genCpu: 1.15,        // each CPU generation: builds ×N faster
+  genRam: 1.3,         // each RAM generation: rewards ×N
+  genDisk: 1.15,       // each Disk generation: rewards ×N…
+  genDiskFail: 0.85,   // …and failures ×N
 };
+
+/* ---------- Hardware generations (inspired by Revolution Idle's ascension) ---------- */
+// Once a hardware reaches the required level, the player can move it to the next
+// generation: its level drops back to the start of the run, in exchange for a
+// permanent bonus. Generations are never reset.
+export const gensRevealed = (s: GameState) => starsRevealed(s);
+/** Level needed for the next generation, rounded to 5. Grows fast so generations stay rare. */
+export const genRequired = (s: GameState, k: GenKey) =>
+  Math.round((BAL.genBase * Math.pow(BAL.genGrowth, s.gens[k])) / 5) * 5;
+export const totalGens = (s: GameState) => s.gens.cpu + s.gens.ram + s.gens.disk;
+export const genSpeedMult = (s: GameState) => Math.pow(BAL.genCpu, s.gens.cpu);
+export const genFailMult = (s: GameState) => Math.pow(BAL.genDiskFail, s.gens.disk);
+export const genRewardMult = (s: GameState) => Decimal.pow(BAL.genRam, s.gens.ram).mul(Decimal.pow(BAL.genDisk, s.gens.disk));
 
 /* ---------- Build parameters ---------- */
 // CPU   : faster builds, slightly more failures
@@ -81,6 +100,7 @@ export function buildTime(s: GameState): number {
   if (on(s, "dist_cache")) t /= BAL.distSpeed;
   t *= optSpeedMult(s);
   t /= achSpeedMult(s);
+  t /= genSpeedMult(s);
   if (challengeDone(s, "single_core")) t /= 1.5;
   if (inChallenge(s, "debug_build")) t *= 10;
   return t;
@@ -91,6 +111,7 @@ export function failProbability(s: GameState): number {
   if (on(s, "rust_rewrite")) p /= 2;
   if (challengeDone(s, "friday")) p *= 0.75;
   p *= achFailMult(s);
+  p *= genFailMult(s);
   p = Math.min(Math.max(p, 0.01), 0.9);
   if (inChallenge(s, "friday")) p = Math.max(p, 0.5);
   return p;
@@ -107,7 +128,7 @@ export const achFailMult = (s: GameState) => Math.max(0.5, 1 - achBonus(s, "fail
 export const achStarsMult = (s: GameState) => 1 + achBonus(s, "stars") / 100;
 
 export function rewardMultiplier(s: GameState): Decimal {
-  let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s));
+  let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s)).mul(genRewardMult(s));
   if (on(s, "code_review")) m = m.mul(BAL.revReward);
   if (on(s, "lto")) m = m.mul(BAL.ltoReward);
   if (challengeDone(s, "debug_build")) m = m.mul(2);
