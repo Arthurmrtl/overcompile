@@ -2,7 +2,7 @@ import Decimal from "break_eternity.js";
 import { ACHIEVEMENTS, ACH_BY_ID, type Reward } from "./achievements";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./challenges";
 import {
-  HW, PERK_PRICE, OFFLINE_GRACE_SECONDS, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
+  HW, OFFLINE_GRACE_SECONDS, perkLocked, perkPrice, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
   expectedRate, genRequired, gensRevealed, has, starsRevealed, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
 } from "./formulas";
 import { TALENT_BY_ID } from "./talents";
@@ -395,8 +395,10 @@ export class Engine {
   buyPerk(key: PerkKey): BuyResult {
     const perk = this.s.perks[key];
     if (perk.unlocked) return { ok: false, reason: "owned" };
-    if (this.s.credits.lt(PERK_PRICE[key])) return { ok: false, reason: "credits" };
-    this.s.credits = this.s.credits.sub(PERK_PRICE[key]);
+    if (perkLocked(this.s, key)) return { ok: false, reason: "locked" };
+    const cost = perkPrice(this.s, key);
+    if (this.s.credits.lt(cost)) return { ok: false, reason: "credits" };
+    this.s.credits = this.s.credits.sub(cost);
     perk.unlocked = true;
     perk.enabled = true;
     return { ok: true, n: 1 };

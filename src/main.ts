@@ -3,7 +3,7 @@ import Decimal from "break_eternity.js";
 import { Engine, type GameEvent } from "./core/engine";
 import { ACHIEVEMENTS } from "./core/achievements";
 import {
-  HW, PERK_PRICE, autoScaleInterval, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
+  HW, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
   failProbability, genRequired, gensRevealed, has, maxAffordable, totalGens, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
   reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
 } from "./core/formulas";
@@ -22,7 +22,7 @@ import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/term
 import { type Advice, ReleaseAdvisor } from "./core/advisor";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.3.1";
+const GAME_VERSION = "0.3.2";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -411,12 +411,15 @@ function render() {
     setText(st, !p.unlocked ? "" : p.enabled ? t("perk.enabled") : t("perk.disabled"));
     toggleClass(st, "on", p.enabled);
     const btn = $<HTMLButtonElement>("[data-f=btn]", el);
-    setText(btn, p.unlocked ? (p.enabled ? "ON" : "OFF") : `${t("unlock")} · ${fmt(PERK_PRICE[k])} cr`);
-    toggleClass(btn, "afford", !p.unlocked && s.credits.gte(PERK_PRICE[k]));
+    const locked = perkLocked(s, k);
+    const cost = perkPrice(s, k);
+    setText(btn, p.unlocked ? (p.enabled ? "ON" : "OFF") : locked ? "🔒" : `${t("unlock")} · ${fmt(cost)} cr`);
+    btn.disabled = locked;
+    toggleClass(btn, "afford", !p.unlocked && !locked && s.credits.gte(cost));
     toggleClass(btn, "toggle-on", p.unlocked && p.enabled);
     toggleClass(el, "owned", p.unlocked);
     const desc = k === "auto_scaling"
-      ? (p.unlocked ? autoScaleInfo(engine) : t("perk.auto_scaling.desc", { i: fmtTime(autoScaleInterval(s)) }))
+      ? (p.unlocked ? autoScaleInfo(engine) : locked ? t("perk.auto_scaling.locked") : t("perk.auto_scaling.desc", { i: fmtTime(autoScaleInterval(s)) }))
       : t(`perk.${k}.desc`);
     setText($("[data-f=desc]", el), desc);
   }

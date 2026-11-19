@@ -1,5 +1,5 @@
 import Decimal from "break_eternity.js";
-import type { GameState, GenKey, HwKey } from "./state";
+import type { GameState, GenKey, HwKey, PerkKey } from "./state";
 import { achBonus } from "./achievements";
 import { CHALLENGES } from "./challenges";
 import { TALENTS } from "./talents";
@@ -32,6 +32,17 @@ export const HW: Record<HwKey, { base: number; ratio: number; max?: number }> = 
   jobs: { base: 15, ratio: 5, max: 16 },
 };
 export const PERK_PRICE = { ci_cd: new Decimal(10), auto_scaling: new Decimal(1000) };
+
+/**
+ * Auto-Scaling (v0.3.2): not sold before the first release (the first run is played by
+ * hand), then priced at a share of the current release threshold, so it stays a real
+ * purchase at the start of each run until the permanent `as` talent.
+ */
+export const AS_PRICE_SHARE = 0.25;
+export const perkLocked = (s: GameState, k: PerkKey) => k === "auto_scaling" && s.releases === 0 && !s.perks.auto_scaling.unlocked;
+export function perkPrice(s: GameState, k: PerkKey): Decimal {
+  return k === "auto_scaling" ? releaseBase(s).mul(AS_PRICE_SHARE).floor() : PERK_PRICE[k];
+}
 
 /** Price of the next level when currently at `level`. */
 export function price(key: HwKey, level: number): Decimal {

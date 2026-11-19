@@ -5,7 +5,7 @@ import {
 import { CHALLENGES } from "./core/challenges";
 import { BUILD_EVENTS, EVENT_BY_ID, eventForCommand } from "./core/events";
 import {
-  BAL, HW, PERK_PRICE, autoScaleInterval, genRequired, gensRevealed, totalGens, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
+  BAL, HW, autoScaleInterval, perkLocked, perkPrice, genRequired, gensRevealed, totalGens, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
   maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { UPGRADES, UPGRADE_BY_ID, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
@@ -243,8 +243,9 @@ export function createCommands(c: GameCtx) {
       }
       say("");
       for (const k of PERK_KEYS) {
-        say([pad(k, 14), "c-green"], `==> ${fmt(PERK_PRICE[k])} ${t("credits")}  [${perkState(e(), k)}]`);
-        say(["      " + t(`perk.${k}.desc`), "c-dim"]);
+        const locked = perkLocked(e().s, k);
+        say([pad(k, 14), "c-green"], locked ? "==> 🔒" : `==> ${fmt(perkPrice(e().s, k))} ${t("credits")}  [${perkState(e(), k)}]`);
+        say(["      " + (locked ? t("perk.auto_scaling.locked") : t(`perk.${k}.desc`, { i: fmtTime(autoScaleInterval(e().s)) })), "c-dim"]);
       }
       say("");
       say(["buy <cpu|ram|disk|jobs> [n|max]  ·  perk <ci_cd|auto_scaling>", "c-dim"]);
@@ -256,6 +257,7 @@ export function createCommands(c: GameCtx) {
       const name = t(`perk.${key}`);
       if (r.ok) say(OK, " " + t("term.perk_unlocked", { p: name }));
       else if (r.reason === "owned") say(t("term.perk_owned", { p: name }));
+      else if (r.reason === "locked") say(INFO, " " + t("perk.auto_scaling.locked"));
       else say(FAIL, " " + t("term.not_enough"));
     },
     toggle(args) {
