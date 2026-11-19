@@ -1,7 +1,7 @@
 // Balance simulation: a reasonably smart player, played at 0.25 s ticks.
 // Usage: npm run sim -- [hours]
 import { Engine } from "../src/core/engine";
-import { PERK_PRICE, price, starsOnRelease, expectedRate, releaseBase } from "../src/core/formulas";
+import { perkLocked, perkPrice, price, starsOnRelease, expectedRate, releaseBase } from "../src/core/formulas";
 import { TALENTS } from "../src/core/talents";
 import { UPGRADES, upgradePrice } from "../src/core/upgrades";
 import { CHALLENGES } from "../src/core/challenges";
@@ -20,6 +20,8 @@ let t = 0;
 let firstStarLogged = false;
 const milestones: string[] = [];
 const advisor = new ReleaseAdvisor();
+let asLogged = false;
+let manualTimer = 0;
 const catchRate = Number(process.env.EVENTS ?? 0.7);
 let lastEvent: unknown = null;
 
@@ -39,8 +41,17 @@ while (t < H * 3600) {
   if (!s.pipeline) e.compile();
   if (!s.perks.ci_cd.unlocked) e.buyPerk("ci_cd");
   else if (!s.perks.auto_scaling.unlocked) {
-    if (s.credits.gte(PERK_PRICE.auto_scaling)) e.buyPerk("auto_scaling");
-    else if (s.hw.cpu + s.hw.ram < 24) e.autoScale(); // manual buying until saving for the perk
+    const locked = perkLocked(s, "auto_scaling");
+    const cost = perkPrice(s, "auto_scaling");
+    if (!locked && s.credits.gte(cost)) {
+      e.buyPerk("auto_scaling");
+      if (!asLogged) { asLogged = true; milestones.push(`Auto-Scaling bought ${fmt(t)} (after release ${s.releases})`); }
+    } else if ((manualTimer += dt) >= 4) {
+      // A human buys by hand about every 4 s; once the perk is for sale, keep 10 % of its price aside
+      manualTimer = 0;
+      const cheapest = (["cpu", "ram", "disk"] as const).map(k => price(k, s.hw[k])).reduce((a, b) => a.min(b));
+      if (locked || cheapest.lt(cost.mul(0.1))) e.autoScale();
+    }
   }
   if (!s.talents.includes("as_jobs") && s.credits.gte(price("jobs", s.hw.jobs).mul(1.2))) e.buyHw("jobs", 1);
   // Hardware generations: taken as soon as available (NOGEN=1 to disable)

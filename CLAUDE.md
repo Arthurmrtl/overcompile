@@ -60,7 +60,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.3.1)
+## Mécaniques actuelles (v0.3.2)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -70,7 +70,7 @@ Règles d'architecture :
 
 Perks de boutique :
 - **CI/CD** à 10 crédits : relance automatique des builds. **Tranché :** reste à 10.
-- **Auto-Scaling** à 1 000 crédits : achète automatiquement le matériel le moins cher.
+- **Auto-Scaling** : achète automatiquement le matériel le moins cher. **Tranché (v0.3.2, Arthur et son ami voulaient retarder l'autobuy) :** pas en vente avant la 1re release (la 1re run se joue à la main), puis prix = 25 % du seuil de release en cours (`AS_PRICE_SHARE`, ~6 000 cr après la 1re release), racheté à chaque run jusqu'au talent permanent `as`, passé de 3★ à 10★. Simulation : la 1re étoile ne bouge pas (~22 min, achats à la main toutes les ~4 s), Auto-Scaling acheté vers 33–39 min, arbre complet 3 h 05–3 h 30. Avant ça, il coûtait 1 000 cr dès la 1re run.
 
 **Release (prestige).** Le seuil de base est de 20 000 crédits gagnés dans la run, multiplié par 1,2 à chaque release. Étoiles gagnées :
 `floor(max(1 + 1,5·log2(ratio), ratio^0.36) × multiplicateurs)`, où `ratio = gagné / seuil`.
@@ -85,7 +85,7 @@ La courbe est volontairement généreuse au début : 2★ à ×1,6 le seuil, 3�
 **Arbre de release (talents).** 15 talents, du premier (`inc`, Cache chaud, 1★) au dernier (`bot`, Release bot, 100★). Ils sont identifiés par des **tags texte**, et **Tranché :** pas d'emojis dans l'arbre (« ça fait gamin / IA »). Les autres emojis de l'interface (💾 ⚙ 🏆 🔒 🛒 ⌨️ 🚀 ⭐) restent.
 
 Branche Auto-Scaling :
-- `as` : Auto-Scaling permanent (conservé après une release) ;
+- `as` (10★ depuis la v0.3.2) : Auto-Scaling permanent (conservé après une release) ;
 - `fast` : 4 passages par seconde au lieu d'un toutes les 2 s ;
 - `ctrl` : cases AUTO, pour choisir quelles ressources l'Auto-Scaling achète ;
 - `-j` : l'Auto-Scaling gère aussi les Jobs.
