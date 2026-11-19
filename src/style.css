@@ -253,7 +253,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 8px; }
 .ach { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px; opacity: .5; }
 .ach.got { opacity: 1; border-color: #8a6a14; }
-.ach-icon { font-size: 16px; }
+.ach-icon { font-size: 12px; font-weight: 700; color: var(--dim); white-space: pre; letter-spacing: 0; }
+.ach.ready .ach-icon { color: var(--amber); }
+.ach.got .ach-icon { color: var(--green); }
 .ach-name { font-weight: 700; font-size: 12px; }
 .ach.got .ach-name { color: var(--amber); }
 .ach-desc { color: var(--dim); font-size: 11px; }
@@ -439,3 +441,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .job-save-t { white-space: nowrap; }
 .job-save-bar { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .job-save-bar i { display: block; height: 100%; background: var(--violet); transition: width .2s linear; }
+
+/* ---------- v0.3.5 achievements: progress on the cards (no separate "in progress" list) ---------- */
+.ach-prog { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.ach-prog .progress { flex: 1; margin: 0; height: 4px; }
+.ach-prog .progress .fill { background: var(--green); }
+.ach-val { flex: none; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
