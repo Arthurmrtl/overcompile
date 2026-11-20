@@ -134,6 +134,24 @@ export function contributorsExact(s: GameState): Decimal {
 }
 export const contributorsOnFork = (s: GameState) => contributorsExact(s).floor();
 
+/** How the fork's contributors are computed, for the Fork card (Arthur: "on ne comprend pas le calcul"). */
+export function contributorBreakdown(s: GameState) {
+  const gens = s.stats.bestRunGens;
+  const chal = s.challengesDone.length;
+  const multGens = 1 + FORK.genBonus * gens;
+  const multChal = 1 + FORK.chalBonus * chal;
+  const multSig = hasFork(s, "f_rel") ? 1 + FORK_PCT.rel : 1;
+  const ups = hasFork(s, "f_upstream") ? UPSTREAM_CONTRIBUTORS : 0;
+  const base = curve(s.lifetimeStars.div(FORK.starsBase));
+  const total = contributorsOnFork(s).toNumber();
+  // Stars of the cycle for one more contributor: invert the curve (the max of two branches → the lower inverse)
+  const needBase = Math.max(1, (total + 1 - ups) / (multGens * multChal * multSig));
+  const early = new Decimal(2).pow((needBase - 1) / FORK.earlyK);
+  const late = new Decimal(needBase).pow(1 / FORK.lateExp);
+  const nextAt = early.min(late).mul(FORK.starsBase).ceil();
+  return { stars: s.lifetimeStars, base: base.toNumber(), gens, multGens, chal, multChal, multSig, ups, total, nextAt };
+}
+
 /** Stars to earn in this cycle for the first contributor. */
 export const starsForFirstContributor = () => FORK.starsBase;
 

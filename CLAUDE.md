@@ -61,7 +61,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.4.5)
+## Mécaniques actuelles (v0.4.6)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -117,10 +117,11 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
   - Identifiants internes gardés depuis la v0.4.0 (`f_sponsors`, `f_bench`… même si l'effet a changé) ; les prérequis ont changé avec le nouvel arbre.
 - **Améliorations Fork** (infinies, en contributeurs, prix ×2,5 par niveau, `fork upgrade <bounties|mentoring>`) : Bounties gains +10 %/niveau (3 ⑂ au départ), Mentorat étoiles +3 %/niveau (5 ⑂). Elles donnent un usage aux contributeurs une fois l'arbre Fork complet.
 - **Pull requests** (après le 1er fork) : une PR s'ouvre toutes les 600 s / (1 + 0,5·log2(1 + contributeurs gagnés)), 3 ouvertes au maximum, ni hors ligne ni en challenge. Fusionner (`gh pr merge <n>` ou bouton) donne un bonus jusqu'à la prochaine release : perf builds ×1,2, feat gains ×1,25, ci étoiles ×1,05 ; docs donne +2 min de revenu. Fusionner est gratuit et **ne rapporte jamais de contributeurs** (seul le fork en donne).
+- **Détail du calcul** (v0.4.6, Arthur : « on ne comprend pas comment est calculé le nombre de contributeurs ») : sous le bouton Fork, une ligne `contributorBreakdown()` montre les étoiles du cycle → la base, ×générations de la meilleure run, ×challenges, `sig`, `ups`, le total, et les étoiles qu'il faut pour le contributeur suivant (comme « Prochaine ⭐ à … » pour les releases).
 - **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
 - Nouvel onglet Fork (après le 1er fork), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
 - Simulation v0.4.1 (`npm run sim -- 10`, 3 runs ; le joueur forke quand le conseiller le dit, fusionne toutes les PR, achète les talents Fork puis les améliorations) : 1er fork vers 3 h 10–3 h 20 avec 5–6 contributeurs ; 2e cycle 35–45 min, 3e ~22 min, ensuite cycles stables de 33–36 min ; contributeurs par fork en hausse lente (5 → 12 → 24 → 30 → 50 → 75 au 12e fork) ; arbre Fork complet au 5e fork (~5 h 20), puis ~1 niveau d'amélioration Fork par fork. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
-- Pas encore fait : `crontab` (v0.4.6).
+- Pas encore fait : `crontab` (v0.4.7).
 
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
@@ -186,7 +187,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 ## Feuille de route
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
-- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), puis **`crontab`** pour l'automatisation scriptée (v0.4.6).
+- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), puis **`crontab`** pour l'automatisation scriptée (v0.4.7).
 - **v0.5** : couche **Distro** (idée encore vague).
 
 ## Façon de travailler avec Arthur

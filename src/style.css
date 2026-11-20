@@ -487,3 +487,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 
 /* ---------- v0.4.3 mobile tab bar: line icons ---------- */
 .nav-ic { width: 22px; height: 22px; display: block; }
+
+/* v0.4.6 Fork card: how the contributors are computed */
+.fork-calc { margin-top: 6px; color: var(--dim); font-variant-numeric: tabular-nums; }
