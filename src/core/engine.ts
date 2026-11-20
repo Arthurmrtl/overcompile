@@ -558,6 +558,12 @@ export class Engine {
       this.s.hw.jobs = 2;
       this.s.slots.push({ progress: 0, running: this.s.pipeline && this.ciActive });
     }
+    // Talents count again once the challenge is left (No cache disables the tree): give back
+    // the perks the run would have started with, instead of waiting for the next release.
+    const p = this.s.perks;
+    if (on(this.s, "ci_preinstalled") && !p.ci_cd.unlocked) p.ci_cd = { unlocked: true, enabled: true };
+    if (on(this.s, "as_perm") && !p.auto_scaling.unlocked) p.auto_scaling = { unlocked: true, enabled: true };
+    if (p.ci_cd.enabled && !this.s.pipeline) this.compile();
     this.emit({ t: "challenge_exit", id });
     return true;
   }
