@@ -4,7 +4,7 @@ import { achBonus } from "./achievements";
 import { CHALLENGES } from "./challenges";
 import { TALENTS } from "./talents";
 import { EVENT_BY_ID, RC_STARS_PCT } from "./events";
-import { FORK, contribGainsMult, contribStarsMult, hasFork } from "./fork";
+import { AWESOME_STARS, FORK, contribGainsMult, forkGainsMult, forkSpeedMult, forkStarsMult, hasFork } from "./fork";
 const TALENT_REQ: Record<string, string[]> = Object.fromEntries(TALENTS.map(t => [t.id, t.req]));
 import { offlineCapHours, offlineEff, optRewardMult, optSpeedMult } from "./upgrades";
 
@@ -83,7 +83,7 @@ export const BAL = {
   distSpeed: 2,        // dist_cache: build speed
   releaseGrowth: 1.2,    // each released version needs ×N more credits per star
   releaseGrowthLts: 1.15, // …×N instead with the Fork talent "lts"
-  starExp: 0.36,        // stars = (earned / base) ^ starExp
+  starExp: 0.25,        // stars = (earned / base) ^ starExp (v0.4.1: was 0.36, made the end of the tree explode)
   lifeCoef: 0.25,       // lifetime star bonus: 1 + lifeCoef × lifetime ^ lifeExp
   lifeExp: 0.35,       // was 0.5: with infinite optimizations the √ bonus made late game explode
   optReward: 1.25,      // Optimization "rewards": × per level
@@ -137,8 +137,7 @@ export function buildTime(s: GameState): number {
   t /= achSpeedMult(s);
   t /= genSpeedMult(s);
   t /= eventSpeedMult(s);
-  if (hasFork(s, "f_bench")) t /= 1.5;
-  t /= s.prBoost.speed;
+  t /= s.prBoost.speed * forkSpeedMult(s);
   if (challengeDone(s, "single_core")) t /= 1.5;
   if (inChallenge(s, "debug_build")) t *= 10;
   return t;
@@ -168,8 +167,7 @@ export const achStarsMult = (s: GameState) => 1 + achBonus(s, "stars") / 100;
 
 export function rewardMultiplier(s: GameState): Decimal {
   let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s)).mul(genRewardMult(s)).mul(eventGainsMult(s))
-    .mul(contribGainsMult(s)).mul(s.prBoost.gains);
-  if (hasFork(s, "f_sponsors")) m = m.mul(2);
+    .mul(contribGainsMult(s)).mul(s.prBoost.gains).mul(forkGainsMult(s));
   if (on(s, "code_review")) m = m.mul(BAL.revReward);
   if (on(s, "lto")) m = m.mul(BAL.ltoReward);
   if (challengeDone(s, "debug_build")) m = m.mul(2);
@@ -200,8 +198,7 @@ export function starGainMultiplier(s: GameState): number {
   if (on(s, "semver")) m *= 2;
   if (challengeDone(s, "no_cache")) m *= 1.5;
   if (s.rcPending) m *= 1 + RC_STARS_PCT / 100; // "Release candidate" event
-  m *= contribStarsMult(s) * s.prBoost.stars;
-  if (hasFork(s, "f_awesome")) m *= 1.5;
+  m *= s.prBoost.stars * forkStarsMult(s);
   return m;
 }
 
@@ -227,18 +224,21 @@ function ratioFor(v: Decimal): Decimal {
 export function starsExact(s: GameState): Decimal {
   const base = releaseBase(s);
   if (s.challenge || s.runEarned.lt(base)) return new Decimal(0);
-  return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s));
+  return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s)).add(awesomeStars(s));
 }
 
 export function starsOnRelease(s: GameState): Decimal {
   const base = releaseBase(s);
   if (s.challenge || s.runEarned.lt(base)) return new Decimal(0);
-  return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s)).floor();
+  return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s)).floor().add(awesomeStars(s));
 }
+
+/** Fork talent "awe": flat stars on every release. */
+const awesomeStars = (s: GameState) => (hasFork(s, "f_awesome") ? AWESOME_STARS : 0);
 
 /** runEarned needed to reach `n` stars on release. */
 export function earnedForStars(s: GameState, n: Decimal | number): Decimal {
-  return ratioFor(new Decimal(n).div(starGainMultiplier(s))).mul(releaseBase(s));
+  return ratioFor(new Decimal(n).sub(awesomeStars(s)).max(1).div(starGainMultiplier(s))).mul(releaseBase(s));
 }
 
 /** runEarned needed to get one more star than now. */

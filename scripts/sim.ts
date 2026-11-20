@@ -3,7 +3,7 @@
 import { Engine } from "../src/core/engine";
 import { perkLocked, perkPrice, price, starsOnRelease, expectedRate, releaseBase } from "../src/core/formulas";
 import { TALENTS } from "../src/core/talents";
-import { FORK, FORK_TALENTS } from "../src/core/fork";
+import { FORK, FORK_TALENTS, FORK_UPGRADES, forkUpgradePrice } from "../src/core/fork";
 import { FORK_ADV, ForkAdvisor } from "../src/core/advisor";
 import { UPGRADES, upgradePrice } from "../src/core/upgrades";
 import { CHALLENGES } from "../src/core/challenges";
@@ -34,10 +34,14 @@ for (const [k, v] of Object.entries(process.env)) if (k.startsWith("FORK_")) (FO
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("FADV_")) (FORK_ADV as any)[k.slice(5)] = Number(v);
 
 function spendContributors() {
+  // Fork talents first (cheapest first), then the infinite Fork upgrades (cheapest first)
   for (;;) {
     const ft = FORK_TALENTS.filter(x => e.canBuyForkTalent(x.id).ok).sort((a, b) => a.cost - b.cost)[0];
-    if (!ft) break;
-    e.buyForkTalent(ft.id);
+    if (ft) { e.buyForkTalent(ft.id); continue; }
+    if (FORK_TALENTS.some(x => !s.forkTalents.includes(x.id))) break; // save up for the next talent
+    const fu = FORK_UPGRADES.filter(x => e.canBuyForkUpgrade(x.id).ok).sort((a, b) => forkUpgradePrice(s, a.id) - forkUpgradePrice(s, b.id))[0];
+    if (!fu) break;
+    e.buyForkUpgrade(fu.id);
   }
 }
 
@@ -116,7 +120,7 @@ while (t < H * 3600) {
       if (gain !== null) {
         cycleStart = t;
         spendContributors();
-        const line = `${fmt(t)}  FORK #${s.forks}  +${gain} contributors after ${fmt(cycle)} (cycle stars ${Math.round(stars)}, lifetime contributors ${s.lifetimeContributors}, fork talents ${s.forkTalents.length}/${FORK_TALENTS.length})`;
+        const line = `${fmt(t)}  FORK #${s.forks}  +${gain} contributors after ${fmt(cycle)} (cycle stars ${Math.round(stars)}, lifetime contributors ${s.lifetimeContributors}, fork talents ${s.forkTalents.length}/${FORK_TALENTS.length}, upgrades ${JSON.stringify(s.forkUpgrades)})`;
         console.log(line);
         milestones.push(line.trim());
       }

@@ -23,40 +23,81 @@ export const FORK = {
   lateExp: 0.6,          // late curve: (stars / starsBase) ^ lateExp, whichever is higher
   genBonus: 0.05,        // +5 % contributors per hardware generation owned at fork time
   chalBonus: 0.1,        // +10 % contributors per challenge completed in the cycle
-  gainsPer: 0.4,         // passive: rewards × (1 + gainsPer × lifetime contributors ^ gainsExp)
-  gainsExp: 0.8,
-  starsPer: 0.02,        // passive: stars × (1 + starsPer × lifetime contributors)
-  releaseBaseMult: 10,   // each fork makes the release threshold ×N (else the first release of a cycle pays hundreds of stars)
-  prGap: 600,            // seconds between two PRs with 0 contributors (÷ √(1 + lifetime))
+  // v0.4.1: the passive bonus grows logarithmically. Multipliers snowballed (more gains → more
+  // stars → more contributors → shorter cycles): cycles went 3 h → 20 min → 5 min → 1 min.
+  gainsLog: 0.25,        // passive: rewards × (1 + gainsLog × log2(1 + lifetime contributors))
+  releaseBaseMult: 1,    // each fork makes the release threshold ×N (v0.4.1: 1, Arthur wants the same start as a new game)
+  prGap: 600,            // seconds between two PRs with 0 contributors (÷ (1 + 0.5·log2(1 + lifetime)))
   prMax: 3,              // open PRs at most
 };
 
-/* ---------------- Fork talents (paid in contributors, never reset) ---------------- */
+/* ---------------- Fork talents (paid in contributors, never reset) ----------------
+ * v0.4.1: they speed up the restart (stars, hardware levels, talents and automation from the
+ * start of a fork) instead of multiplying rewards, so cycles get shorter without snowballing.
+ * Ids kept from v0.4.0 for saves; some effects and tags changed. */
 export interface ForkTalent {
   id: string;
   tag: string;   // short text tag shown in the tree (no emojis)
   cost: number;
   req: string[];
+  row: number;   // position in the drawn tree (5 columns)
+  col: number;
 }
 
+/* Two kinds, alternating down the tree (Arthur, v0.4.1): restart boosts (stars, levels,
+ * talents, automation at the start of a fork) and fixed % bonuses (bought once). */
 export const FORK_TALENTS: ForkTalent[] = [
-  { id: "f_template", tag: "tpl", cost: 1, req: [] },                 // each fork starts with 5 stars
-  { id: "f_iac", tag: "iac", cost: 1, req: ["f_template"] },          // Auto-Scaling sold before the 1st release, 1 000 cr
-  { id: "f_sponsors", tag: "spn", cost: 2, req: ["f_template"] },     // rewards ×2
-  { id: "f_lts", tag: "lts", cost: 2, req: ["f_iac"] },               // release threshold ×1.15 per release instead of ×1.2
-  { id: "f_mirrors", tag: "mir", cost: 3, req: ["f_sponsors"] },      // a fork keeps half the hardware generations
-  { id: "f_bench", tag: "bch", cost: 3, req: ["f_sponsors"] },        // builds ×1.5 faster
-  { id: "f_dependabot", tag: "dpb", cost: 5, req: ["f_lts"] },        // common build events are caught automatically
-  { id: "f_awesome", tag: "awe", cost: 5, req: ["f_mirrors", "f_bench"] }, // stars ×1.5
-  { id: "f_keep", tag: "kp", cost: 8, req: ["f_dependabot"] },        // a fork keeps the Auto-Scaling branch talents
-  { id: "f_upstream", tag: "ups", cost: 13, req: ["f_awesome", "f_keep"] }, // contributors ×1.5
+  { id: "f_template", tag: "tpl", cost: 1, req: [], row: 0, col: 2 },                       // each fork starts with 10 stars
+  { id: "f_iac", tag: "iac", cost: 1, req: ["f_template"], row: 1, col: 1 },                // Auto-Scaling sold from the start, 1 000 cr
+  { id: "f_oc", tag: "oc", cost: 2, req: ["f_template"], row: 1, col: 3 },                  // rewards +50 %
+  { id: "f_lts", tag: "lts", cost: 2, req: ["f_iac"], row: 2, col: 0 },                     // release threshold ×1.15 per release instead of ×1.2
+  { id: "f_sponsors", tag: "spn", cost: 2, req: ["f_iac"], row: 2, col: 1 },                // every run starts with +10 CPU/RAM/Disk levels
+  { id: "f_cdn", tag: "cdn", cost: 3, req: ["f_oc"], row: 2, col: 3 },                      // builds +25 % faster
+  { id: "f_mirrors", tag: "mir", cost: 3, req: ["f_oc"], row: 2, col: 4 },                  // a fork keeps half the hardware generations
+  { id: "f_dependabot", tag: "dpb", cost: 5, req: ["f_lts"], row: 3, col: 0 },              // common build events are caught automatically
+  { id: "f_bench", tag: "bin", cost: 3, req: ["f_sponsors", "f_cdn"], row: 3, col: 2 },     // each fork starts with inc, rev and ci owned
+  { id: "f_hn", tag: "hn", cost: 5, req: ["f_mirrors"], row: 3, col: 4 },                   // stars +15 %
+  { id: "f_keep", tag: "kp", cost: 8, req: ["f_dependabot", "f_bench"], row: 4, col: 1 },   // a fork keeps the CI and Auto-Scaling talents
+  { id: "f_awesome", tag: "awe", cost: 5, req: ["f_bench", "f_hn"], row: 4, col: 3 },       // +2 stars on every release
+  { id: "f_rel", tag: "sig", cost: 8, req: ["f_keep", "f_awesome"], row: 5, col: 2 },       // contributors +10 % on every fork
+  { id: "f_upstream", tag: "ups", cost: 13, req: ["f_rel"], row: 6, col: 2 },               // +2 contributors on every fork
 ];
 export const FORK_TALENT_BY_ID = Object.fromEntries(FORK_TALENTS.map(t => [t.id, t]));
 export const hasFork = (s: GameState, id: string) => s.forkTalents.includes(id);
 
 /** Release talents a fork keeps with `f_keep`. */
 export const KEPT_BY_F_KEEP = ["ci_preinstalled", "as_perm", "as_fast", "as_ctrl", "as_jobs"];
-export const TEMPLATE_STARS = 5;
+export const TEMPLATE_STARS = 10;
+/** Release talents a fork starts with when `f_bench` (prebuilt binaries) is owned. */
+export const PREBUILT_TALENTS = ["warm_cache", "code_review", "ci_preinstalled"];
+export const SEED_LEVELS = 10;      // f_sponsors: extra CPU/RAM/Disk levels at the start of every run
+export const AWESOME_STARS = 2;     // f_awesome: flat stars added to every release
+export const UPSTREAM_CONTRIBUTORS = 2; // f_upstream: flat contributors added to every fork
+/** Fixed % bonuses of Fork talents (bought once, not scaling with contributors). */
+export const FORK_PCT = { oc: 0.5, cdn: 0.25, hn: 0.15, rel: 0.1 };
+
+/* ---------------- Fork upgrades (contributors, infinite levels) ----------------
+ * A sink for contributors once the Fork tree is complete: small % per level, price ×2.5 per level. */
+export interface ForkUpgrade { id: "fu_bounties" | "fu_mentoring"; base: number; ratio: number; pct: number }
+export const FORK_UPGRADES: ForkUpgrade[] = [
+  { id: "fu_bounties", base: 3, ratio: 2.5, pct: 0.1 },   // rewards +10 % per level
+  { id: "fu_mentoring", base: 5, ratio: 2.5, pct: 0.03 }, // stars +3 % per level
+];
+export const FORK_UPGRADE_BY_ID = Object.fromEntries(FORK_UPGRADES.map(u => [u.id, u]));
+export const forkUpgradeLevel = (s: GameState, id: string) => s.forkUpgrades[id] ?? 0;
+export const forkUpgradePrice = (s: GameState, id: string) => {
+  const u = FORK_UPGRADE_BY_ID[id];
+  return Math.round(u.base * Math.pow(u.ratio, forkUpgradeLevel(s, id)));
+};
+
+/** Every % bonus of the Fork layer (talents and upgrades), by stat. */
+export function forkGainsMult(s: GameState): number {
+  return (1 + (hasFork(s, "f_oc") ? FORK_PCT.oc : 0)) * (1 + 0.1 * forkUpgradeLevel(s, "fu_bounties"));
+}
+export const forkSpeedMult = (s: GameState) => 1 + (hasFork(s, "f_cdn") ? FORK_PCT.cdn : 0);
+export function forkStarsMult(s: GameState): number {
+  return (1 + (hasFork(s, "f_hn") ? FORK_PCT.hn : 0)) * (1 + 0.03 * forkUpgradeLevel(s, "fu_mentoring"));
+}
 
 /* ---------------- Fork condition and contributors ---------------- */
 export const forkRevealed = (s: GameState) => s.forks > 0 || s.talents.includes("release_bot") ||
@@ -71,9 +112,7 @@ function curve(ratio: Decimal): Decimal {
 
 export function contributorMultiplier(s: GameState): number {
   const gens = s.gens.cpu + s.gens.ram + s.gens.disk;
-  let m = (1 + FORK.genBonus * gens) * (1 + FORK.chalBonus * s.challengesDone.length);
-  if (hasFork(s, "f_upstream")) m *= 1.5;
-  return m;
+  return (1 + FORK.genBonus * gens) * (1 + FORK.chalBonus * s.challengesDone.length) * (1 + (hasFork(s, "f_rel") ? FORK_PCT.rel : 0));
 }
 
 /** Contributors the fork would pay right now, before rounding down. */
@@ -81,7 +120,7 @@ export function contributorsExact(s: GameState): Decimal {
   if (s.challenge || !treeComplete(s)) return new Decimal(0);
   const base = curve(s.lifetimeStars.div(FORK.starsBase));
   if (base.lt(1)) return new Decimal(0);
-  return base.mul(contributorMultiplier(s));
+  return base.mul(contributorMultiplier(s)).add(hasFork(s, "f_upstream") ? UPSTREAM_CONTRIBUTORS : 0);
 }
 export const contributorsOnFork = (s: GameState) => contributorsExact(s).floor();
 
@@ -89,8 +128,7 @@ export const contributorsOnFork = (s: GameState) => contributorsExact(s).floor()
 export const starsForFirstContributor = () => FORK.starsBase;
 
 /* ---------------- Passive bonuses ---------------- */
-export const contribGainsMult = (s: GameState) => 1 + FORK.gainsPer * Math.pow(s.lifetimeContributors, FORK.gainsExp);
-export const contribStarsMult = (s: GameState) => 1 + FORK.starsPer * s.lifetimeContributors;
+export const contribGainsMult = (s: GameState) => 1 + FORK.gainsLog * Math.log2(1 + s.lifetimeContributors);
 
 /* ---------------- Pull requests ---------------- */
 export type PrKind = "perf" | "feat" | "docs" | "ci";
@@ -105,7 +143,7 @@ export const PR_EFFECTS: Record<PrKind, { weight: number; mult?: number; seconds
 };
 export const PR_TITLES = 6; // titles per kind in i18n (pr.<kind>.0 … 5)
 
-export const prGap = (s: GameState) => FORK.prGap / Math.sqrt(1 + s.lifetimeContributors);
+export const prGap = (s: GameState) => FORK.prGap / (1 + 0.5 * Math.log2(1 + s.lifetimeContributors));
 
 export function pickPrKind(rnd = Math.random()): PrKind {
   const kinds = Object.keys(PR_EFFECTS) as PrKind[];
