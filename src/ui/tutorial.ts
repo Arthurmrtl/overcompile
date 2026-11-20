@@ -13,6 +13,8 @@ import { GEN_KEYS } from "../core/state";
 import { forkRevealed } from "../core/fork";
 import { PERK_PRICE, gensRevealed, price } from "../core/formulas";
 import { t } from "../i18n";
+import { fmt } from "../format";
+import type Decimal from "break_eternity.js";
 
 type Panel = "shop" | "center" | "side";
 type SideTab = "release" | "challenges" | "fork" | "achievements" | "stats";
@@ -33,6 +35,8 @@ interface Step {
   tab?: SideTab;
   /** Done when this becomes true; without it, the step has a Next button. */
   done?: () => boolean;
+  /** Credits goal of the step: shows a progress bar "x / goal cr" in the bubble. */
+  goal?: () => Decimal;
 }
 
 interface Tip {
@@ -57,9 +61,9 @@ const STEPS: Step[] = [
   { id: "welcome", anchor: "[data-r=credits]", panel: "center" },
   // Each step only moves on when the next one is possible (1st build: 1 cr, cheapest hardware 1.5 cr,
   // CI/CD 10 cr), so a phone never sends the player to a shop they cannot afford yet
-  { id: "compile", anchor: "[data-r=runBtn]", panel: "center", done: () => bought() || S().credits.gte(cheapestHw()) },
+  { id: "compile", anchor: "[data-r=runBtn]", panel: "center", done: () => bought() || S().credits.gte(cheapestHw()), goal: () => cheapestHw() },
   { id: "buy", anchor: "[data-r=hw]", panel: "shop", done: bought },
-  { id: "grind", anchor: "[data-r=runBtn]", panel: "center", done: () => S().perks.ci_cd.unlocked || S().credits.gte(PERK_PRICE.ci_cd) },
+  { id: "grind", anchor: "[data-r=runBtn]", panel: "center", done: () => S().perks.ci_cd.unlocked || S().credits.gte(PERK_PRICE.ci_cd), goal: () => PERK_PRICE.ci_cd },
   { id: "ci", anchor: "[data-perk=ci_cd]", panel: "shop", done: () => S().perks.ci_cd.unlocked },
   { id: "goal", anchor: "[data-r=relBtn]", panel: "side", tab: "release" },
 ];
@@ -157,7 +161,7 @@ function place(anchor: Element | null) {
   bubble.style.top = `${Math.round(top)}px`;
 }
 
-function open(id: string, head: string, text: string, buttons: HTMLElement[]) {
+function open(id: string, head: string, text: string, buttons: HTMLElement[], progress = false) {
   close();
   shown = id;
   bubble = document.createElement("div");
@@ -172,7 +176,14 @@ function open(id: string, head: string, text: string, buttons: HTMLElement[]) {
   const row = document.createElement("div");
   row.className = "tut-row";
   row.append(...buttons);
-  bubble.append(h, p, row);
+  bubble.append(h, p);
+  if (progress) {
+    const prog = document.createElement("div");
+    prog.className = "tut-prog";
+    prog.innerHTML = '<span class="tut-bar"><i></i></span><span class="tut-prog-t"></span>';
+    bubble.append(prog);
+  }
+  bubble.append(row);
   document.body.append(bubble);
 }
 
@@ -201,7 +212,15 @@ export function updateTutorial() {
     if (shown !== id) {
       const buttons = [btn(t("tut.skip"), "ghost", skip)];
       if (!st.done || seen("tut:replay")) buttons.push(btn(i === STEPS.length - 1 ? t("tut.finish") : t("tut.next"), "main", () => { mark(`tut:step:${st.id}`); close(); }));
-      open(id, `[ TUTO ${i + 1}/${STEPS.length} ]`, t(`tut.${st.id}`), buttons);
+      open(id, `[ TUTO ${i + 1}/${STEPS.length} ]`, t(`tut.${st.id}`), buttons, !!st.goal);
+    }
+    if (st.goal && bubble) {
+      // v0.4.13 (Arthur): a progress bar on the credit goals, so the wait is clear without skipping
+      const goal = st.goal();
+      const cr = S().credits;
+      const pct = Math.min(100, cr.div(goal).toNumber() * 100);
+      (bubble.querySelector(".tut-bar i") as HTMLElement).style.width = `${pct}%`;
+      bubble.querySelector(".tut-prog-t")!.textContent = `${fmt(cr.min(goal))} / ${fmt(goal)} cr`;
     }
     place(document.querySelector(st.anchor));
     return;
