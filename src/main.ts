@@ -27,7 +27,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.2";
+const GAME_VERSION = "0.4.3";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -91,6 +91,18 @@ let lastSlotCount = -1;
 let lastTalentKey = "";
 let lastOptKey = "";
 let lastChKey = "";
+
+/** Mobile tab bar: line icons (SVG, theme colour) instead of emojis (Arthur: "less AI slop"). */
+const svgIcon = (body: string) =>
+  `<svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const NAV_ICONS = {
+  // a chip: the shop sells hardware
+  shop: svgIcon('<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>'),
+  // a prompt
+  terminal: svgIcon('<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7 10l3 2.5L7 15M12.5 15.5H17"/>'),
+  // rising bars: releases, challenges, fork, achievements, stats
+  progress: svgIcon('<path d="M4 20h16"/><rect x="5.5" y="13" width="3" height="5"/><rect x="10.5" y="9" width="3" height="9"/><rect x="15.5" y="5" width="3" height="13"/>'),
+};
 
 function buildLayout() {
   document.title = "overcompile";
@@ -221,9 +233,9 @@ function buildLayout() {
     </section>
   </main>
   <nav class="mnav">
-    <button data-m="shop">🛒<span>${t("nav.shop")}</span></button>
-    <button data-m="center">⌨️<span>${t("nav.terminal")}</span></button>
-    <button data-m="side">🚀<span>${t("nav.release")}</span><i class="mdot" data-r="mDot" hidden></i></button>
+    <button data-m="shop">${NAV_ICONS.shop}<span>${t("nav.shop")}</span></button>
+    <button data-m="center">${NAV_ICONS.terminal}<span>${t("nav.terminal")}</span></button>
+    <button data-m="side">${NAV_ICONS.progress}<span>${t("nav.progress")}</span><i class="mdot" data-r="mDot" hidden></i></button>
   </nav>
   <footer class="foot"><a href="https://github.com/Antiz96/incrust" target="_blank" rel="noopener noreferrer">${t("fork_of")}</a></footer>
   <div class="toasts" data-r="toasts"></div>
