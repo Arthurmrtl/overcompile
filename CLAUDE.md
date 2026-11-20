@@ -61,7 +61,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.4.3)
+## Mécaniques actuelles (v0.4.4)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -77,7 +77,7 @@ Perks de boutique :
 `floor(max(1 + 1,5·log2(ratio), ratio^0.36) × multiplicateurs)`, où `ratio = gagné / seuil`.
 La courbe est volontairement généreuse au début : 2★ à ×1,6 le seuil, 3★ à ×2,5, 4★ à ×4. Le terme `ratio^0,36` est devenu `ratio^0,25` en v0.4.1 (voir Fork). Les étoiles gagnées au total donnent aussi un bonus permanent de gains (`1 + 0,25·total^0,35` ; c'était `√total` avant la v0.2.8, ce qui faisait exploser la fin de partie).
 
-**Conseiller de release** (`src/core/advisor.ts`, v0.2.8). Constat d'Arthur à 6 h 19 de jeu : il s'ennuyait, ses runs duraient ~1 h et il n'avait jamais fait de challenge. Les étoiles d'une release montent de plus en plus lentement, donc garder une run trop longtemps fait perdre du temps, et le jeu ne le disait pas. Le conseiller calcule les étoiles par minute de la run (sur 5 min minimum) et conseille de publier quand ce rythme retombe sous 90 % de son meilleur niveau, ou quand la release ajoute au moins 50 % des étoiles déjà gagnées. Le bouton Release ne clignote plus que dans ce cas ; il y a aussi un badge sur l'onglet, un point sur mobile et une ligne dans le journal. La simulation suit ce conseiller : c'est le rythme d'un joueur qui écoute le jeu. **Tranché (v0.4.3, Arthur) :** plus d'encart « N challenge(s) à faire » dans l'onglet Release (il gênait la lecture) ; il reste la ligne `[ TIP ]` dans le journal et le badge de l'onglet Challenges.
+**Conseiller de release** (`src/core/advisor.ts`, v0.2.8). Constat d'Arthur à 6 h 19 de jeu : il s'ennuyait, ses runs duraient ~1 h et il n'avait jamais fait de challenge. Les étoiles d'une release montent de plus en plus lentement, donc garder une run trop longtemps fait perdre du temps, et le jeu ne le disait pas. Le conseiller calcule les étoiles par minute de la run (sur 5 min minimum) et conseille de publier quand ce rythme retombe sous 90 % de son meilleur niveau, ou quand la release ajoute au moins 50 % des étoiles déjà gagnées. Le bouton Release ne clignote plus que dans ce cas ; il y a aussi un badge sur l'onglet, un point sur mobile et une ligne dans le journal. La simulation suit ce conseiller : c'est le rythme d'un joueur qui écoute le jeu. **Tranché (v0.4.4, Arthur) :** plus d'encart « N challenge(s) à faire » dans l'onglet Release (il gênait la lecture) ; il reste la ligne `[ TIP ]` dans le journal et le badge de l'onglet Challenges.
 
 **Tranché :** la monnaie de prestige reste les « étoiles ». Ne pas la renommer.
 
@@ -109,7 +109,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - **Contributeurs** = f(étoiles gagnées depuis le dernier fork), sur le modèle des étoiles : `max(1 + 2·log2(étoiles/200), (étoiles/200)^0,6)`, ×(1 + 5 % par génération) ×(1 + 10 % par challenge fait dans le cycle). Le total gagné donne un bonus permanent **logarithmique** : gains ×(1 + 0,25·log2(1 + total)). Les non dépensés achètent l'arbre Fork.
 - **Pourquoi c'est logarithmique et pourquoi l'arbre Fork ne multiplie presque rien** (v0.4.1) : avec des multiplicateurs (gains ×(1 + 0,4·total^0,8), Sponsors ×2, Benchmarks ×1,5, Awesome ×1,5) et le seuil remis à 20K, tout faisait boule de neige (plus de gains → plus d'étoiles → plus de contributeurs → cycle plus court) : cycles de 3 h → 20 min → 5 min → 1 min, même avec un bonus divisé par 20. La couche Fork accélère donc le **redémarrage** (étoiles, niveaux, talents, automatisation au départ) plutôt que la vitesse de croisière.
 - Même cause côté releases : l'exposant de la courbe d'étoiles pour les très grosses runs passe de 0,36 à **0,25** (`BAL.starExp`). Avec 0,36, la fin de l'arbre s'emballait déjà sans fork (+56 → +47 000★ par release en 1 h 30) ; avec 0,25 : +115 → +434★, arbre toujours fini vers 2 h 40–3 h 10, 1re étoile inchangée.
-- **Arbre Fork** (14 talents, 1 à 13 contributeurs, 61 au total, jamais remis à zéro), **dessiné en arbre** comme l'arbre de release (demande d'Arthur). **Tranché (v0.4.3, Arthur) :** même brouillard que l'arbre de release (`forkTalentVisibility`) : il se découvre au fil des achats, le reste est en `???` ou caché, y compris dans `fork tree`. **Tranché (Arthur) :** deux familles qui alternent dans l'arbre, des accélérateurs de redémarrage et des bonus en % **fixes** (achetés une fois, ils ne grossissent pas avec le nombre de contributeurs, d'où pas de boule de neige) :
+- **Arbre Fork** (14 talents, 1 à 13 contributeurs, 61 au total, jamais remis à zéro), **dessiné en arbre** comme l'arbre de release (demande d'Arthur). **Tranché (v0.4.4, Arthur) :** même brouillard que l'arbre de release (`forkTalentVisibility`) : il se découvre au fil des achats, le reste est en `???` ou caché, y compris dans `fork tree`. **Tranché (Arthur) :** deux familles qui alternent dans l'arbre, des accélérateurs de redémarrage et des bonus en % **fixes** (achetés une fois, ils ne grossissent pas avec le nombre de contributeurs, d'où pas de boule de neige) :
   - redémarrage : `tpl` 10★ au départ de chaque fork ; `iac` Auto-Scaling achetable dès le début d'un fork (1 000 cr) ; `spn` chaque run commence avec +10 niveaux de CPU/RAM/Disk ; `lts` seuil ×1,15 par release au lieu de ×1,2 ; `mir` garde la moitié des générations ; `bin` chaque fork commence avec `inc`, `rev` et `ci` ; `dpb` attrape seul les événements courants ; `kp` garde les talents CI et Auto-Scaling ; `awe` +2★ par release ; `ups` +2 contributeurs par fork ;
   - en % : `oc` gains +50 % ; `cdn` builds +25 % plus rapides ; `hn` étoiles +15 % ; `sig` contributeurs +10 % à chaque fork.
   - Identifiants internes gardés depuis la v0.4.0 (`f_sponsors`, `f_bench`… même si l'effet a changé) ; les prérequis ont changé avec le nouvel arbre.
@@ -118,7 +118,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
 - Nouvel onglet Fork (après le 1er fork), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
 - Simulation v0.4.1 (`npm run sim -- 10`, 3 runs ; le joueur forke quand le conseiller le dit, fusionne toutes les PR, achète les talents Fork puis les améliorations) : 1er fork vers 3 h 10–3 h 20 avec 5–6 contributeurs ; 2e cycle 35–45 min, 3e ~22 min, ensuite cycles stables de 33–36 min ; contributeurs par fork en hausse lente (5 → 12 → 24 → 30 → 50 → 75 au 12e fork) ; arbre Fork complet au 5e fork (~5 h 20), puis ~1 niveau d'amélioration Fork par fork. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
-- Pas encore fait : `crontab` (v0.4.4), lien avec les générations au-delà de `mir`.
+- Pas encore fait : `crontab` (v0.4.5), lien avec les générations au-delà de `mir`.
 
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
@@ -184,7 +184,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 ## Feuille de route
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
-- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), puis **`crontab`** pour l'automatisation scriptée (v0.4.4).
+- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), puis **`crontab`** pour l'automatisation scriptée (v0.4.5).
 - **v0.5** : couche **Distro** (idée encore vague).
 
 ## Façon de travailler avec Arthur

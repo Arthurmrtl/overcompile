@@ -48,7 +48,7 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## Content (v0.4.3)
+## Content (v0.4.4)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (buys the cheapest upgrade every 2 s): not sold before the first release (the first run is played by hand), then priced at 25 % of the current release threshold until the permanent `as` talent (10★)
