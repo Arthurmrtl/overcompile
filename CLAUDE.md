@@ -69,6 +69,8 @@ Règles d'architecture :
 - Disk : moins d'échecs, gains légèrement plus faibles ;
 - Jobs : builds en parallèle (max 16).
 
+**Cache du Disk (v0.4.7, Arthur : « réactiver le disque fait perdre des cr/s, c'est bizarre »).** Le taux d'échec a un plancher à 1 % ; au-delà, chaque niveau de Disk ne faisait plus que −0,3 % de gains, et l'Auto-Scaling (le moins cher d'abord) en achetait quand même. Désormais le surplus de fiabilité sous le plancher (en « niveaux de Disk » équivalents, `diskSurplus()`) devient un bonus de gains ×1,004 par niveau (`BAL.diskCache`, affiché « cache ×N » sur la carte Disk). Simulation (3 runs de 8 h) : arbre 3 h 00–3 h 04 et cycles de fork inchangés ; ~680 contributeurs en 8 h, contre ~630 pour un joueur qui arrête d'acheter du Disk au plancher et ~455 pour celui qui en achète sans réfléchir. Avec ×1,008, les contributeurs des forks tardifs doublaient.
+
 Perks de boutique :
 - **CI/CD** à 10 crédits : relance automatique des builds. **Tranché :** reste à 10.
 - **Auto-Scaling** : achète automatiquement le matériel le moins cher. **Tranché (v0.3.2, Arthur et son ami voulaient retarder l'autobuy) :** pas en vente avant la 1re release (la 1re run se joue à la main), puis prix = 25 % du seuil de release en cours (`AS_PRICE_SHARE`, ~6 000 cr après la 1re release), racheté à chaque run jusqu'au talent permanent `as`, passé de 3★ à 10★. Simulation : la 1re étoile ne bouge pas (~22 min, achats à la main toutes les ~4 s), Auto-Scaling acheté vers 33–39 min, arbre complet 3 h 05–3 h 30. Avant ça, il coûtait 1 000 cr dès la 1re run.
