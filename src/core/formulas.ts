@@ -47,8 +47,8 @@ export const perkLocked = (s: GameState, k: PerkKey) =>
   k === "auto_scaling" && s.releases === 0 && !s.perks.auto_scaling.unlocked && !hasFork(s, "f_iac");
 export function perkPrice(s: GameState, k: PerkKey): Decimal {
   if (k !== "auto_scaling") return PERK_PRICE[k];
-  // Fork talent "iac": sold from the start of a fork, at the old 1 000 cr before the first release
-  if (s.releases === 0 && hasFork(s, "f_iac")) return PERK_PRICE.auto_scaling;
+  // Fork talent "iac" only makes it sold from the start of a fork, at the normal price (v0.4.7: was
+  // 1 000 cr, which removed the manual start of every fork; Arthur wants a few minutes of it to stay)
   return releaseBase(s).mul(AS_PRICE_SHARE).floor();
 }
 
@@ -98,6 +98,10 @@ export const BAL = {
   genRam: 1.2,         // each RAM generation: rewards ×N
   genDisk: 1.08,       // each Disk generation: rewards ×N…
   genDiskFail: 0.88,   // …and failures ×N
+  // v0.4.7 "cache hits": below the 1 % failure floor, the extra reliability turns into rewards
+  // (each Disk-level worth of surplus: rewards ×N), so Disk never becomes a pure malus.
+  // Sim: 1.004 ≈ a player who stops buying Disk at the floor (forks +49/+79/+100…); 1.008 doubled late contributors.
+  diskCache: 1.004,
   genMirrors: 0.8,     // Fork talent "mir": generations need ×N levels
 };
 
@@ -147,13 +151,28 @@ export function buildTime(s: GameState): number {
   return t;
 }
 
-export function failProbability(s: GameState): number {
-  let p = 0.25 * Math.pow(1.012, s.hw.cpu - 1) * Math.pow(0.965, s.hw.disk - 1);
+const FAIL_FLOOR = 0.01;
+const DISK_FAIL = 0.965; // failures × per Disk level
+/** Failure chance before the floor and the challenge / event overrides. */
+function rawFail(s: GameState): number {
+  let p = 0.25 * Math.pow(1.012, s.hw.cpu - 1) * Math.pow(DISK_FAIL, s.hw.disk - 1);
   if (on(s, "rust_rewrite")) p /= 2;
   if (challengeDone(s, "friday")) p *= 0.75;
   p *= achFailMult(s);
   p *= genFailMult(s);
-  p = Math.min(Math.max(p, 0.01), 0.9);
+  return p;
+}
+/** Disk levels' worth of reliability below the failure floor (0 when above it). */
+export function diskSurplus(s: GameState): number {
+  const p = rawFail(s);
+  return p >= FAIL_FLOOR ? 0 : Math.log(FAIL_FLOOR / p) / Math.log(1 / DISK_FAIL);
+}
+/** "Cache hits": the surplus reliability as a rewards multiplier. */
+export const diskCacheMult = (s: GameState) => Math.pow(BAL.diskCache, diskSurplus(s));
+
+export function failProbability(s: GameState): number {
+  let p = rawFail(s);
+  p = Math.min(Math.max(p, FAIL_FLOOR), 0.9);
   if (inChallenge(s, "friday")) p = Math.max(p, 0.5);
   if (eventNoFail(s)) p = 0;
   return p;
@@ -180,7 +199,7 @@ export function rewardMultiplier(s: GameState): Decimal {
 }
 
 export function reward(s: GameState): Decimal {
-  return Decimal.pow(1.09, s.hw.ram - 1).mul(Decimal.pow(0.997, s.hw.disk - 1)).mul(rewardMultiplier(s));
+  return Decimal.pow(1.09, s.hw.ram - 1).mul(Decimal.pow(0.997, s.hw.disk - 1)).mul(diskCacheMult(s)).mul(rewardMultiplier(s));
 }
 
 /** Expected credits per second with every slot building. */

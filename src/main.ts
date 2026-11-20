@@ -4,7 +4,7 @@ import { Engine, type GameEvent } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
 import {
   HW, JOBS_PRIO_STEPS, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
-  failProbability, genRequired, gensRevealed, has, maxAffordable, totalGens, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
+  failProbability, diskCacheMult, genRequired, gensRevealed, has, maxAffordable, totalGens, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
   reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./core/challenges";
@@ -27,7 +27,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.6";
+const GAME_VERSION = "0.4.7";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -622,7 +622,10 @@ function hwEffect(k: HwKey): string {
   switch (k) {
     case "cpu": return `${fmtTime(buildTime(s))} / build`;
     case "ram": return `${fmt(reward(s))} cr / build`;
-    case "disk": return `${(failProbability(s) * 100).toFixed(1)}% fail`;
+    case "disk": {
+      const cache = diskCacheMult(s);
+      return `${(failProbability(s) * 100).toFixed(1)}% fail` + (cache > 1.0005 ? ` · ${t("hw.disk.cache", { x: cache.toFixed(2) })}` : "");
+    }
     case "jobs": return `make -j${s.hw.jobs}`;
   }
 }

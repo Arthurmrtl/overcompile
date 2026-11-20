@@ -48,7 +48,7 @@ export interface ForkTalent {
  * talents, automation at the start of a fork) and fixed % bonuses (bought once). */
 export const FORK_TALENTS: ForkTalent[] = [
   { id: "f_template", tag: "tpl", cost: 1, req: [], row: 0, col: 2 },                       // each fork starts with 10 stars
-  { id: "f_iac", tag: "iac", cost: 1, req: ["f_template"], row: 1, col: 1 },                // Auto-Scaling sold from the start, 1 000 cr
+  { id: "f_iac", tag: "iac", cost: 1, req: ["f_template"], row: 1, col: 1 },                // Auto-Scaling sold from the start of a fork, normal price (25 % of the threshold)
   { id: "f_oc", tag: "oc", cost: 2, req: ["f_template"], row: 1, col: 3 },                  // rewards +50 %
   { id: "f_lts", tag: "lts", cost: 2, req: ["f_iac"], row: 2, col: 0 },                     // release threshold ×1.15 per release instead of ×1.2
   { id: "f_sponsors", tag: "spn", cost: 2, req: ["f_iac"], row: 2, col: 1 },                // every run starts with +10 CPU/RAM/Disk levels
