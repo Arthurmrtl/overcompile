@@ -22,7 +22,7 @@ import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/term
 import { type Advice, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
 import {
   FORK_TALENTS, FORK_TALENT_BY_ID, FORK_UPGRADES, PR_EFFECTS, contribGainsMult, contributorsOnFork, forkUpgradeLevel,
-  forkUpgradePrice, forkRevealed, hasFork,
+  forkUpgradePrice, forkRevealed, hasFork, forkTalentVisibility,
   starsForFirstContributor, treeComplete,
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
@@ -180,7 +180,6 @@ function buildLayout() {
         <div class="muted small" data-r="relHint"></div>
         <div class="rel-rc small" data-r="relRc" hidden></div>
         <div class="rel-rate small" data-r="relRate" hidden></div>
-        <button class="ch-nudge" data-r="chNudge" hidden></button>
         <div class="fork-card" data-r="forkCard" hidden>
           <div class="fork-title"><span class="fk-glyph">⑂</span> <span data-r="forkTitle"></span></div>
           <div class="muted small" data-r="forkDesc"></div>
@@ -424,11 +423,6 @@ function bindLayout() {
     if (cur) cmd.run(EVENT_BY_ID[cur.id].cmd, true);
   });
   $("[data-r=forkBtn]").addEventListener("click", confirmFork);
-  $("[data-r=chNudge]").addEventListener("click", () => {
-    sideTab = "challenges";
-    if (!engine.s.seen.includes("challenges")) engine.s.seen.push("challenges");
-    render();
-  });
   $("[data-r=chExit]").addEventListener("click", () => cmd.run("challenge exit", true));
   $("[data-a=save]").addEventListener("click", () => cmd.run("save", true));
   $("[data-a=settings]").addEventListener("click", () => openSettings());
@@ -684,12 +678,6 @@ function renderRelease() {
     toggleClass(rateEl, "on", advised);
   }
 
-  // Challenges waiting to be done
-  const nudge = $<HTMLButtonElement>("[data-r=chNudge]");
-  const todo = engine.challengesUnlocked ? CHALLENGES.filter(c => !s.challengesDone.includes(c.id)) : [];
-  const showNudge = todo.length > 0 && !s.challenge;
-  if (nudge.hidden === showNudge) nudge.hidden = !showNudge;
-  if (showNudge) setText(nudge, t("adv.ch", { n: todo.length, c: t(`ch.${todo[0].id}`), r: t(`ch.${todo[0].id}.reward`) }));
   let prog: number;
   const base = releaseBase(s);
   if (s.challenge) {
@@ -734,7 +722,7 @@ function renderRelease() {
     toggleClass(node, "afford", !owned && reqOk && s.stars.gte(tal.cost));
     toggleClass(node, "sel", selectedTalent === tal.id);
   }
-  app.querySelectorAll<SVGLineElement>(".tree-lines line").forEach(l => {
+  $("[data-r=tree]").querySelectorAll<SVGLineElement>(".tree-lines line").forEach(l => { // release tree only: the Fork tree has its own lines
     l.classList.toggle("lit", has(s, l.dataset.from!) && has(s, l.dataset.to!));
     l.classList.toggle("hidden", vis[l.dataset.from!] !== "shown" || vis[l.dataset.to!] === "hidden");
   });
@@ -1007,11 +995,21 @@ function renderForkTab() {
 /* Fork tree: drawn like the release tree (same nodes and lines), all talents visible. */
 let forkTreeBuilt = false;
 let selectedFork = "f_template";
+let forkTreeRows = 0;
+/** Sizes the Fork tree to its visible rows, like layoutTree() for the release tree. */
+function layoutForkTree(rows: number) {
+  if (rows === forkTreeRows) return;
+  forkTreeRows = rows;
+  const tree = $("[data-r=ftree]");
+  tree.style.aspectRatio = `${TREE_COLS} / ${rows}`;
+  $(".tree-lines", tree).setAttribute("viewBox", `0 0 ${TREE_COLS * 100} ${rows * 100}`);
+  for (const ft of FORK_TALENTS) $(`[data-ft=${ft.id}]`, tree).style.top = `${(ft.row + 0.5) * (100 / rows)}%`;
+}
 function buildForkTree() {
   const tree = $("[data-r=ftree]");
   tree.replaceChildren();
+  forkTreeRows = 0;
   const rows = Math.max(...FORK_TALENTS.map(x => x.row)) + 1;
-  tree.style.aspectRatio = `${TREE_COLS} / ${rows}`;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${TREE_COLS * 100} ${rows * 100}`);
   svg.setAttribute("preserveAspectRatio", "none");
@@ -1036,7 +1034,6 @@ function buildForkTree() {
       h("span", { class: "node-cost" }, `${ft.cost}⑂`),
     );
     node.style.left = `${(ft.col + 0.5) * (100 / TREE_COLS)}%`;
-    node.style.top = `${(ft.row + 0.5) * (100 / rows)}%`;
     node.addEventListener("click", () => { selectedFork = ft.id; forkTabKey = ""; render(); });
     node.addEventListener("dblclick", () => cmd.run(`fork buy ${ft.tag}`, true));
     tree.append(node);
@@ -1048,18 +1045,32 @@ function renderForkTree() {
   if (!forkTreeBuilt || !$("[data-r=ftree]").firstChild) buildForkTree(); // the layout is rebuilt on language change
   const s = engine.s;
   const tree = $("[data-r=ftree]");
+  const vis = Object.fromEntries(FORK_TALENTS.map(x => [x.id, forkTalentVisibility(s, x.id)]));
+  if (vis[selectedFork] === "hidden") selectedFork = "f_template";
+  layoutForkTree(Math.max(...FORK_TALENTS.filter(x => vis[x.id] !== "hidden").map(x => x.row)) + 1);
   for (const ft of FORK_TALENTS) {
     const node = $(`[data-ft=${ft.id}]`, tree);
+    toggleClass(node, "hidden", vis[ft.id] === "hidden");
+    toggleClass(node, "fog", vis[ft.id] === "fog");
+    setText($(".node-icon", node), vis[ft.id] === "fog" ? "???" : ft.tag);
+    node.title = vis[ft.id] === "shown" ? t(`ft.${ft.id}`) : "???";
     const owned = hasFork(s, ft.id);
     const reqOk = ft.req.every(r => hasFork(s, r));
     toggleClass(node, "owned", owned);
     toggleClass(node, "avail", !owned && reqOk);
     toggleClass(node, "afford", !owned && reqOk && s.contributors >= ft.cost);
-    toggleClass(node, "locked", !owned && !reqOk);
+    toggleClass(node, "locked", !owned && !reqOk && vis[ft.id] === "shown");
     toggleClass(node, "sel", ft.id === selectedFork);
   }
-  tree.querySelectorAll<SVGLineElement>("line").forEach(l => toggleClass(l as unknown as HTMLElement, "lit", hasFork(s, l.dataset.from!) && hasFork(s, l.dataset.to!)));
+  tree.querySelectorAll<SVGLineElement>("line").forEach(l => {
+    l.classList.toggle("lit", hasFork(s, l.dataset.from!) && hasFork(s, l.dataset.to!));
+    l.classList.toggle("hidden", vis[l.dataset.from!] !== "shown" || vis[l.dataset.to!] === "hidden");
+  });
   const ft = FORK_TALENT_BY_ID[selectedFork];
+  if (vis[ft.id] === "fog") {
+    $("[data-r=ftDetail]").replaceChildren(h("div", {}, h("span", { class: "ft-tag" }, "[???]"), ` ${t("tree.fog")}`));
+    return;
+  }
   const owned = hasFork(s, ft.id);
   const reqOk = ft.req.every(r => hasFork(s, r));
   const btn = h("button", { class: "claim-btn" }, owned ? t("fk.owned") : `${t("fk.buy")} · ${ft.cost} ⑂`) as HTMLButtonElement;
