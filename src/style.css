@@ -270,13 +270,18 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .stats tr + tr { border-top: 1px solid var(--border); }
 
 /* ---------- Toasts / modal ---------- */
-.toasts { position: fixed; top: 64px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 20; pointer-events: none; }
+/* v0.4.14 desktop too (Arthur): compact lines in the bottom-right corner, 2 at most, out of the tabs' way */
+.toasts { position: fixed; bottom: 34px; right: 16px; display: flex; flex-direction: column; gap: 4px; z-index: 20; pointer-events: none; max-width: 380px; }
+.toast:nth-last-child(n+3) { display: none; }
 .toast {
-  background: var(--panel-2); border: 1px solid var(--amber); border-radius: 8px; padding: 8px 12px; min-width: 220px;
+  background: var(--panel-2); border: 1px solid var(--amber); border-radius: 8px; padding: 5px 10px; min-width: 0; font-size: 12px;
+  display: flex; gap: 8px; align-items: baseline; opacity: .95;
   box-shadow: 0 8px 24px #0008; animation: slidein .25s ease-out; transition: opacity .4s, transform .4s;
 }
 .toast.out { opacity: 0; transform: translateX(20px); }
 .toast-t { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--amber); }
+.toast-t { flex: none; }
+.toast > div:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes slidein { from { opacity: 0; transform: translateX(20px); } }
 .modal { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 30; padding: 16px; }
 .modal[hidden] { display: none; }

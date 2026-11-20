@@ -28,7 +28,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.13";
+const GAME_VERSION = "0.4.14";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -1290,14 +1290,13 @@ function toast(title: string, body: string) {
   }
   const el = h("div", { class: "toast" }, h("div", { class: "toast-t" }, title), h("div", {}, body));
   box.append(el);
-  const life = mobileToasts() ? 2500 : 3500;
+  const life = 2500; // v0.4.14: short everywhere (Arthur: just as annoying on desktop)
   setTimeout(() => el.classList.add("out"), life);
   setTimeout(() => el.remove(), life + 500);
 }
-const mobileToasts = () => matchMedia("(max-width: 900px)").matches;
-// On a phone, any touch clears the toasts: they must never sit on what the player wants to reach
+// Any click or touch clears the toasts (phone since v0.4.8, desktop since v0.4.14):
+// they must never sit on what the player wants to reach
 document.addEventListener("pointerdown", () => {
-  if (!mobileToasts()) return;
   for (const el of document.querySelectorAll<HTMLElement>(".toast")) {
     el.classList.add("out");
     setTimeout(() => el.remove(), 300);
