@@ -7,7 +7,8 @@ import {
 } from "./formulas";
 import { TALENT_BY_ID } from "./talents";
 import {
-  FORK, FORK_TALENT_BY_ID, KEPT_BY_F_KEEP, PR_EFFECTS, PR_TITLES, type PullRequest, TEMPLATE_STARS,
+  FORK, FORK_TALENT_BY_ID, KEPT_BY_F_KEEP, PREBUILT_TALENTS, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
+  TEMPLATE_STARS,
   canFork, contributorsOnFork, hasFork, pickPrKind, prGap,
 } from "./fork";
 import {
@@ -471,7 +472,7 @@ export class Engine {
     const jobs = on(s, "monorepo") && !inChallenge(s, "single_core") ? 2 : 1;
     s.credits = new Decimal(0);
     s.runEarned = new Decimal(0);
-    const boot = 1 + optBootLevels(s);
+    const boot = 1 + optBootLevels(s) + (hasFork(s, "f_sponsors") ? SEED_LEVELS : 0);
     s.hw = { cpu: inChallenge(s, "single_core") ? 1 : boot, ram: boot, disk: boot, jobs };
     s.slots = Array.from({ length: jobs }, () => ({ progress: 0, running: false }));
     s.pipeline = false;
@@ -575,7 +576,9 @@ export class Engine {
     s.stars = new Decimal(hasFork(s, "f_template") ? TEMPLATE_STARS : 0);
     s.lifetimeStars = new Decimal(0);
     s.releases = 0;
-    s.talents = hasFork(s, "f_keep") ? s.talents.filter(id => KEPT_BY_F_KEEP.includes(id)) : [];
+    const kept = [...(hasFork(s, "f_keep") ? KEPT_BY_F_KEEP : []), ...(hasFork(s, "f_bench") ? PREBUILT_TALENTS : [])];
+    s.talents = s.talents.filter(id => kept.includes(id));
+    for (const id of kept) if (!s.talents.includes(id)) s.talents.push(id); // in case a later talent was skipped
     s.upgrades = {};
     s.challenge = null;
     s.challengesDone = [];

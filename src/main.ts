@@ -21,12 +21,12 @@ import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 import { type Advice, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
 import {
-  FORK_TALENTS, FORK_TALENT_BY_ID, PR_EFFECTS, contribGainsMult, contribStarsMult, contributorsOnFork, forkRevealed, hasFork,
+  FORK_TALENTS, FORK_TALENT_BY_ID, PR_EFFECTS, contribGainsMult, contributorsOnFork, forkRevealed, hasFork,
   starsForFirstContributor, treeComplete,
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.0";
+const GAME_VERSION = "0.4.1";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -956,7 +956,7 @@ function renderForkTab() {
   const s = engine.s;
   setText($("[data-r=forkSum]"), t("fk.sum", {
     c: fmtInt(s.contributors), l: fmtInt(s.lifetimeContributors), f: fmtInt(s.forks),
-    g: `×${fmt(new Decimal(contribGainsMult(s)))}`, st: `×${contribStarsMult(s).toFixed(2)}`,
+    g: `×${contribGainsMult(s).toFixed(2)}`,
   }));
   const b = s.prBoost;
   setText($("[data-r=prBoost]"), b.speed > 1 || b.gains > 1 || b.stars > 1
