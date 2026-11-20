@@ -65,6 +65,16 @@ export const FORK_TALENTS: ForkTalent[] = [
 export const FORK_TALENT_BY_ID = Object.fromEntries(FORK_TALENTS.map(t => [t.id, t]));
 export const hasFork = (s: GameState, id: string) => s.forkTalents.includes(id);
 
+/**
+ * Same fog as the release tree: a talent is shown once its prerequisites are owned,
+ * in the fog ("???") when one prerequisite is itself shown, hidden otherwise.
+ */
+export function forkTalentVisibility(s: GameState, id: string): "shown" | "fog" | "hidden" {
+  const shown = (x: string) => hasFork(s, x) || FORK_TALENT_BY_ID[x].req.every(r => hasFork(s, r));
+  if (shown(id)) return "shown";
+  return FORK_TALENT_BY_ID[id].req.some(shown) ? "fog" : "hidden";
+}
+
 /** Release talents a fork keeps with `f_keep`. */
 export const KEPT_BY_F_KEEP = ["ci_preinstalled", "as_perm", "as_fast", "as_ctrl", "as_jobs"];
 export const TEMPLATE_STARS = 10;
