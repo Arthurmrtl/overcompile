@@ -61,7 +61,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.4.9)
+## Mécaniques actuelles (v0.4.10)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -91,7 +91,7 @@ Branche Auto-Scaling :
 - `as` (10★ depuis la v0.3.2) : Auto-Scaling permanent (conservé après une release) ;
 - `fast` : 4 passages par seconde au lieu d'un toutes les 2 s ;
 - `ctrl` : cases AUTO, pour choisir quelles ressources l'Auto-Scaling achète ;
-- `-j` : l'Auto-Scaling gère aussi les Jobs. Il en achète d'abord autant que possible, puis dépense le reste en CPU/RAM/Disk. **Tranché (v0.3.3, option choisie par Arthur) :** un seuil réglé par le joueur (`jobsPrio`, en secondes de revenu : jamais, 10 s, 30 s, 1 min, 5 min, toujours) fait économiser pour le prochain slot quand il coûte au plus ce temps de revenu. Bouton `prio … ▸` sur la carte Jobs, barre « épargne pour le job N », commande `autoscale jobs <off|10|30|60|300|always>` (visible seulement avec `-j`). Défaut : jamais, parce que la simulation montre qu'économiser ne fait jamais gagner (chaque slot coûte ×5 le précédent pour un gain linéaire ; 16 jobs atteints vers 3 h 30 sans épargne ; 30 s retarde l'arbre de ~10 min, 5 min de ~2 h). C'est une préférence de joueur, pas une optimisation. Sim : `JOBSPRIO=<s>`.
+- `-j` : l'Auto-Scaling gère aussi les Jobs. Il en achète d'abord autant que possible, puis dépense le reste en CPU/RAM/Disk. **Tranché (v0.3.3, option choisie par Arthur) :** un seuil réglé par le joueur (`jobsPrio`, en secondes de revenu) fait économiser pour le prochain slot quand il coûte au plus ce temps de revenu. **Tranché (v0.4.10, Arthur : « pas suffisant ») :** menu natif sur la pastille `prio … ▸` de la carte Jobs avec jamais, 1 s, 5 s, 10 s, 30 s, 1 min, 5 min, toujours, et « autre… » pour n'importe quelle valeur ; commande `autoscale jobs <off|secondes|always>` (visible seulement avec `-j`). Barre « épargne pour le job N ». Défaut : jamais, parce que la simulation montre qu'économiser ne fait jamais gagner (chaque slot coûte ×5 le précédent pour un gain linéaire ; 16 jobs atteints vers 3 h 30 sans épargne ; 30 s retarde l'arbre de ~10 min, 5 min de ~2 h). C'est une préférence de joueur, pas une optimisation. Sim : `JOBSPRIO=<s>`.
 
 Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doublon avec l'Auto-Scaling.
 
@@ -123,7 +123,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
 - Nouvel onglet Fork (après le 1er fork), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
 - Simulation v0.4.1 (`npm run sim -- 10`, 3 runs ; le joueur forke quand le conseiller le dit, fusionne toutes les PR, achète les talents Fork puis les améliorations) : 1er fork vers 3 h 10–3 h 20 avec 5–6 contributeurs ; 2e cycle 35–45 min, 3e ~22 min, ensuite cycles stables de 33–36 min ; contributeurs par fork en hausse lente (5 → 12 → 24 → 30 → 50 → 75 au 12e fork) ; arbre Fork complet au 5e fork (~5 h 20), puis ~1 niveau d'amélioration Fork par fork. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
-- Pas encore fait : `crontab` (v0.4.10).
+- Pas encore fait : `crontab` (v0.4.11).
 
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
@@ -189,7 +189,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 ## Feuille de route
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
-- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), puis **`crontab`** pour l'automatisation scriptée (v0.4.10).
+- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), réglage libre de la priorité Jobs (v0.4.10), puis **`crontab`** pour l'automatisation scriptée (v0.4.11).
 - **v0.5** : couche **Distro** (idée encore vague).
 
 ## Façon de travailler avec Arthur

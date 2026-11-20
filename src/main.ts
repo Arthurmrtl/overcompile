@@ -13,7 +13,7 @@ import { GEN_KEYS, type GenKey, HW_KEYS, PERK_KEYS, type HwKey, exportSave, impo
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import {
   LOGO, achDesc, achVisible, autoScaleInfo, bonusSummary, challengeName, createCommands, fakeCargoLine, genBonusText, progressText,
-  eventBonusText, jobsPrioText, rewardText, upgradeNow, version,
+  eventBonusText, jobsPrioText, parseJobsPrio, rewardText, upgradeNow, version,
 } from "./commands";
 import { achProgress } from "./core/achievements";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
@@ -27,7 +27,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.9";
+const GAME_VERSION = "0.4.10";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -284,16 +284,21 @@ function buildHardware() {
     card.querySelector(".hw-top")!.append(auto);
     if (k === "jobs") {
       // `-j`: threshold under which Auto-Scaling saves up for the next slot (not a <button>: the card is one)
-      const prio = h("span", { class: "prio-btn", role: "button", tabindex: "0", "data-f": "prio", hidden: "" });
-      const next = (ev: Event) => {
-        ev.stopPropagation();
-        const steps = JOBS_PRIO_STEPS;
-        const i = steps.indexOf(engine.s.jobsPrio);
-        const v = steps[(i + 1) % steps.length];
-        cmd.run(`autoscale jobs ${v === 0 ? "off" : v < 0 ? "always" : v}`, true);
-      };
-      prio.addEventListener("click", next);
-      prio.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); next(ev); } });
+      // A native menu over the pill (v0.4.10): presets from 1 s to 5 min, plus any custom value
+      const prio = h("span", { class: "prio-btn", "data-f": "prio", hidden: "" },
+        h("span", { "data-f": "prioT" }),
+        h("select", { class: "prio-sel", "data-f": "prioSel", "aria-label": t("jp.help") }));
+      const sel = $<HTMLSelectElement>("select", prio);
+      prio.addEventListener("click", ev => ev.stopPropagation());
+      sel.addEventListener("change", () => {
+        let v = sel.value;
+        if (v === "custom") {
+          const got = window.prompt(t("jp.custom_q"), engine.s.jobsPrio > 0 ? String(engine.s.jobsPrio) : "");
+          if (got === null || parseJobsPrio(got) === null) { sel.dataset.key = ""; return; }
+          v = got.trim();
+        }
+        cmd.run(`autoscale jobs ${v}`, true);
+      });
       card.querySelector(".hw-top")!.append(prio);
       card.append(h("div", { class: "job-save", "data-f": "save", hidden: "" },
         h("span", { class: "job-save-t", "data-f": "saveT" }),
@@ -584,8 +589,17 @@ function renderJobsPrio(card: HTMLElement) {
   const owns = on(s, "as_jobs");
   if (prio.hidden === owns) prio.hidden = !owns;
   if (owns) {
-    setText(prio, t("jp.btn", { v: jobsPrioText(s.jobsPrio) }));
+    setText($("[data-f=prioT]", prio), t("jp.btn", { v: jobsPrioText(s.jobsPrio) }));
     prio.title = t("jp.help");
+    const sel = $<HTMLSelectElement>("[data-f=prioSel]", prio);
+    const key = `${s.jobsPrio}|${s.settings.lang}`;
+    if (sel.dataset.key !== key) {
+      sel.dataset.key = key;
+      const steps = JOBS_PRIO_STEPS.includes(s.jobsPrio) ? JOBS_PRIO_STEPS : [...JOBS_PRIO_STEPS.slice(0, -1), s.jobsPrio, -1].sort((a, b) => (a < 0 ? 1 : b < 0 ? -1 : a - b));
+      const val = (v: number) => (v === 0 ? "off" : v < 0 ? "always" : String(v));
+      sel.replaceChildren(...steps.map(v => h("option", { value: val(v) }, jobsPrioText(v))), h("option", { value: "custom" }, t("jp.custom")));
+      sel.value = val(s.jobsPrio);
+    }
   }
   const sv = engine.jobSaving();
   const row = $("[data-f=save]", card);

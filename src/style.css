@@ -430,6 +430,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 }
 .prio-btn:hover, .prio-btn:focus-visible { background: var(--violet); color: var(--bg); outline: none; }
 .prio-btn[hidden] { display: none; }
+.prio-btn { position: relative; }
+.prio-sel { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
 .job-save { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--border); font-size: 11px; color: var(--violet); }
 .job-save[hidden] { display: none; }
 .job-save-t { white-space: nowrap; }
