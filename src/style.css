@@ -489,4 +489,22 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .nav-ic { width: 22px; height: 22px; display: block; }
 
 /* v0.4.6 Fork card: how the contributors are computed */
-.fork-calc { margin-top: 6px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.fork-calc { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.fork-calc .fc-title { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+.fork-calc .fc-row { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+.fork-calc .fc-row .fc-v { color: var(--fg); white-space: nowrap; }
+.fork-calc .fc-row.dim .fc-v { color: var(--dim); }
+.fork-calc .fc-row.total { border-top: 1px dashed var(--border); margin-top: 3px; padding-top: 4px; }
+.fork-calc .fc-row.total .fc-v { color: var(--violet); font-weight: 600; }
+.fork-calc .fc-row.next { margin-top: 3px; }
+
+/* v0.4.8 mobile toasts (Arthur: they got in the way): one compact line each, just above the tab bar,
+   shorter, never more than 2, and gone as soon as the player touches the screen */
+@media (max-width: 900px) {
+  .toasts { top: auto; bottom: calc(64px + env(safe-area-inset-bottom)); left: 8px; right: 8px; gap: 4px; }
+  .toast { min-width: 0; padding: 5px 10px; font-size: 12px; display: flex; gap: 8px; align-items: baseline; box-shadow: 0 4px 12px #0006; opacity: .95; }
+  .toast-t { flex: none; }
+  .toast > div:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toast:nth-last-child(n+3) { display: none; }
+  html.kbd .toasts { display: none; }
+}

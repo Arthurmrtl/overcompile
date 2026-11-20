@@ -27,7 +27,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.7";
+const GAME_VERSION = "0.4.8";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -184,7 +184,7 @@ function buildLayout() {
           <div class="fork-title"><span class="fk-glyph">⑂</span> <span data-r="forkTitle"></span></div>
           <div class="muted small" data-r="forkDesc"></div>
           <button class="fork-btn" data-r="forkBtn" hidden></button>
-          <div class="fork-calc small" data-r="forkCalc" hidden></div>
+          <div class="fork-calc" data-r="forkCalc" hidden></div>
           <div class="rel-rate small" data-r="forkRate" hidden></div>
         </div>
         <div class="bot" data-r="bot" hidden>
@@ -952,14 +952,23 @@ function renderForkCard() {
   const calc = $("[data-r=forkCalc]");
   if (calc.hidden) calc.hidden = false;
   const b = contributorBreakdown(s);
-  const x = (m: number) => m.toFixed(2);
-  setText(calc, [
-    t("fk.calc.stars", { s: fmt(b.stars), b: b.base.toFixed(1) }),
-    t("fk.calc.gens", { x: x(b.multGens), n: b.gens }),
-    t("fk.calc.chal", { x: x(b.multChal), n: b.chal }),
-    ...(b.multSig > 1 ? [`sig ×${x(b.multSig)}`] : []),
-    ...(b.ups ? [`ups +${b.ups}`] : []),
-  ].join(" · ") + ` = ${fmtInt(b.total)} ⑂ · ` + t("fk.calc.next", { s: fmt(b.nextAt) }));
+  // A small table, one line per factor (v0.4.8: the one-line version was "ugly and hard to follow")
+  const x = (m: number) => `×${m.toFixed(2)}`;
+  const rows: [string, string, string?][] = [
+    [t("fk.calc.stars", { s: fmt(b.stars) }), b.base.toFixed(1)],
+    [t("fk.calc.gens", { n: b.gens }), x(b.multGens), b.gens ? "" : "dim"],
+    [t("fk.calc.chal", { n: b.chal }), x(b.multChal), b.chal ? "" : "dim"],
+    ...(b.multSig > 1 ? [[t("fk.calc.sig"), x(b.multSig)] as [string, string]] : []),
+    ...(b.ups ? [[t("fk.calc.ups"), `+${b.ups}`] as [string, string]] : []),
+    [t("fk.calc.total", { e: b.exact.toFixed(2) }), `${fmtInt(b.total)} ⑂`, "total"],
+    [t("fk.calc.next", { s: fmt(b.nextAt) }), t("fk.calc.more", { s: fmt(b.nextAt.sub(b.stars).max(0)) }), "next"],
+  ];
+  const key = rows.map(r => r.join("|")).join("/");
+  if (calc.dataset.key !== key) {
+    calc.dataset.key = key;
+    calc.replaceChildren(h("div", { class: "fc-title" }, t("fk.calc.title")),
+      ...rows.map(([l, v, c]) => h("div", { class: "fc-row" + (c ? ` ${c}` : "") }, h("span", {}, l), h("span", { class: "fc-v" }, v))));
+  }
   setText($("[data-r=forkTitle]"), t("fk.title"));
   setText($("[data-r=forkDesc]"), pending >= 1 ? t("fk.desc") : t("fk.need_stars", { n: fmtInt(starsForFirstContributor()), c: fmt(s.lifetimeStars) }));
   if (btn.hidden) btn.hidden = false;
@@ -1189,9 +1198,19 @@ function toast(title: string, body: string) {
   }
   const el = h("div", { class: "toast" }, h("div", { class: "toast-t" }, title), h("div", {}, body));
   box.append(el);
-  setTimeout(() => el.classList.add("out"), 3500);
-  setTimeout(() => el.remove(), 4000);
+  const life = mobileToasts() ? 2500 : 3500;
+  setTimeout(() => el.classList.add("out"), life);
+  setTimeout(() => el.remove(), life + 500);
 }
+const mobileToasts = () => matchMedia("(max-width: 900px)").matches;
+// On a phone, any touch clears the toasts: they must never sit on what the player wants to reach
+document.addEventListener("pointerdown", () => {
+  if (!mobileToasts()) return;
+  for (const el of document.querySelectorAll<HTMLElement>(".toast")) {
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 300);
+  }
+}, { capture: true, passive: true });
 
 function openModal(...content: (Node | string)[]) {
   const modal = $("[data-r=modal]");

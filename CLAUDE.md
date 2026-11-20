@@ -61,7 +61,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.4.7)
+## Mécaniques actuelles (v0.4.8)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -119,11 +119,11 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
   - Identifiants internes gardés depuis la v0.4.0 (`f_sponsors`, `f_bench`… même si l'effet a changé) ; les prérequis ont changé avec le nouvel arbre.
 - **Améliorations Fork** (infinies, en contributeurs, prix ×2,5 par niveau, `fork upgrade <bounties|mentoring>`) : Bounties gains +10 %/niveau (3 ⑂ au départ), Mentorat étoiles +3 %/niveau (5 ⑂). Elles donnent un usage aux contributeurs une fois l'arbre Fork complet.
 - **Pull requests** (après le 1er fork) : une PR s'ouvre toutes les 600 s / (1 + 0,5·log2(1 + contributeurs gagnés)), 3 ouvertes au maximum, ni hors ligne ni en challenge. Fusionner (`gh pr merge <n>` ou bouton) donne un bonus jusqu'à la prochaine release : perf builds ×1,2, feat gains ×1,25, ci étoiles ×1,05 ; docs donne +2 min de revenu. Fusionner est gratuit et **ne rapporte jamais de contributeurs** (seul le fork en donne).
-- **Détail du calcul** (v0.4.6, Arthur : « on ne comprend pas comment est calculé le nombre de contributeurs ») : sous le bouton Fork, une ligne `contributorBreakdown()` montre les étoiles du cycle → la base, ×générations de la meilleure run, ×challenges, `sig`, `ups`, le total, et les étoiles qu'il faut pour le contributeur suivant (comme « Prochaine ⭐ à … » pour les releases).
+- **Détail du calcul** (v0.4.6, Arthur : « on ne comprend pas comment est calculé le nombre de contributeurs » ; **v0.4.8** : la ligne unique était « moche et peu compréhensible », c'est maintenant un petit tableau « Calcul des contributeurs », une ligne par facteur, avec la valeur exacte avant l'arrondi) : sous le bouton Fork, `contributorBreakdown()` montre les étoiles du cycle → la base, ×générations de la meilleure run, ×challenges, `sig`, `ups`, le total, et les étoiles qu'il faut pour le contributeur suivant (comme « Prochaine ⭐ à … » pour les releases).
 - **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
 - Nouvel onglet Fork (après le 1er fork), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
 - Simulation v0.4.1 (`npm run sim -- 10`, 3 runs ; le joueur forke quand le conseiller le dit, fusionne toutes les PR, achète les talents Fork puis les améliorations) : 1er fork vers 3 h 10–3 h 20 avec 5–6 contributeurs ; 2e cycle 35–45 min, 3e ~22 min, ensuite cycles stables de 33–36 min ; contributeurs par fork en hausse lente (5 → 12 → 24 → 30 → 50 → 75 au 12e fork) ; arbre Fork complet au 5e fork (~5 h 20), puis ~1 niveau d'amélioration Fork par fork. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
-- Pas encore fait : `crontab` (v0.4.8).
+- Pas encore fait : `crontab` (v0.4.9).
 
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
@@ -135,7 +135,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - petites sommes en crédits au début, puis bonus permanents du type « +2 % de gains » ;
 - un seul onglet Succès : « À récupérer » puis « Tous les succès ». **Tranché (v0.3.5) :** plus de liste « En cours » séparée (doublon, selon Arthur) ; chaque carte de succès pas encore obtenu porte sa barre de progression, et la grille est triée : en cours (les plus proches d'abord), puis à récupérer, récupérés, secrets. Pas d'affichage en double.
 
-**Console.** Elle doit être avant tout **satisfaisante et informative, pas verbeuse**. On a en haut un flux de build décoratif (lignes façon `cargo`, 5 max) et une ligne de statut en direct. En bas, un journal lisible : résumés par minute, records, bannières. Trois niveaux de verbosité dans les paramètres. Les toasts sont limités à 3 à la fois.
+**Console.** Elle doit être avant tout **satisfaisante et informative, pas verbeuse**. On a en haut un flux de build décoratif (lignes façon `cargo`, 5 max) et une ligne de statut en direct. En bas, un journal lisible : résumés par minute, records, bannières. Trois niveaux de verbosité dans les paramètres. Les toasts sont limités à 3 à la fois. **Tranché (v0.4.8, Arthur : « les pop up sur téléphone c'est relou, ça bloque ») :** sur mobile, une ligne compacte juste au-dessus de la barre d'onglets, 2 au maximum, 2,5 s, et ils disparaissent dès qu'on touche l'écran.
 
 **Mobile.** Sur écran tactile, le jeu ne place jamais le curseur dans le terminal tout seul : le clavier ne s'ouvre que si on touche la ligne du prompt. Pendant la saisie, la barre d'onglets et le bloc Pipeline sont masqués pour laisser toute la hauteur au terminal. La hauteur suit la zone réellement visible (`100dvh` + `visualViewport`), y compris avec la zone du geste d'accueil sur iPhone.
 
@@ -189,7 +189,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 ## Feuille de route
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
-- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` (v0.4.7), puis **`crontab`** pour l'automatisation scriptée (v0.4.8).
+- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), puis **`crontab`** pour l'automatisation scriptée (v0.4.9).
 - **v0.5** : couche **Distro** (idée encore vague).
 
 ## Façon de travailler avec Arthur
