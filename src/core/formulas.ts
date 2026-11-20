@@ -42,7 +42,8 @@ export const PERK_PRICE = { ci_cd: new Decimal(10), auto_scaling: new Decimal(10
 export const AS_PRICE_SHARE = 0.25;
 
 /** Choices for the job priority threshold (seconds of income; 0 = never, -1 = always). */
-export const JOBS_PRIO_STEPS = [0, 10, 30, 60, 300, -1];
+// v0.4.10 (Arthur: not enough choice): 1 s and 5 s added; any value works too ("custom…" in the menu, or the command)
+export const JOBS_PRIO_STEPS = [0, 1, 5, 10, 30, 60, 300, -1];
 export const perkLocked = (s: GameState, k: PerkKey) =>
   k === "auto_scaling" && s.releases === 0 && !s.perks.auto_scaling.unlocked && !hasFork(s, "f_iac");
 export function perkPrice(s: GameState, k: PerkKey): Decimal {
