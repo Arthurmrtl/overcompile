@@ -61,7 +61,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.4.12)
+## Mécaniques actuelles (v0.4.13)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -144,7 +144,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 **Colonnes redimensionnables (PC seulement, v0.4.11, Arthur : « le volet de droite est un peu serré » une fois qu'on forke).** Poignées entre les colonnes (boutique | terminal | volet de droite) : on glisse pour élargir, double-clic = normal ⇄ large (420 / 620 px). Largeurs gardées dans `localStorage` (`overcompile-layout`, préférence d'UI, hors sauvegarde), bornées pour laisser au moins 360 px au terminal, re-bornées si la fenêtre rétrécit. Les arbres sont plafonnés à 460 px de large pour ne pas grossir avec le volet. Rien ne change sur mobile. Les fenêtres déplaçables façon bureau ont été écartées (refonte, contre « on garde l'UI actuelle »).
 
 **Tuto et astuces (v0.4.12, Arthur : « un tuto skippable, des pop-ups explicatives », PC et mobile ; `src/ui/tutorial.ts`).** Option choisie : tuto interactif au début + astuces au déblocage.
-- Tuto (nouvelle partie) en 6 étapes, chacune pointe un élément (contour violet) et attend l'action : bienvenue → compiler jusqu'à pouvoir acheter → acheter du matériel → compiler jusqu'à 10 cr → CI/CD → objectif v1.0.0. Une étape n'avance que quand la suivante est possible (sur mobile, on n'est jamais envoyé dans une boutique qu'on ne peut pas payer). Sur mobile, le tuto change d'onglet tout seul ; la bulle est en bas, au-dessus de la barre d'onglets (les toasts sont masqués pendant ce temps).
+- Tuto (nouvelle partie) en 6 étapes, chacune pointe un élément (contour violet) et attend l'action : bienvenue → compiler jusqu'à pouvoir acheter → acheter du matériel → compiler jusqu'à 10 cr → CI/CD → objectif v1.0.0. Les étapes 2 et 4, qui attendent des crédits, ont une barre de progression « x / objectif cr » (v0.4.13, demande d'Arthur). Une étape n'avance que quand la suivante est possible (sur mobile, on n'est jamais envoyé dans une boutique qu'on ne peut pas payer). Sur mobile, le tuto change d'onglet tout seul ; la bulle est en bas, au-dessus de la barre d'onglets (les toasts sont masqués pendant ce temps).
 - Astuces, une seule fois, au moment du déblocage : 1re release (étoiles, arbre, Auto-Scaling), 1er événement, 1re génération prête, challenges, teaser du Fork (sans rien dévoiler), 1er fork. Sur mobile, une astuce ne change jamais d'onglet d'elle-même (bouton « Voir »).
 - « Passer le tuto » / « Plus d'astuces » coupe tout ; Paramètres → « Revoir le tutoriel » (sur une partie avancée, chaque étape a alors un bouton Suivant).
 - État dans `s.seen` (`tut:*`, `tip:*`) : pas de changement de format de sauvegarde. Une partie avec de la progression (release, fork ou 30 min de jeu) qui n'a jamais vu le tuto est « adoptée » : pas de tuto, et pas d'astuce pour ce qu'elle a déjà débloqué (y compris importée).
@@ -197,7 +197,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 ## Feuille de route
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
-- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), réglage libre de la priorité Jobs (v0.4.10), colonnes redimensionnables sur PC (v0.4.11), tuto interactif et astuces au déblocage (v0.4.12), puis **`crontab`** pour l'automatisation scriptée.
+- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), réglage libre de la priorité Jobs (v0.4.10), colonnes redimensionnables sur PC (v0.4.11), tuto interactif et astuces au déblocage (v0.4.12), barre de progression du tuto (v0.4.13), puis **`crontab`** pour l'automatisation scriptée.
 - **v0.5** : couche **Distro** (idée encore vague).
 
 ## Façon de travailler avec Arthur

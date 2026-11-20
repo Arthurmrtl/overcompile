@@ -540,3 +540,8 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
   html.tut-on .toasts { display: none; }
   html.kbd .tut-bubble { display: none; }
 }
+
+.tut-prog { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.tut-bar { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.tut-bar i { display: block; height: 100%; width: 0; background: var(--violet); transition: width .25s; }
+.tut-prog-t { white-space: nowrap; }
