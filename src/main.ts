@@ -27,7 +27,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.4";
+const GAME_VERSION = "0.4.5";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -1130,7 +1130,10 @@ function renderStats() {
       ["st.prs", fmtInt(s.stats.prsMerged)],
       ["st.all_stars", fmt(new Decimal(s.stats.allStars))],
     ] as [string, string][] : []),
-    ...(gensRevealed(s) ? [["st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`] as [string, string]] : []),
+    ...(gensRevealed(s) ? [
+      ["st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`] as [string, string],
+      ["st.gens_total", fmtInt(s.stats.gensTotal)] as [string, string],
+    ] : []),
     ["st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease)],
     ["st.streak", fmtInt(s.stats.bestStreak)],
     ["st.interrupts", fmtInt(s.stats.interrupts)],

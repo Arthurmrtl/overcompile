@@ -47,7 +47,7 @@ export function metricValue(s: GameState, m: Metric): Decimal {
     case "forks": return new Decimal(s.forks ?? 0);
     case "contributors": return new Decimal(s.lifetimeContributors ?? 0);
     case "prs": return new Decimal(s.stats.prsMerged ?? 0);
-    case "gens": return new Decimal((s.gens?.cpu ?? 0) + (s.gens?.ram ?? 0) + (s.gens?.disk ?? 0));
+    case "gens": return new Decimal(s.stats.gensTotal ?? 0);
   }
 }
 export const PER_RUN_METRICS: Metric[] = ["cpu", "ram", "disk", "jobs"];

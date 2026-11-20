@@ -23,7 +23,10 @@ export interface GameState {
   runEarned: Decimal;
   totalEarned: Decimal;
   hw: Record<HwKey, number>;
-  /** Hardware generations: permanent, kept across releases (never reset). */
+  /**
+   * Hardware generations of the current run (v0.4.5): a generation sends the hardware back to
+   * level 1 for a strong bonus, and every release (or fork, or challenge start) resets them.
+   */
   gens: Record<GenKey, number>;
   /** "Release candidate" event caught: the next release gives more stars. */
   rcPending: boolean;
@@ -68,6 +71,8 @@ export interface GameState {
     fastestFork: number | null;
     prsMerged: number;
     allStars: number;          // stars earned over every fork (stats only)
+    gensTotal: number;         // generations ever done (achievements, never reset)
+    bestRunGens: number;       // most generations in one run during this fork cycle (contributors)
   };
   settings: { lang: Lang; notation: Notation; logLevel: "full" | "reduced" | "minimal"; buyAmount: BuyAmount };
   /* ---------- Fork (v0.4, prestige layer 2) ---------- */
@@ -88,7 +93,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -126,7 +131,7 @@ export function newState(): GameState {
     seen: [],
     achClaimed: [],
     achievements: [],
-    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0, forkTime: 0, fastestFork: null, prsMerged: 0, allStars: 0 },
+    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0, forkTime: 0, fastestFork: null, prsMerged: 0, allStars: 0, gensTotal: 0, bestRunGens: 0 },
     settings: { lang: browserLang(), notation: "standard", logLevel: "reduced", buyAmount: 1 },
     forks: 0,
     contributors: 0,
@@ -243,6 +248,13 @@ function migrate(s: GameState, from: number) {
   if (from < 7) {
     // v0.4.0 → v0.4.1: Fork upgrades (infinite levels, paid in contributors)
     s.forkUpgrades = {};
+  }
+  if (from < 8) {
+    // v0.4.4 → v0.4.5: generations become per run. The ones owned stay until the next release;
+    // they count as done (achievements) and as this cycle's best run (contributors).
+    const n = s.gens.cpu + s.gens.ram + s.gens.disk;
+    s.stats.gensTotal = n;
+    s.stats.bestRunGens = n;
   }
   s.version = SAVE_VERSION;
 }

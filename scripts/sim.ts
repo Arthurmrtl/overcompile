@@ -102,8 +102,10 @@ while (t < H * 3600) {
   if (adv.advised) {
     const rt = s.stats.runTime;
     const jobsAtRelease = s.hw.jobs;
+    const lvAtRelease = `${s.hw.cpu}/${s.hw.ram}/${s.hw.disk}`;
+    const gensAtRelease = `${s.gens.cpu}/${s.gens.ram}/${s.gens.disk}`;
     e.release();
-    console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/${TALENTS.length}, jobs ${jobsAtRelease}, gens ${s.gens.cpu}/${s.gens.ram}/${s.gens.disk}, next base ${releaseBase(s).toExponential(1)})`);
+    console.log(`${fmt(t)}  v${s.releases}.0.0  +${gain}★ in ${Math.round(rt / 60)} min  (lifetime ${s.lifetimeStars}, talents ${s.talents.length}/${TALENTS.length}, jobs ${jobsAtRelease}, lv ${lvAtRelease}, gens ${gensAtRelease}, next base ${releaseBase(s).toExponential(1)})`);
     spendStars();
     if (s.talents.length === TALENTS.length && treeLoggedForks !== s.forks) {
       treeLoggedForks = s.forks;
