@@ -16,7 +16,7 @@ import {
 } from "./events";
 import { UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
 import {
-  type BuyAmount, type GameState, type GenKey, type HwKey, type PerkKey, SAVE_KEY, deserialize, newState, serialize,
+  type BuyAmount, type GameState, type GenKey, type HwKey, type PerkKey, SAVE_KEY, GEN_KEYS, deserialize, newState, serialize,
 } from "./state";
 
 export type GameEvent =
@@ -30,7 +30,7 @@ export type GameEvent =
   | { t: "challenge_start"; id: string }
   | { t: "challenge_done"; id: string }
   | { t: "challenge_exit"; id: string }
-  | { t: "generation"; key: GenKey; gen: number }
+  | { t: "generation"; key: GenKey; gen: number; auto?: boolean }
   | { t: "event_spawn"; id: string; window: number }
   | { t: "event_caught"; id: string; credits?: Decimal; builds?: number }
   | { t: "event_missed"; id: string }
@@ -137,6 +137,11 @@ export class Engine {
     if (s.perks.auto_scaling.enabled && this.autoScaleTimer >= autoScaleInterval(s)) {
       this.autoScaleTimer = 0;
       this.autoScale();
+    }
+
+    // Fork talent `rnv` (Renovate): generations happen on their own, per-hardware switch
+    if (hasFork(s, "f_renovate") && gensRevealed(s)) {
+      for (const k of GEN_KEYS) if (s.autogen[k] && this.canGenerate(k) === "ok") this.generate(k, true);
     }
 
     // Challenge completion
@@ -419,7 +424,7 @@ export class Engine {
   }
 
   /** Moves a hardware to its next generation: back to level 1, the bonus lasts until the release. */
-  generate(key: GenKey): "ok" | "locked" | "level" {
+  generate(key: GenKey, auto = false): "ok" | "locked" | "level" {
     const r = this.canGenerate(key);
     if (r !== "ok") return r;
     const s = this.s;
@@ -427,7 +432,7 @@ export class Engine {
     s.hw[key] = 1;
     s.stats.gensTotal++;
     s.stats.bestRunGens = Math.max(s.stats.bestRunGens, s.gens.cpu + s.gens.ram + s.gens.disk);
-    this.emit({ t: "generation", key, gen: s.gens[key] });
+    this.emit({ t: "generation", key, gen: s.gens[key], auto });
     this.checkAchievements();
     return "ok";
   }

@@ -395,6 +395,8 @@ const en: Dict = {
   "a.opt_100": "Micro-optimizer", "a.opt_100.desc": "Buy 100 optimization levels.",
   // Hardware generations
   "help.gen": "gen [cpu|ram|disk] — move hardware to its next generation",
+  "term.gen_auto": "Auto-generation of {r}: {s}",
+  "term.usage_gen_auto": "Usage: gen auto <cpu|ram|disk>",
   "gen.desc": "At the required level, send a hardware back to level 1 for a big bonus until the next release. Every release resets the generations.",
   "gen.label": "Gen {n}",
   "gen.next": "next at lvl {l}",
@@ -488,6 +490,7 @@ const en: Dict = {
   "ft.f_sponsors": "GitHub Sponsors", "ft.f_sponsors.desc": "Every run starts with +10 levels of CPU, RAM and Disk.",
   "ft.f_lts": "LTS branch", "ft.f_lts.desc": "The release threshold grows ×1.15 per release instead of ×1.2.",
   "ft.f_mirrors": "Mirrors", "ft.f_mirrors.desc": "Hardware generations need 20 % fewer levels.",
+  "ft.f_renovate": "Renovate", "ft.f_renovate.desc": "Hardware generations happen on their own as soon as they can (AUTO switch per hardware on its Gen line, or gen auto <cpu|ram|disk>).",
   "ft.f_bench": "Prebuilt binaries", "ft.f_bench.desc": "Every fork starts with the first three release talents (inc, rev, ci).",
   "ft.f_dependabot": "Dependabot", "ft.f_dependabot.desc": "The common build events (coffee, cargo update, flaky test) are caught automatically.",
   "ft.f_awesome": "Awesome list", "ft.f_awesome.desc": "+2 stars on every release.",
@@ -954,6 +957,8 @@ const fr: Dict = {
   "a.opt_100": "Micro-optimiseur", "a.opt_100.desc": "Achète 100 niveaux d'optimisation.",
   // Générations de matériel
   "help.gen": "gen [cpu|ram|disk] — passe un matériel à la génération suivante",
+  "term.gen_auto": "Génération automatique de {r} : {s}",
+  "term.usage_gen_auto": "Usage : gen auto <cpu|ram|disk>",
   "gen.desc": "Au niveau requis, un matériel repart au niveau 1 contre un gros bonus jusqu'à la prochaine release. Chaque release remet les générations à zéro.",
   "gen.label": "Gén. {n}",
   "gen.next": "suivante au niv. {l}",
@@ -1047,6 +1052,7 @@ const fr: Dict = {
   "ft.f_sponsors": "GitHub Sponsors", "ft.f_sponsors.desc": "Chaque run commence avec +10 niveaux de CPU, RAM et Disque.",
   "ft.f_lts": "Branche LTS", "ft.f_lts.desc": "Le seuil de release augmente de ×1,15 par release au lieu de ×1,2.",
   "ft.f_mirrors": "Miroirs", "ft.f_mirrors.desc": "Les générations de matériel demandent 20 % de niveaux en moins.",
+  "ft.f_renovate": "Renovate", "ft.f_renovate.desc": "Les générations de matériel se font toutes seules dès que possible (case AUTO par matériel sur sa ligne Gén., ou gen auto <cpu|ram|disk>).",
   "ft.f_bench": "Binaires précompilés", "ft.f_bench.desc": "Chaque fork commence avec les trois premiers talents de release (inc, rev, ci).",
   "ft.f_dependabot": "Dependabot", "ft.f_dependabot.desc": "Les événements de build courants (café, cargo update, test instable) sont attrapés automatiquement.",
   "ft.f_awesome": "Awesome list", "ft.f_awesome.desc": "+2 étoiles à chaque release.",
