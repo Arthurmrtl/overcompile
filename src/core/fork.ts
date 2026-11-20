@@ -149,7 +149,8 @@ export function contributorBreakdown(s: GameState) {
   const early = new Decimal(2).pow((needBase - 1) / FORK.earlyK);
   const late = new Decimal(needBase).pow(1 / FORK.lateExp);
   const nextAt = early.min(late).mul(FORK.starsBase).ceil();
-  return { stars: s.lifetimeStars, base: base.toNumber(), gens, multGens, chal, multChal, multSig, ups, total, nextAt };
+  const exact = contributorsExact(s).toNumber();
+  return { stars: s.lifetimeStars, base: base.toNumber(), gens, multGens, chal, multChal, multSig, ups, exact, total, nextAt };
 }
 
 /** Stars to earn in this cycle for the first contributor. */
