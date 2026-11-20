@@ -57,6 +57,7 @@ function spendStars() {
   }
 }
 
+let forkAt = 0, asForkLogged = 0; const asAfterFork: number[] = [];
 while (t < H * 3600) {
   if (!s.pipeline) e.compile();
   if (!s.perks.ci_cd.unlocked) e.buyPerk("ci_cd");
@@ -66,6 +67,7 @@ while (t < H * 3600) {
     if (!locked && s.credits.gte(cost)) {
       e.buyPerk("auto_scaling");
       if (!asLogged) { asLogged = true; milestones.push(`Auto-Scaling bought ${fmt(t)} (after release ${s.releases})`); }
+      if (s.forks > 0 && s.releases === 0 && asForkLogged < s.forks) { asForkLogged = s.forks; asAfterFork.push(Math.round((t - forkAt) / 6) / 10); }
     } else if ((manualTimer += dt) >= 4) {
       // A human buys by hand about every 4 s; once the perk is for sale, keep 10 % of its price aside
       manualTimer = 0;
@@ -119,6 +121,7 @@ while (t < H * 3600) {
       const cycle = t - cycleStart;
       const stars = s.lifetimeStars.toNumber();
       const gain = e.fork();
+      forkAt = t;
       if (gain !== null) {
         cycleStart = t;
         spendContributors();
@@ -130,5 +133,6 @@ while (t < H * 3600) {
   }
 }
 for (const c of s.challengesDone) milestones.push(`challenge done: ${c}`);
+milestones.push(`Auto-Scaling bought after fork (min): ${asAfterFork.join(" ")}`);
 console.log(milestones.join("\n"));
 console.log("forks", s.forks, "contributors", s.lifetimeContributors, "PRs merged", s.stats.prsMerged, "events caught", s.stats.events, "optimizations", JSON.stringify(s.upgrades), "achievements", s.achievements.length, "rate", expectedRate(s).toExponential(2));

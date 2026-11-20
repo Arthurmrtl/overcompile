@@ -47,8 +47,8 @@ export const perkLocked = (s: GameState, k: PerkKey) =>
   k === "auto_scaling" && s.releases === 0 && !s.perks.auto_scaling.unlocked && !hasFork(s, "f_iac");
 export function perkPrice(s: GameState, k: PerkKey): Decimal {
   if (k !== "auto_scaling") return PERK_PRICE[k];
-  // Fork talent "iac": sold from the start of a fork, at the old 1 000 cr before the first release
-  if (s.releases === 0 && hasFork(s, "f_iac")) return PERK_PRICE.auto_scaling;
+  // Fork talent "iac" only makes it sold from the start of a fork, at the normal price (v0.4.7: was
+  // 1 000 cr, which removed the manual start of every fork; Arthur wants a few minutes of it to stay)
   return releaseBase(s).mul(AS_PRICE_SHARE).floor();
 }
 
