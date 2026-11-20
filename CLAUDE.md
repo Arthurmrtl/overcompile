@@ -61,7 +61,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.4.10)
+## Mécaniques actuelles (v0.4.11)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -123,7 +123,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
 - Nouvel onglet Fork (après le 1er fork), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
 - Simulation v0.4.1 (`npm run sim -- 10`, 3 runs ; le joueur forke quand le conseiller le dit, fusionne toutes les PR, achète les talents Fork puis les améliorations) : 1er fork vers 3 h 10–3 h 20 avec 5–6 contributeurs ; 2e cycle 35–45 min, 3e ~22 min, ensuite cycles stables de 33–36 min ; contributeurs par fork en hausse lente (5 → 12 → 24 → 30 → 50 → 75 au 12e fork) ; arbre Fork complet au 5e fork (~5 h 20), puis ~1 niveau d'amélioration Fork par fork. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
-- Pas encore fait : `crontab` (v0.4.11).
+- Pas encore fait : `crontab` (après le tuto).
 
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
 
@@ -140,6 +140,8 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 **Mobile.** Sur écran tactile, le jeu ne place jamais le curseur dans le terminal tout seul : le clavier ne s'ouvre que si on touche la ligne du prompt. Pendant la saisie, la barre d'onglets et le bloc Pipeline sont masqués pour laisser toute la hauteur au terminal. La hauteur suit la zone réellement visible (`100dvh` + `visualViewport`), y compris avec la zone du geste d'accueil sur iPhone.
 
 **Tranché (v0.4.3, Arthur) :** la barre d'onglets du bas sur mobile n'a plus d'emojis (« IA slop ») : icônes au trait en SVG (`NAV_ICONS` dans `main.ts`, couleur du thème). Le 3e onglet s'appelle **Progression / Progress** et plus « Release », car il contient aussi Challenges, Fork, Succès et Stats.
+
+**Colonnes redimensionnables (PC seulement, v0.4.11, Arthur : « le volet de droite est un peu serré » une fois qu'on forke).** Poignées entre les colonnes (boutique | terminal | volet de droite) : on glisse pour élargir, double-clic = normal ⇄ large (420 / 620 px). Largeurs gardées dans `localStorage` (`overcompile-layout`, préférence d'UI, hors sauvegarde), bornées pour laisser au moins 360 px au terminal, re-bornées si la fenêtre rétrécit. Les arbres sont plafonnés à 460 px de large pour ne pas grossir avec le volet. Rien ne change sur mobile. Les fenêtres déplaçables façon bureau ont été écartées (refonte, contre « on garde l'UI actuelle »).
 
 **Terminal / CLI.** **Tranché :** on ne change rien pour le moment. On a douté que les joueurs tapent vraiment des commandes, mais le terminal fait l'identité du jeu, et tout reste faisable à la souris.
 
@@ -189,7 +191,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 ## Feuille de route
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
-- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), réglage libre de la priorité Jobs (v0.4.10), puis **`crontab`** pour l'automatisation scriptée (v0.4.11).
+- **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), réglage libre de la priorité Jobs (v0.4.10), colonnes redimensionnables sur PC (v0.4.11), tuto interactif et astuces au déblocage (v0.4.12), puis **`crontab`** pour l'automatisation scriptée.
 - **v0.5** : couche **Distro** (idée encore vague).
 
 ## Façon de travailler avec Arthur

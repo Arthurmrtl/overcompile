@@ -27,7 +27,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.10";
+const GAME_VERSION = "0.4.11";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -104,6 +104,70 @@ const NAV_ICONS = {
   progress: svgIcon('<path d="M4 20h16"/><rect x="5.5" y="13" width="3" height="5"/><rect x="10.5" y="9" width="3" height="9"/><rect x="15.5" y="5" width="3" height="13"/>'),
 };
 
+/**
+ * Desktop only (v0.4.11, Arthur: the right panel got cramped once forking): the shop and side
+ * columns can be resized by dragging the handles between columns. Double-click: default ⇄ wide.
+ * A UI preference, kept in its own localStorage key (not in the save).
+ */
+const LAYOUT_KEY = "overcompile-layout";
+const COL_DEFAULT = { shop: 300, side: 370 };
+const COL_WIDE = { shop: 420, side: 620 };
+const COL_MIN = { shop: 240, side: 300 };
+const CENTER_MIN = 360;
+let colW: { shop: number | null; side: number | null } = { shop: null, side: null };
+try { colW = { ...colW, ...JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}") }; } catch { /* default widths */ }
+function applyColumns() {
+  const l = document.querySelector<HTMLElement>(".layout");
+  if (!l) return;
+  for (const k of ["shop", "side"] as const) {
+    if (colW[k] === null) l.style.removeProperty(`--w-${k}`);
+    else l.style.setProperty(`--w-${k}`, `${colW[k]}px`);
+  }
+}
+function clampColumn(k: "shop" | "side", w: number) {
+  const other = k === "shop" ? colW.side ?? COL_DEFAULT.side : colW.shop ?? COL_DEFAULT.shop;
+  const max = window.innerWidth - other - CENTER_MIN - 48;
+  return Math.round(Math.max(COL_MIN[k], Math.min(w, max)));
+}
+// A smaller window must still leave the terminal its minimum width
+window.addEventListener("resize", () => {
+  for (const k of ["shop", "side"] as const) if (colW[k] !== null) colW[k] = clampColumn(k, colW[k]!);
+  applyColumns();
+});
+function saveColumns() { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(colW)); } catch { /* not kept */ } }
+function initColumnHandles() {
+  const l = $(".layout");
+  for (const handle of l.querySelectorAll<HTMLElement>(".col-handle")) {
+    const k = handle.dataset.handle as "shop" | "side";
+    handle.addEventListener("pointerdown", ev => {
+      ev.preventDefault();
+      handle.setPointerCapture(ev.pointerId);
+      handle.classList.add("drag");
+      document.documentElement.classList.add("resizing");
+      const rect = l.getBoundingClientRect();
+      const move = (e: PointerEvent) => {
+        colW[k] = clampColumn(k, k === "shop" ? e.clientX - rect.left - 12 : rect.right - e.clientX - 12);
+        applyColumns();
+      };
+      const up = () => {
+        handle.classList.remove("drag");
+        document.documentElement.classList.remove("resizing");
+        handle.removeEventListener("pointermove", move);
+        saveColumns();
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up, { once: true });
+      handle.addEventListener("pointercancel", up, { once: true });
+    });
+    handle.addEventListener("dblclick", () => {
+      colW[k] = colW[k] !== null && colW[k]! > COL_DEFAULT[k] + 20 ? null : clampColumn(k, COL_WIDE[k]);
+      applyColumns();
+      saveColumns();
+    });
+  }
+  applyColumns();
+}
+
 function buildLayout() {
   document.title = "overcompile";
   app.innerHTML = `
@@ -134,6 +198,7 @@ function buildLayout() {
         <div class="perk-list" data-r="perks"></div>
       </div>
     </section>
+    <div class="col-handle" data-handle="shop" role="separator" aria-orientation="vertical" title="${t("layout.resize")}"></div>
     <section class="col col-center">
       <div class="card pipeline">
         <div class="card-h">
@@ -160,6 +225,7 @@ function buildLayout() {
         <div class="term-host" data-r="termHost"></div>
       </div>
     </section>
+    <div class="col-handle" data-handle="side" role="separator" aria-orientation="vertical" title="${t("layout.resize")}"></div>
     <section class="col col-side">
       <div class="tabs" role="tablist">
         <button data-tab="release">${t("tab.release")} <span class="badge new" data-r="relBadge" hidden>!</span></button>
@@ -259,6 +325,7 @@ function buildLayout() {
   lastChKey = "";
   lastObjKey = "";
   bindLayout();
+  initColumnHandles();
   render();
 }
 
