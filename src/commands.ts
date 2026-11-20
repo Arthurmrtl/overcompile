@@ -443,8 +443,14 @@ export function createCommands(c: GameCtx) {
             pad(lvl, 12), ["→ " + genBonusText(k), "c-amber"]);
           if (s.gens[k] > 0) say(["      " + t("gen.now", { b: genBonusText(k, s.gens[k]) }), "c-dim"]);
         }
-        say(["gen <cpu|ram|disk>", "c-dim"]);
+        say(["gen <cpu|ram|disk>" + (hasFork(s, "f_renovate") ? " · gen auto <cpu|ram|disk>" : ""), "c-dim"]);
         return;
+      }
+      if (arg === "auto" && hasFork(s, "f_renovate")) {
+        const k = args[1]?.toLowerCase() as GenKey;
+        if (!GEN_KEYS.includes(k)) return void say(t("term.usage_gen_auto"));
+        s.autogen[k] = !s.autogen[k];
+        return void say(INFO, " " + t("term.gen_auto", { r: hwDisplayName(k), s: s.autogen[k] ? t("perk.enabled") : t("perk.disabled") }));
       }
       if (!GEN_KEYS.includes(arg as GenKey)) return void say(t("term.usage_gen"));
       const k = arg as GenKey;

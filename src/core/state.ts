@@ -46,6 +46,8 @@ export interface GameState {
   releases: number;
   talents: string[];
   autobuy: Record<HwKey, boolean>;
+  /** Fork talent `rnv`: which hardware generates on its own as soon as it can (v0.4.9). */
+  autogen: Record<GenKey, boolean>;
   autoRelease: { enabled: boolean; threshold: number };
   /** Levels of the infinite star upgrades (Optimizations). */
   upgrades: Record<string, number>;
@@ -93,7 +95,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -124,6 +126,7 @@ export function newState(): GameState {
     releases: 0,
     talents: [],
     autobuy: { cpu: true, ram: true, disk: true, jobs: true },
+    autogen: { cpu: true, ram: true, disk: true },
     autoRelease: { enabled: false, threshold: 10 },
     upgrades: {},
     challenge: null,
@@ -168,6 +171,7 @@ export function deserialize(json: string): GameState {
       auto_scaling: { ...base.perks.auto_scaling, ...raw.perks?.auto_scaling },
     },
     autobuy: { ...base.autobuy, ...raw.autobuy },
+    autogen: { ...base.autogen, ...raw.autogen },
     autoRelease: { ...base.autoRelease, ...raw.autoRelease },
     stats: { ...base.stats, ...raw.stats },
     settings: { ...base.settings, ...raw.settings },
@@ -255,6 +259,10 @@ function migrate(s: GameState, from: number) {
     const n = s.gens.cpu + s.gens.ram + s.gens.disk;
     s.stats.gensTotal = n;
     s.stats.bestRunGens = n;
+  }
+  if (from < 9) {
+    // v0.4.8 → v0.4.9: per-hardware switches of the Fork talent `rnv` (auto-generation), all on
+    s.autogen = { cpu: true, ram: true, disk: true };
   }
   s.version = SAVE_VERSION;
 }

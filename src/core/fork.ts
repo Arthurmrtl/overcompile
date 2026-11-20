@@ -53,10 +53,11 @@ export const FORK_TALENTS: ForkTalent[] = [
   { id: "f_lts", tag: "lts", cost: 2, req: ["f_iac"], row: 2, col: 0 },                     // release threshold ×1.15 per release instead of ×1.2
   { id: "f_sponsors", tag: "spn", cost: 2, req: ["f_iac"], row: 2, col: 1 },                // every run starts with +10 CPU/RAM/Disk levels
   { id: "f_cdn", tag: "cdn", cost: 3, req: ["f_oc"], row: 2, col: 3 },                      // builds +25 % faster
-  { id: "f_mirrors", tag: "mir", cost: 3, req: ["f_oc"], row: 2, col: 4 },                  // a fork keeps half the hardware generations
+  { id: "f_mirrors", tag: "mir", cost: 3, req: ["f_oc"], row: 2, col: 4 },                  // generations need 20 % fewer levels
   { id: "f_dependabot", tag: "dpb", cost: 5, req: ["f_lts"], row: 3, col: 0 },              // common build events are caught automatically
   { id: "f_bench", tag: "bin", cost: 3, req: ["f_sponsors", "f_cdn"], row: 3, col: 2 },     // each fork starts with inc, rev and ci owned
   { id: "f_hn", tag: "hn", cost: 5, req: ["f_mirrors"], row: 3, col: 4 },                   // stars +15 %
+  { id: "f_renovate", tag: "rnv", cost: 5, req: ["f_mirrors"], row: 3, col: 3 },            // generations happen on their own (v0.4.9, per-hardware switch)
   { id: "f_keep", tag: "kp", cost: 8, req: ["f_dependabot", "f_bench"], row: 4, col: 1 },   // a fork keeps the CI and Auto-Scaling talents
   { id: "f_awesome", tag: "awe", cost: 5, req: ["f_bench", "f_hn"], row: 4, col: 3 },       // +2 stars on every release
   { id: "f_rel", tag: "sig", cost: 8, req: ["f_keep", "f_awesome"], row: 5, col: 2 },       // contributors +10 % on every fork

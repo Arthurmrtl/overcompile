@@ -27,7 +27,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.8";
+const GAME_VERSION = "0.4.9";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -306,8 +306,13 @@ function buildHardware() {
       const go = (ev: Event) => { ev.stopPropagation(); cmd.run(`gen ${k}`, true); };
       genBtn.addEventListener("click", go);
       genBtn.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(ev); } });
+      // Fork talent `rnv`: per-hardware auto-generation switch
+      const genAuto = h("label", { class: "auto-pill", "data-f": "genAuto", hidden: "" }, h("input", { type: "checkbox" }), h("span", {}, t("auto")));
+      genAuto.addEventListener("click", ev => ev.stopPropagation());
+      genAuto.querySelector("input")!.addEventListener("change", () => cmd.run(`gen auto ${k}`, true));
       card.append(h("div", { class: "hw-gen", "data-f": "gen", hidden: "" },
         h("span", { class: "hw-gen-lbl", "data-f": "genLbl" }),
+        genAuto,
         h("span", { class: "hw-gen-next", "data-f": "genNext" }),
         genBtn,
       ));
@@ -602,6 +607,10 @@ function renderGen(card: HTMLElement, k: HwKey) {
   const g = k as GenKey;
   const state = engine.canGenerate(g);
   setText($("[data-f=genLbl]", row), t("gen.label", { n: s.gens[g] }));
+  const genAuto = $("[data-f=genAuto]", row);
+  const showAuto = hasFork(s, "f_renovate");
+  if (genAuto.hidden === showAuto) genAuto.hidden = !showAuto;
+  if (showAuto) { const box = $<HTMLInputElement>("input", genAuto); if (box.checked !== s.autogen[g]) box.checked = s.autogen[g]; }
   const next = $("[data-f=genNext]", row);
   setText(next, state === "locked" ? "🔒" : t("gen.next", { l: genRequired(s, g) }));
   const btn = $("[data-f=genBtn]", row);
@@ -1449,7 +1458,7 @@ engine.on((e: GameEvent) => {
       const r = t(`hw.${e.key}`);
       const b = genBonusText(e.key);
       term.println(["[ GEN ]", "c-violet"], " " + t("term.gen_ok", { r, n: e.gen, f: t(`gen.flavor.${e.key}`), b, l: engine.s.hw[e.key] }));
-      toast(`⬆ ${r} · ${t("gen.label", { n: e.gen })}`, b);
+      if (!e.auto) toast(`⬆ ${r} · ${t("gen.label", { n: e.gen })}`, b); // auto-generations (rnv): journal only
       engine.save();
       break;
     }
