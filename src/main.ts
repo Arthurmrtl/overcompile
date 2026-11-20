@@ -1,4 +1,5 @@
 import "./style.css";
+import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
 import Decimal from "break_eternity.js";
 import { Engine, type GameEvent } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
@@ -27,7 +28,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.11";
+const GAME_VERSION = "0.4.12";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -517,6 +518,7 @@ function bindLayout() {
 /* ================= Render ================= */
 function render() {
   const s = engine.s;
+  updateTutorial();
   setText($("[data-r=credits]"), fmt(s.credits));
   setText($("[data-r=rate]"), s.pipeline || engine.ciActive ? fmt(expectedRate(s)) : "0");
   setText($("[data-r=stars]"), fmt(s.stars));
@@ -1358,6 +1360,8 @@ function openSettings() {
       setText(msg, t("set.import.fail"));
     }
   });
+  const tutBtn = h("button", { class: "btn" }, t("set.tutorial"));
+  tutBtn.addEventListener("click", () => { replayTutorial(); closeModal(); render(); });
   const resetBtn = h("button", { class: "btn danger" }, t("set.reset"));
   resetBtn.addEventListener("click", () => {
     const yes = h("button", { class: "btn danger" }, t("confirm"));
@@ -1385,6 +1389,7 @@ function openSettings() {
     h("div", { class: "row" }, exportBtn, importBtn),
     msg,
     h("hr"),
+    tutBtn,
     resetBtn,
   );
 }
@@ -1710,6 +1715,19 @@ async function halt() {
 
 /* ================= Start ================= */
 buildLayout();
+initTutorial({
+  engine: () => engine,
+  show: (panel, tab) => {
+    if (tab) { sideTab = tab; }
+    if (window.matchMedia("(max-width: 900px)").matches && mobilePanel !== panel) {
+      mobilePanel = panel;
+      $("main.layout").dataset.mobile = panel;
+    }
+    setTimeout(render, 0); // called from render(): never re-enter it
+  },
+  mobile: () => window.matchMedia("(max-width: 900px)").matches,
+  modalOpen: () => !$("[data-r=modal]").hidden,
+});
 const away = (Date.now() - engine.s.lastSeen) / 1000;
 boot().then(() => {
   const rep = engine.simulateOffline(away);
