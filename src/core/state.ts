@@ -76,8 +76,9 @@ export interface GameState {
   contributors: number;
   /** Every contributor ever earned (passive bonus, never reset). */
   lifetimeContributors: number;
-  /** Fork talents, never reset. */
+  /** Fork talents and Fork upgrades (levels), never reset. */
   forkTalents: string[];
+  forkUpgrades: Record<string, number>;
   /** Open pull requests, and the boosts of merged ones (until the next release). */
   prs: PullRequest[];
   prNext: number;      // seconds before the next PR
@@ -87,7 +88,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -131,6 +132,7 @@ export function newState(): GameState {
     contributors: 0,
     lifetimeContributors: 0,
     forkTalents: [],
+    forkUpgrades: {},
     prs: [],
     prNext: 600,
     prSeq: 0,
@@ -174,6 +176,7 @@ export function deserialize(json: string): GameState {
   delete (s.settings as Record<string, unknown>).verbose;
   s.achClaimed = [...(raw.achClaimed ?? [])];
   s.forkTalents = [...(raw.forkTalents ?? [])];
+  s.forkUpgrades = { ...(raw.forkUpgrades ?? {}) };
   s.prs = Array.isArray(raw.prs) ? raw.prs.map((p: PullRequest) => ({ ...p })) : [];
   s.prBoost = { ...base.prBoost, ...raw.prBoost };
   // v0.2.2–0.2.4 first-run objectives became the first tiers of the achievement chains
@@ -236,6 +239,10 @@ function migrate(s: GameState, from: number) {
     s.stats.fastestFork = null;
     s.stats.prsMerged = 0;
     s.stats.allStars = s.lifetimeStars.toNumber();
+  }
+  if (from < 7) {
+    // v0.4.0 → v0.4.1: Fork upgrades (infinite levels, paid in contributors)
+    s.forkUpgrades = {};
   }
   s.version = SAVE_VERSION;
 }

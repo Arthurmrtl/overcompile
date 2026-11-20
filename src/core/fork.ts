@@ -40,19 +40,27 @@ export interface ForkTalent {
   tag: string;   // short text tag shown in the tree (no emojis)
   cost: number;
   req: string[];
+  row: number;   // position in the drawn tree (5 columns)
+  col: number;
 }
 
+/* Two kinds, alternating down the tree (Arthur, v0.4.1): restart boosts (stars, levels,
+ * talents, automation at the start of a fork) and fixed % bonuses (bought once). */
 export const FORK_TALENTS: ForkTalent[] = [
-  { id: "f_template", tag: "tpl", cost: 1, req: [] },                 // each fork starts with 10 stars
-  { id: "f_iac", tag: "iac", cost: 1, req: ["f_template"] },          // Auto-Scaling sold before the 1st release, 1 000 cr
-  { id: "f_sponsors", tag: "spn", cost: 2, req: ["f_template"] },     // every run starts with +10 CPU/RAM/Disk levels
-  { id: "f_lts", tag: "lts", cost: 2, req: ["f_iac"] },               // release threshold ×1.15 per release instead of ×1.2
-  { id: "f_mirrors", tag: "mir", cost: 3, req: ["f_sponsors"] },      // a fork keeps half the hardware generations
-  { id: "f_bench", tag: "bin", cost: 3, req: ["f_sponsors"] },        // each fork starts with inc, rev and ci owned
-  { id: "f_dependabot", tag: "dpb", cost: 5, req: ["f_lts"] },        // common build events are caught automatically
-  { id: "f_awesome", tag: "awe", cost: 5, req: ["f_mirrors", "f_bench"] }, // +2 stars on every release
-  { id: "f_keep", tag: "kp", cost: 8, req: ["f_dependabot"] },        // a fork keeps the Auto-Scaling branch talents
-  { id: "f_upstream", tag: "ups", cost: 13, req: ["f_awesome", "f_keep"] }, // +2 contributors on every fork
+  { id: "f_template", tag: "tpl", cost: 1, req: [], row: 0, col: 2 },                       // each fork starts with 10 stars
+  { id: "f_iac", tag: "iac", cost: 1, req: ["f_template"], row: 1, col: 1 },                // Auto-Scaling sold from the start, 1 000 cr
+  { id: "f_oc", tag: "oc", cost: 2, req: ["f_template"], row: 1, col: 3 },                  // rewards +50 %
+  { id: "f_lts", tag: "lts", cost: 2, req: ["f_iac"], row: 2, col: 0 },                     // release threshold ×1.15 per release instead of ×1.2
+  { id: "f_sponsors", tag: "spn", cost: 2, req: ["f_iac"], row: 2, col: 1 },                // every run starts with +10 CPU/RAM/Disk levels
+  { id: "f_cdn", tag: "cdn", cost: 3, req: ["f_oc"], row: 2, col: 3 },                      // builds +25 % faster
+  { id: "f_mirrors", tag: "mir", cost: 3, req: ["f_oc"], row: 2, col: 4 },                  // a fork keeps half the hardware generations
+  { id: "f_dependabot", tag: "dpb", cost: 5, req: ["f_lts"], row: 3, col: 0 },              // common build events are caught automatically
+  { id: "f_bench", tag: "bin", cost: 3, req: ["f_sponsors", "f_cdn"], row: 3, col: 2 },     // each fork starts with inc, rev and ci owned
+  { id: "f_hn", tag: "hn", cost: 5, req: ["f_mirrors"], row: 3, col: 4 },                   // stars +15 %
+  { id: "f_keep", tag: "kp", cost: 8, req: ["f_dependabot", "f_bench"], row: 4, col: 1 },   // a fork keeps the CI and Auto-Scaling talents
+  { id: "f_awesome", tag: "awe", cost: 5, req: ["f_bench", "f_hn"], row: 4, col: 3 },       // +2 stars on every release
+  { id: "f_rel", tag: "sig", cost: 8, req: ["f_keep", "f_awesome"], row: 5, col: 2 },       // contributors +10 % on every fork
+  { id: "f_upstream", tag: "ups", cost: 13, req: ["f_rel"], row: 6, col: 2 },               // +2 contributors on every fork
 ];
 export const FORK_TALENT_BY_ID = Object.fromEntries(FORK_TALENTS.map(t => [t.id, t]));
 export const hasFork = (s: GameState, id: string) => s.forkTalents.includes(id);
@@ -65,6 +73,31 @@ export const PREBUILT_TALENTS = ["warm_cache", "code_review", "ci_preinstalled"]
 export const SEED_LEVELS = 10;      // f_sponsors: extra CPU/RAM/Disk levels at the start of every run
 export const AWESOME_STARS = 2;     // f_awesome: flat stars added to every release
 export const UPSTREAM_CONTRIBUTORS = 2; // f_upstream: flat contributors added to every fork
+/** Fixed % bonuses of Fork talents (bought once, not scaling with contributors). */
+export const FORK_PCT = { oc: 0.5, cdn: 0.25, hn: 0.15, rel: 0.1 };
+
+/* ---------------- Fork upgrades (contributors, infinite levels) ----------------
+ * A sink for contributors once the Fork tree is complete: small % per level, price ×2.5 per level. */
+export interface ForkUpgrade { id: "fu_bounties" | "fu_mentoring"; base: number; ratio: number; pct: number }
+export const FORK_UPGRADES: ForkUpgrade[] = [
+  { id: "fu_bounties", base: 3, ratio: 2.5, pct: 0.1 },   // rewards +10 % per level
+  { id: "fu_mentoring", base: 5, ratio: 2.5, pct: 0.03 }, // stars +3 % per level
+];
+export const FORK_UPGRADE_BY_ID = Object.fromEntries(FORK_UPGRADES.map(u => [u.id, u]));
+export const forkUpgradeLevel = (s: GameState, id: string) => s.forkUpgrades[id] ?? 0;
+export const forkUpgradePrice = (s: GameState, id: string) => {
+  const u = FORK_UPGRADE_BY_ID[id];
+  return Math.round(u.base * Math.pow(u.ratio, forkUpgradeLevel(s, id)));
+};
+
+/** Every % bonus of the Fork layer (talents and upgrades), by stat. */
+export function forkGainsMult(s: GameState): number {
+  return (1 + (hasFork(s, "f_oc") ? FORK_PCT.oc : 0)) * (1 + 0.1 * forkUpgradeLevel(s, "fu_bounties"));
+}
+export const forkSpeedMult = (s: GameState) => 1 + (hasFork(s, "f_cdn") ? FORK_PCT.cdn : 0);
+export function forkStarsMult(s: GameState): number {
+  return (1 + (hasFork(s, "f_hn") ? FORK_PCT.hn : 0)) * (1 + 0.03 * forkUpgradeLevel(s, "fu_mentoring"));
+}
 
 /* ---------------- Fork condition and contributors ---------------- */
 export const forkRevealed = (s: GameState) => s.forks > 0 || s.talents.includes("release_bot") ||
@@ -79,7 +112,7 @@ function curve(ratio: Decimal): Decimal {
 
 export function contributorMultiplier(s: GameState): number {
   const gens = s.gens.cpu + s.gens.ram + s.gens.disk;
-  return (1 + FORK.genBonus * gens) * (1 + FORK.chalBonus * s.challengesDone.length);
+  return (1 + FORK.genBonus * gens) * (1 + FORK.chalBonus * s.challengesDone.length) * (1 + (hasFork(s, "f_rel") ? FORK_PCT.rel : 0));
 }
 
 /** Contributors the fork would pay right now, before rounding down. */

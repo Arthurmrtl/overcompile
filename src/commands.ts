@@ -5,7 +5,8 @@ import {
 import { CHALLENGES } from "./core/challenges";
 import { BUILD_EVENTS, EVENT_BY_ID, eventForCommand } from "./core/events";
 import {
-  FORK, FORK_TALENTS, PR_EFFECTS, contributorsOnFork, forkRevealed, hasFork, treeComplete,
+  FORK, FORK_TALENTS, FORK_UPGRADES, PR_EFFECTS, contributorsOnFork, forkRevealed, forkUpgradeLevel, forkUpgradePrice,
+  hasFork, treeComplete,
 } from "./core/fork";
 import {
   BAL, HW, autoScaleInterval, perkLocked, perkPrice, genRequired, gensRevealed, totalGens, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
@@ -367,6 +368,16 @@ export function createCommands(c: GameCtx) {
         if (!r.ok) say(INFO, " " + t(r.reason === "contributors" ? "fk.no_contrib" : r.reason === "req" ? "fk.no_req" : "fk.owned"));
         return;
       }
+      if (sub === "upgrade") {
+        const u = FORK_UPGRADES.find(x => x.id === arg || x.id === `fu_${arg}`);
+        if (!u) {
+          for (const x of FORK_UPGRADES) say("  ", [pad(x.id.slice(3), 11), "c-violet"], pad(t(`fu.${x.id}`), 14), [`${forkUpgradePrice(s, x.id)} ⑂  `, "c-amber"], [t("fu.level", { n: forkUpgradeLevel(s, x.id) }), "c-dim"]);
+          return void say(["  fork upgrade <bounties|mentoring>", "c-dim"]);
+        }
+        const r = en.buyForkUpgrade(u.id);
+        if (!r.ok) say(INFO, " " + t("fk.no_contrib"));
+        return;
+      }
       if (sub === "tree") {
         say(["[FORK TREE]", "c-bold"], `  ${t("fk.contributors")}: ${fmtInt(s.contributors)}`);
         for (const ft of FORK_TALENTS) {
@@ -665,7 +676,7 @@ export function createCommands(c: GameCtx) {
     buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "auto_cpu", "auto_ram", "auto_disk", "auto_jobs", "release_bot"],
     optimize: UPGRADES.map(u => u.id), gen: GEN_KEYS, challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
-    cargo: ["update"], git: ["merge"], autoscale: ["jobs"], fork: ["tree", "buy", "--yes"], gh: ["pr"],
+    cargo: ["update"], git: ["merge"], autoscale: ["jobs"], fork: ["tree", "buy", "upgrade", "--yes"], gh: ["pr"],
   };
   const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "autoscale", "fork", "gh", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
     ...new Set(BUILD_EVENTS.map(ev => ev.cmd.split(" ")[0]))];

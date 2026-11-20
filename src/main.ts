@@ -21,7 +21,8 @@ import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 import { type Advice, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
 import {
-  FORK_TALENTS, FORK_TALENT_BY_ID, PR_EFFECTS, contribGainsMult, contributorsOnFork, forkRevealed, hasFork,
+  FORK_TALENTS, FORK_TALENT_BY_ID, FORK_UPGRADES, PR_EFFECTS, contribGainsMult, contributorsOnFork, forkUpgradeLevel,
+  forkUpgradePrice, forkRevealed, hasFork,
   starsForFirstContributor, treeComplete,
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
@@ -199,7 +200,11 @@ function buildLayout() {
         <div class="pr-boost small" data-r="prBoost"></div>
         <h3>${t("fk.tree")}</h3>
         <p class="muted small">${t("fk.tree.desc")}</p>
-        <div class="ft-list" data-r="ftList"></div>
+        <div class="tree" data-r="ftree"></div>
+        <div class="tree-detail" data-r="ftDetail"></div>
+        <h3>${t("fu.title")}</h3>
+        <p class="muted small">${t("fu.desc")}</p>
+        <div class="fu-list" data-r="fuList"></div>
       </div>
       <div class="card tab-body" data-body="achievements">
         <div class="muted small" data-r="achHead"></div>
@@ -961,7 +966,7 @@ function renderForkTab() {
   const b = s.prBoost;
   setText($("[data-r=prBoost]"), b.speed > 1 || b.gains > 1 || b.stars > 1
     ? t("fk.boost", { sp: b.speed.toFixed(2), g: b.gains.toFixed(2), st: b.stars.toFixed(2) }) : "");
-  const key = `${s.prs.map(p => p.n).join(",")}|${s.forkTalents.join(",")}|${s.contributors}|${s.settings.lang}`;
+  const key = `${s.prs.map(p => p.n).join(",")}|${s.forkTalents.join(",")}|${JSON.stringify(s.forkUpgrades)}|${s.contributors}|${selectedFork}|${s.settings.lang}`;
   if (key === forkTabKey) return;
   forkTabKey = key;
   $("[data-r=prList]").replaceChildren(...(s.prs.length ? s.prs.map(pr => {
@@ -973,18 +978,87 @@ function renderForkTab() {
       h("span", { class: "pr-fx" }, prEffectText(pr.kind)),
       merge);
   }) : [h("p", { class: "muted small" }, t("fk.no_pr"))]));
-  $("[data-r=ftList]").replaceChildren(...FORK_TALENTS.map(ft => {
-    const owned = hasFork(s, ft.id);
-    const reqOk = ft.req.every(r => hasFork(s, r));
-    const btn = h("button", { class: "claim-btn" }, owned ? t("fk.owned") : `${t("fk.buy")} · ${ft.cost} ⑂`) as HTMLButtonElement;
-    btn.disabled = owned || !reqOk || s.contributors < ft.cost;
-    btn.addEventListener("click", () => cmd.run(`fork buy ${ft.id}`, true));
-    return h("div", { class: "ft" + (owned ? " owned" : reqOk ? "" : " locked") },
-      h("div", { class: "ft-top" }, h("span", { class: "ft-tag" }, `[${ft.tag}]`), h("span", { class: "ft-name" }, t(`ft.${ft.id}`))),
-      h("div", { class: "ft-desc" }, t(`ft.${ft.id}.desc`)),
-      ft.req.length && !owned ? h("div", { class: "ft-req" }, t("fk.req", { r: ft.req.map(r => FORK_TALENT_BY_ID[r].tag).join(" + ") })) : "",
+  renderForkTree();
+  $("[data-r=fuList]").replaceChildren(...FORK_UPGRADES.map(u => {
+    const lvl = forkUpgradeLevel(s, u.id);
+    const cost = forkUpgradePrice(s, u.id);
+    const btn = h("button", { class: "claim-btn" }, `${t("fk.buy")} · ${cost} ⑂`) as HTMLButtonElement;
+    btn.disabled = s.contributors < cost;
+    btn.addEventListener("click", () => cmd.run(`fork upgrade ${u.id}`, true));
+    return h("div", { class: "fu" },
+      h("div", { class: "fu-top" }, h("span", { class: "ft-name" }, t(`fu.${u.id}`)), h("span", { class: "fu-lvl" }, t("fu.level", { n: lvl }))),
+      h("div", { class: "ft-desc" }, t(`fu.${u.id}.desc`, { now: Math.round(lvl * u.pct * 100) })),
       btn);
   }));
+}
+
+/* Fork tree: drawn like the release tree (same nodes and lines), all talents visible. */
+let forkTreeBuilt = false;
+let selectedFork = "f_template";
+function buildForkTree() {
+  const tree = $("[data-r=ftree]");
+  tree.replaceChildren();
+  const rows = Math.max(...FORK_TALENTS.map(x => x.row)) + 1;
+  tree.style.aspectRatio = `${TREE_COLS} / ${rows}`;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${TREE_COLS * 100} ${rows * 100}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.classList.add("tree-lines");
+  for (const ft of FORK_TALENTS) {
+    for (const r of ft.req) {
+      const p = FORK_TALENT_BY_ID[r];
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(p.col * 100 + 50));
+      line.setAttribute("y1", String(p.row * 100 + 50));
+      line.setAttribute("x2", String(ft.col * 100 + 50));
+      line.setAttribute("y2", String(ft.row * 100 + 50));
+      line.dataset.to = ft.id;
+      line.dataset.from = r;
+      svg.append(line);
+    }
+  }
+  tree.append(svg);
+  for (const ft of FORK_TALENTS) {
+    const node = h("button", { class: "node fnode", "data-ft": ft.id, title: t(`ft.${ft.id}`) },
+      h("span", { class: "node-icon" }, ft.tag),
+      h("span", { class: "node-cost" }, `${ft.cost}⑂`),
+    );
+    node.style.left = `${(ft.col + 0.5) * (100 / TREE_COLS)}%`;
+    node.style.top = `${(ft.row + 0.5) * (100 / rows)}%`;
+    node.addEventListener("click", () => { selectedFork = ft.id; forkTabKey = ""; render(); });
+    node.addEventListener("dblclick", () => cmd.run(`fork buy ${ft.tag}`, true));
+    tree.append(node);
+  }
+  forkTreeBuilt = true;
+}
+
+function renderForkTree() {
+  if (!forkTreeBuilt || !$("[data-r=ftree]").firstChild) buildForkTree(); // the layout is rebuilt on language change
+  const s = engine.s;
+  const tree = $("[data-r=ftree]");
+  for (const ft of FORK_TALENTS) {
+    const node = $(`[data-ft=${ft.id}]`, tree);
+    const owned = hasFork(s, ft.id);
+    const reqOk = ft.req.every(r => hasFork(s, r));
+    toggleClass(node, "owned", owned);
+    toggleClass(node, "avail", !owned && reqOk);
+    toggleClass(node, "afford", !owned && reqOk && s.contributors >= ft.cost);
+    toggleClass(node, "locked", !owned && !reqOk);
+    toggleClass(node, "sel", ft.id === selectedFork);
+  }
+  tree.querySelectorAll<SVGLineElement>("line").forEach(l => toggleClass(l as unknown as HTMLElement, "lit", hasFork(s, l.dataset.from!) && hasFork(s, l.dataset.to!)));
+  const ft = FORK_TALENT_BY_ID[selectedFork];
+  const owned = hasFork(s, ft.id);
+  const reqOk = ft.req.every(r => hasFork(s, r));
+  const btn = h("button", { class: "claim-btn" }, owned ? t("fk.owned") : `${t("fk.buy")} · ${ft.cost} ⑂`) as HTMLButtonElement;
+  btn.disabled = owned || !reqOk || s.contributors < ft.cost;
+  btn.addEventListener("click", () => cmd.run(`fork buy ${ft.tag}`, true));
+  $("[data-r=ftDetail]").replaceChildren(
+    h("div", {}, h("span", { class: "ft-tag" }, `[${ft.tag}]`), h("strong", {}, t(`ft.${ft.id}`))),
+    h("div", {}, t(`ft.${ft.id}.desc`)),
+    ft.req.length ? h("div", { class: "muted small" }, t("fk.req", { r: ft.req.map(r => FORK_TALENT_BY_ID[r].tag).join(" + ") })) : "",
+    btn,
+  );
 }
 
 /** "builds ×1.2 until the release" … */
@@ -1292,6 +1366,10 @@ engine.on((e: GameEvent) => {
       buildTree();
       forkTabKey = "";
       lastAchCount = "";
+      break;
+    case "fork_upgrade":
+      term.println(OK, " " + t("fu.bought", { u: t(`fu.${e.id}`), n: e.level }));
+      forkTabKey = "";
       break;
     case "fork_talent":
       term.println(OK, " " + t("fk.bought", { t: t(`ft.${e.id}`) }));

@@ -478,3 +478,15 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .ft .claim-btn { margin-top: auto; align-self: flex-start; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 .modal-actions .fork-btn { width: auto; margin: 0; padding: 8px 14px; }
+
+/* ---------- v0.4.1 Fork tree drawn + Fork upgrades ---------- */
+.fnode .node-icon { font-size: 12px; }
+.fnode .node-cost { color: var(--violet); }
+.node.locked { opacity: .45; border-style: dashed; }
+.fnode.owned { border-color: var(--violet); background: #241a3d; }
+.fnode.owned .node-icon, .fnode.owned .node-cost { color: var(--violet); }
+.fu-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+.fu { display: flex; flex-direction: column; gap: 3px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2); font-size: 12px; }
+.fu-top { display: flex; justify-content: space-between; gap: 6px; }
+.fu-lvl { color: var(--violet); font-variant-numeric: tabular-nums; }
+.fu .claim-btn { align-self: flex-start; margin-top: auto; }

@@ -7,7 +7,7 @@ import {
 } from "./formulas";
 import { TALENT_BY_ID } from "./talents";
 import {
-  FORK, FORK_TALENT_BY_ID, KEPT_BY_F_KEEP, PREBUILT_TALENTS, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
+  FORK, FORK_TALENT_BY_ID, FORK_UPGRADE_BY_ID, KEPT_BY_F_KEEP, forkUpgradePrice, PREBUILT_TALENTS, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
   TEMPLATE_STARS,
   canFork, contributorsOnFork, hasFork, pickPrKind, prGap,
 } from "./fork";
@@ -37,6 +37,7 @@ export type GameEvent =
   | { t: "buff_end"; id: string }
   | { t: "fork"; contributors: number }
   | { t: "fork_talent"; id: string }
+  | { t: "fork_upgrade"; id: string; level: number }
   | { t: "pr_open"; pr: PullRequest }
   | { t: "pr_merged"; pr: PullRequest; credits?: Decimal }
 
@@ -611,6 +612,21 @@ export class Engine {
     // "iac" makes Auto-Scaling buyable at once; "keep"/others act on the next fork or run
     this.emit({ t: "fork_talent", id });
     this.checkAchievements();
+    return r;
+  }
+
+  canBuyForkUpgrade(id: string): BuyResult {
+    if (!FORK_UPGRADE_BY_ID[id]) return { ok: false, reason: "locked" };
+    if (this.s.contributors < forkUpgradePrice(this.s, id)) return { ok: false, reason: "contributors" };
+    return { ok: true, n: 1 };
+  }
+
+  buyForkUpgrade(id: string): BuyResult {
+    const r = this.canBuyForkUpgrade(id);
+    if (!r.ok) return r;
+    this.s.contributors -= forkUpgradePrice(this.s, id);
+    this.s.forkUpgrades[id] = (this.s.forkUpgrades[id] ?? 0) + 1;
+    this.emit({ t: "fork_upgrade", id, level: this.s.forkUpgrades[id] });
     return r;
   }
 
