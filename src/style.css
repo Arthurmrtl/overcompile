@@ -207,12 +207,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .release-btn.advised { animation: pulse 1.6s ease-in-out infinite; }
 .rel-rate { margin-top: 4px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .rel-rate.on { color: var(--amber); }
-.ch-nudge {
-  display: block; width: 100%; margin-top: 10px; text-align: left; padding: 8px 10px; border-radius: 6px;
-  background: var(--panel-2); border: 1px solid var(--violet); color: var(--fg); font-size: 12px; cursor: pointer;
-}
-.ch-nudge:hover { background: var(--border); }
-.ch-nudge[hidden] { display: none; }
 @keyframes pulse { 50% { box-shadow: 0 0 36px #f59e0b55; } }
 .progress { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin: 10px 0 4px; }
 .progress .fill { height: 100%; background: var(--amber); width: 0; transition: width .2s; }

@@ -5,7 +5,7 @@ import {
 import { CHALLENGES } from "./core/challenges";
 import { BUILD_EVENTS, EVENT_BY_ID, eventForCommand } from "./core/events";
 import {
-  FORK, FORK_TALENTS, FORK_UPGRADES, PR_EFFECTS, contributorsOnFork, forkRevealed, forkUpgradeLevel, forkUpgradePrice,
+  FORK, FORK_TALENTS, FORK_UPGRADES, forkTalentVisibility, PR_EFFECTS, contributorsOnFork, forkRevealed, forkUpgradeLevel, forkUpgradePrice,
   hasFork, treeComplete,
 } from "./core/fork";
 import {
@@ -381,6 +381,9 @@ export function createCommands(c: GameCtx) {
       if (sub === "tree") {
         say(["[FORK TREE]", "c-bold"], `  ${t("fk.contributors")}: ${fmtInt(s.contributors)}`);
         for (const ft of FORK_TALENTS) {
+          const v = forkTalentVisibility(s, ft.id);
+          if (v === "hidden") continue;
+          if (v === "fog") { say("  ", ["[?]", "c-dim"], " ", ["???", "c-dim"]); continue; }
           const state = hasFork(s, ft.id) ? ["[✓]", "c-green"] : ft.req.every(r => hasFork(s, r)) ? ["[ ]", ""] : ["[-]", "c-dim"];
           say("  ", state as Seg, " ", [pad(ft.tag, 5), "c-violet"], pad(t(`ft.${ft.id}`), 22), [`${ft.cost} ⑂  `, "c-amber"], [t(`ft.${ft.id}.desc`), "c-dim"]);
         }
