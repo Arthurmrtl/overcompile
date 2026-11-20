@@ -42,6 +42,10 @@ export function fmtInt(n: number): string {
 }
 
 export function fmtTime(seconds: number): string {
+  // Very fast builds (many jobs, late game) used to show "0.00s"
+  if (seconds > 0 && seconds < 1e-6) return "<1µs";
+  if (seconds > 0 && seconds < 1e-3) return `${Math.round(seconds * 1e6)}µs`;
+  if (seconds > 0 && seconds < 0.1) return `${(seconds * 1000).toFixed(seconds < 0.01 ? 1 : 0)}ms`;
   if (seconds < 1) return `${seconds.toFixed(2)}s`;
   if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
   const s = Math.floor(seconds);
