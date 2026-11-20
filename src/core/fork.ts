@@ -21,7 +21,7 @@ export const FORK = {
   starsBase: 200,        // stars earned in the cycle for the first contributor (the release tree costs 225)
   earlyK: 2,             // early curve: 1 + earlyK × log2(stars / starsBase) → 1, 3, 5, 9 at ×1, ×2, ×4, ×16
   lateExp: 0.6,          // late curve: (stars / starsBase) ^ lateExp, whichever is higher
-  genBonus: 0.05,        // +5 % contributors per hardware generation owned at fork time
+  genBonus: 0.03,        // +3 % contributors per generation in the cycle's best run (gens are per run since v0.4.5)
   chalBonus: 0.1,        // +10 % contributors per challenge completed in the cycle
   // v0.4.1: the passive bonus grows logarithmically. Multipliers snowballed (more gains → more
   // stars → more contributors → shorter cycles): cycles went 3 h → 20 min → 5 min → 1 min.
@@ -121,7 +121,7 @@ function curve(ratio: Decimal): Decimal {
 }
 
 export function contributorMultiplier(s: GameState): number {
-  const gens = s.gens.cpu + s.gens.ram + s.gens.disk;
+  const gens = s.stats.bestRunGens; // best run of the cycle (generations are per run)
   return (1 + FORK.genBonus * gens) * (1 + FORK.chalBonus * s.challengesDone.length) * (1 + (hasFork(s, "f_rel") ? FORK_PCT.rel : 0));
 }
 

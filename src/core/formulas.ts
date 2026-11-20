@@ -89,22 +89,26 @@ export const BAL = {
   optReward: 1.25,      // Optimization "rewards": × per level
   optCostRatio: 3,      // infinite Optimizations: price × N per level (was 2)
   earlyK: 1.5,          // early star curve: 1 + earlyK × log2(earned / base) (was 1)
-  genBase: 45,         // first generation needs this level of the hardware (v0.3.6: was 75, too late to matter before the end of the tree)…
-  genGrowth: 1.4,      // …and each next one ×N more levels (45, 63, 88, 123…)
-  genCpu: 1.08,        // each CPU generation: builds ×N faster
-  genRam: 1.12,         // each RAM generation: rewards ×N
-  genDisk: 1.06,       // each Disk generation: rewards ×N…
-  genDiskFail: 0.92,   // …and failures ×N
+  // Generations are per run since v0.4.5 (reset at every release), so the bar is low and the bonus strong.
+  // Sim v0.4.5: tree 2h59–3h05 (3h01 on average before), same contributors per fork, 1st star unchanged;
+  // 3 generations per run early on, 8–11 at the end of the tree.
+  genBase: 25,         // first generation of a run needs this level of the hardware…
+  genGrowth: 1.6,      // …and each next one in the same run ×N more levels (25, 40, 65, 100…)
+  genCpu: 1.12,        // each CPU generation: builds ×N faster
+  genRam: 1.2,         // each RAM generation: rewards ×N
+  genDisk: 1.08,       // each Disk generation: rewards ×N…
+  genDiskFail: 0.88,   // …and failures ×N
+  genMirrors: 0.8,     // Fork talent "mir": generations need ×N levels
 };
 
 /* ---------- Hardware generations (inspired by Revolution Idle's ascension) ---------- */
 // Once a hardware reaches the required level, the player can move it to the next
-// generation: its level drops back to the start of the run, in exchange for a
-// permanent bonus. Generations are never reset.
+// generation: its level drops back to 1, in exchange for a strong bonus. A small prestige
+// inside the run: every release resets the generations (v0.4.5; they used to be permanent).
 export const gensRevealed = (s: GameState) => starsRevealed(s);
-/** Level needed for the next generation, rounded to 5. Grows fast so generations stay rare. */
+/** Level needed for the next generation of this run, rounded to 5. */
 export const genRequired = (s: GameState, k: GenKey) =>
-  Math.round((BAL.genBase * Math.pow(BAL.genGrowth, s.gens[k])) / 5) * 5;
+  Math.max(5, Math.round((BAL.genBase * Math.pow(BAL.genGrowth, s.gens[k]) * (hasFork(s, "f_mirrors") ? BAL.genMirrors : 1)) / 5) * 5);
 export const totalGens = (s: GameState) => s.gens.cpu + s.gens.ram + s.gens.disk;
 export const genSpeedMult = (s: GameState) => Math.pow(BAL.genCpu, s.gens.cpu);
 export const genFailMult = (s: GameState) => Math.pow(BAL.genDiskFail, s.gens.disk);

@@ -418,13 +418,15 @@ export class Engine {
     return s.hw[key] >= genRequired(s, key) ? "ok" : "level";
   }
 
-  /** Moves a hardware to its next generation: its level restarts, the bonus is permanent. */
+  /** Moves a hardware to its next generation: back to level 1, the bonus lasts until the release. */
   generate(key: GenKey): "ok" | "locked" | "level" {
     const r = this.canGenerate(key);
     if (r !== "ok") return r;
     const s = this.s;
     s.gens[key]++;
-    s.hw[key] = 1 + optBootLevels(s);
+    s.hw[key] = 1;
+    s.stats.gensTotal++;
+    s.stats.bestRunGens = Math.max(s.stats.bestRunGens, s.gens.cpu + s.gens.ram + s.gens.disk);
     this.emit({ t: "generation", key, gen: s.gens[key] });
     this.checkAchievements();
     return "ok";
@@ -475,6 +477,7 @@ export class Engine {
     s.runEarned = new Decimal(0);
     const boot = 1 + optBootLevels(s) + (hasFork(s, "f_sponsors") ? SEED_LEVELS : 0);
     s.hw = { cpu: inChallenge(s, "single_core") ? 1 : boot, ram: boot, disk: boot, jobs };
+    s.gens = { cpu: 0, ram: 0, disk: 0 }; // generations are per run
     s.slots = Array.from({ length: jobs }, () => ({ progress: 0, running: false }));
     s.pipeline = false;
     const ci = on(s, "ci_preinstalled");
@@ -589,8 +592,7 @@ export class Engine {
     s.upgrades = {};
     s.challenge = null;
     s.challengesDone = [];
-    const keep = hasFork(s, "f_mirrors") ? 0.5 : 0;
-    s.gens = { cpu: Math.floor(s.gens.cpu * keep), ram: Math.floor(s.gens.ram * keep), disk: Math.floor(s.gens.disk * keep) };
+    s.stats.bestRunGens = 0;
     s.rcPending = false;
     s.buffs = [];
     s.prBoost = { speed: 1, gains: 1, stars: 1 };
