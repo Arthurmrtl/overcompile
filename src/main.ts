@@ -21,13 +21,13 @@ import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 import { type Advice, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
 import {
-  FORK_TALENTS, FORK_TALENT_BY_ID, FORK_UPGRADES, PR_EFFECTS, contribGainsMult, contributorsOnFork, forkUpgradeLevel,
+  FORK_TALENTS, FORK_TALENT_BY_ID, FORK_UPGRADES, PR_EFFECTS, contribGainsMult, contributorsOnFork, contributorBreakdown, forkUpgradeLevel,
   forkUpgradePrice, forkRevealed, hasFork, forkTalentVisibility,
   starsForFirstContributor, treeComplete,
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.5";
+const GAME_VERSION = "0.4.6";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -184,6 +184,7 @@ function buildLayout() {
           <div class="fork-title"><span class="fk-glyph">⑂</span> <span data-r="forkTitle"></span></div>
           <div class="muted small" data-r="forkDesc"></div>
           <button class="fork-btn" data-r="forkBtn" hidden></button>
+          <div class="fork-calc small" data-r="forkCalc" hidden></div>
           <div class="rel-rate small" data-r="forkRate" hidden></div>
         </div>
         <div class="bot" data-r="bot" hidden>
@@ -941,8 +942,21 @@ function renderForkCard() {
     setText($("[data-r=forkDesc]"), t("fk.need_tree"));
     if (!btn.hidden) btn.hidden = true;
     if (!rate.hidden) rate.hidden = true;
+    if (!$("[data-r=forkCalc]").hidden) $("[data-r=forkCalc]").hidden = true;
     return;
   }
+  // How the contributors are computed, and what one more needs
+  const calc = $("[data-r=forkCalc]");
+  if (calc.hidden) calc.hidden = false;
+  const b = contributorBreakdown(s);
+  const x = (m: number) => m.toFixed(2);
+  setText(calc, [
+    t("fk.calc.stars", { s: fmt(b.stars), b: b.base.toFixed(1) }),
+    t("fk.calc.gens", { x: x(b.multGens), n: b.gens }),
+    t("fk.calc.chal", { x: x(b.multChal), n: b.chal }),
+    ...(b.multSig > 1 ? [`sig ×${x(b.multSig)}`] : []),
+    ...(b.ups ? [`ups +${b.ups}`] : []),
+  ].join(" · ") + ` = ${fmtInt(b.total)} ⑂ · ` + t("fk.calc.next", { s: fmt(b.nextAt) }));
   setText($("[data-r=forkTitle]"), t("fk.title"));
   setText($("[data-r=forkDesc]"), pending >= 1 ? t("fk.desc") : t("fk.need_stars", { n: fmtInt(starsForFirstContributor()), c: fmt(s.lifetimeStars) }));
   if (btn.hidden) btn.hidden = false;
