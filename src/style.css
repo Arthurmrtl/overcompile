@@ -490,3 +490,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .fu-top { display: flex; justify-content: space-between; gap: 6px; }
 .fu-lvl { color: var(--violet); font-variant-numeric: tabular-nums; }
 .fu .claim-btn { align-self: flex-start; margin-top: auto; }
+
+/* ---------- v0.4.3 mobile tab bar: line icons ---------- */
+.nav-ic { width: 22px; height: 22px; display: block; }

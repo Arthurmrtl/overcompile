@@ -25,7 +25,7 @@ const en: Dict = {
   "tab.stats": "Stats",
   "nav.terminal": "Terminal",
   "nav.shop": "Shop",
-  "nav.release": "Release",
+  "nav.progress": "Progress",
   "nav.more": "More",
 
   // Hardware
@@ -584,7 +584,7 @@ const fr: Dict = {
   "tab.stats": "Stats",
   "nav.terminal": "Terminal",
   "nav.shop": "Boutique",
-  "nav.release": "Release",
+  "nav.progress": "Progression",
   "nav.more": "Plus",
 
   "hw.cpu": "CPU",
