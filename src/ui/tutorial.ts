@@ -10,7 +10,7 @@
  */
 import type { Engine } from "../core/engine";
 import { GEN_KEYS } from "../core/state";
-import { forkRevealed } from "../core/fork";
+import { forkRevealed, treeComplete } from "../core/fork";
 import { distroRevealed } from "../core/distro";
 import { PERK_PRICE, gensRevealed, price } from "../core/formulas";
 import { t } from "../i18n";
@@ -75,7 +75,8 @@ const TIPS: Tip[] = [
   { id: "event", anchor: () => "[data-r=evPill]", panel: "center", when: () => !!deps.engine().activeEvent, live: () => !!deps.engine().activeEvent },
   { id: "gen", anchor: () => `[data-hw=${readyGen() ?? "cpu"}] [data-f=gen]`, panel: "shop", when: () => gensRevealed(S()) && !!readyGen() },
   { id: "challenges", anchor: () => "[data-tab=challenges]", panel: "side", when: () => deps.engine().challengesUnlocked },
-  { id: "fork", anchor: () => "[data-r=forkCard]", panel: "side", tab: "release", when: () => forkRevealed(S()) },
+  { id: "fork", anchor: () => "[data-r=forkTeaser]", panel: "side", tab: "release", when: () => forkRevealed(S()) && S().forks === 0 && !treeComplete(S()) },
+  { id: "forkready", anchor: () => "[data-tab=fork]", panel: "side", when: () => treeComplete(S()) || S().forks >= 1 },
   { id: "forked", anchor: () => "[data-tab=fork]", panel: "side", when: () => S().forks >= 1 },
   { id: "distro", anchor: () => "[data-tab=distro]", panel: "side", when: () => distroRevealed(S()) },
   { id: "distroed", anchor: () => "[data-r=dtree]", panel: "side", tab: "distro", when: () => S().distros >= 1 },
