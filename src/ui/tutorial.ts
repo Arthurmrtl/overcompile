@@ -11,13 +11,14 @@
 import type { Engine } from "../core/engine";
 import { GEN_KEYS } from "../core/state";
 import { forkRevealed } from "../core/fork";
+import { distroRevealed } from "../core/distro";
 import { PERK_PRICE, gensRevealed, price } from "../core/formulas";
 import { t } from "../i18n";
 import { fmt } from "../format";
 import type Decimal from "break_eternity.js";
 
 type Panel = "shop" | "center" | "side";
-type SideTab = "release" | "challenges" | "fork" | "achievements" | "stats";
+type SideTab = "release" | "challenges" | "fork" | "distro" | "achievements" | "stats";
 
 interface Deps {
   engine: () => Engine;
@@ -76,6 +77,8 @@ const TIPS: Tip[] = [
   { id: "challenges", anchor: () => "[data-tab=challenges]", panel: "side", when: () => deps.engine().challengesUnlocked },
   { id: "fork", anchor: () => "[data-r=forkCard]", panel: "side", tab: "release", when: () => forkRevealed(S()) },
   { id: "forked", anchor: () => "[data-tab=fork]", panel: "side", when: () => S().forks >= 1 },
+  { id: "distro", anchor: () => "[data-tab=distro]", panel: "side", when: () => distroRevealed(S()) },
+  { id: "distroed", anchor: () => "[data-r=dtree]", panel: "side", tab: "distro", when: () => S().distros >= 1 },
 ];
 
 let bubble: HTMLElement | null = null;

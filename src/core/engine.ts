@@ -7,7 +7,7 @@ import {
 } from "./formulas";
 import { TALENT_BY_ID } from "./talents";
 import {
-  FORK, FORK_TALENT_BY_ID, FORK_UPGRADE_BY_ID, KEPT_BY_F_KEEP, forkUpgradePrice, PREBUILT_TALENTS, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
+  FORK, FORK_TALENTS, FORK_UPGRADES, FORK_TALENT_BY_ID, FORK_UPGRADE_BY_ID, KEPT_BY_F_KEEP, forkUpgradePrice, PREBUILT_TALENTS, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
   TEMPLATE_STARS,
   canFork, contributorsOnFork, hasFork, pickPrKind, prGap,
 } from "./fork";
@@ -15,6 +15,10 @@ import {
   type BuildEvent, EVENT_BY_ID, EVENT_GAP, EVENT_WINDOW, PAGER_GAP_MULT, PAGER_WINDOW, eligibleEvents, pickEvent,
 } from "./events";
 import { UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
+import {
+  DISTRO_TALENT_BY_ID, type FlavorId, FLAVOR_BY_ID, canDistro, flavorOf, forkTalentsKept, hasDistro, packagesOnDistro,
+} from "./distro";
+import { ForkAdvisor } from "./advisor";
 import {
   type BuyAmount, type GameState, type GenKey, type HwKey, type PerkKey, SAVE_KEY, GEN_KEYS, deserialize, newState, serialize,
 } from "./state";
@@ -35,14 +39,16 @@ export type GameEvent =
   | { t: "event_caught"; id: string; credits?: Decimal; builds?: number }
   | { t: "event_missed"; id: string }
   | { t: "buff_end"; id: string }
-  | { t: "fork"; contributors: number }
+  | { t: "fork"; contributors: number; auto?: boolean }
+  | { t: "distro"; packages: number; flavor: FlavorId; gift: boolean }
+  | { t: "distro_talent"; id: string }
   | { t: "fork_talent"; id: string }
   | { t: "fork_upgrade"; id: string; level: number }
   | { t: "pr_open"; pr: PullRequest }
   | { t: "pr_merged"; pr: PullRequest; credits?: Decimal }
 
 
-export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" | "contributors" };
+export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" | "contributors" | "packages" };
 
 export class Engine {
   s: GameState;
@@ -127,6 +133,7 @@ export class Engine {
     s.stats.playTime += dt;
     s.stats.runTime += dt;
     s.stats.forkTime += dt;
+    s.stats.distroTime += dt;
 
     if (s.pipeline) this.advanceBuilds(dt);
     this.tickEvents(dt);
@@ -157,8 +164,18 @@ export class Engine {
       this.release(true);
     }
 
+    // Distro talent "Fork bot" (v0.5): forks on its own, at a contributor threshold or when the advisor says
+    if (hasDistro(s, "d_forkbot") && s.autoFork.enabled && !s.challenge) {
+      const advice = this.forkAdvisor.update(s);
+      const ready = s.autoFork.threshold > 0 ? advice.pending >= s.autoFork.threshold : advice.advised;
+      if (ready) this.fork(true);
+    }
+
     this.checkAchievements();
   }
+
+  /** Same advisor the UI shows, owned by the engine for the Fork bot. */
+  private forkAdvisor = new ForkAdvisor();
 
   /** Unlocked achievements whose reward is waiting to be claimed. */
   pendingAchievements() {
@@ -276,7 +293,7 @@ export class Engine {
     this.eventTimer -= dt;
     if (this.eventTimer > 0) return;
     const pager = has(s, "pager");
-    this.eventTimer = Engine.nextGap(pager);
+    this.eventTimer = Engine.nextGap(pager) * flavorOf(s).eventGap; // Distro flavor "Source": twice as many
     const e = pickEvent(eligibleEvents(s, starsRevealed(s)));
     const window = pager ? PAGER_WINDOW : EVENT_WINDOW;
     this.activeEvent = { id: e.id, left: window };
@@ -578,12 +595,13 @@ export class Engine {
 
   /* ---------------- Fork (prestige layer 2) ---------------- */
   /** Resets releases, stars, the release tree, optimizations, challenges and generations for contributors. */
-  fork(): number | null {
+  fork(auto = false): number | null {
     const s = this.s;
     if (!canFork(s)) return null;
     const gain = contributorsOnFork(s).toNumber();
     s.contributors += gain;
     s.lifetimeContributors += gain;
+    s.stats.allContributors += gain;
     s.forks++;
     if (s.stats.fastestFork === null || s.stats.forkTime < s.stats.fastestFork) s.stats.fastestFork = s.stats.forkTime;
     s.stats.forkTime = 0;
@@ -596,6 +614,64 @@ export class Engine {
     for (const id of kept) if (!s.talents.includes(id)) s.talents.push(id); // in case a later talent was skipped
     s.upgrades = {};
     s.challenge = null;
+    if (!hasDistro(s, "d_chal")) s.challengesDone = []; // Distro talent "chk": challenges stay done until the next distro
+    s.stats.bestRunGens = 0;
+    s.rcPending = false;
+    s.buffs = [];
+    s.prBoost = { speed: 1, gains: 1, stars: 1 };
+    this.activeEvent = null;
+    this.resetRun();
+    if (hasDistro(s, "d_autobuy")) this.autoBuyFork();
+    this.emit({ t: "fork", contributors: gain, auto });
+    this.checkAchievements();
+    return gain;
+  }
+
+  /** Distro talent "abuy": contributors buy Fork talents (cheapest first), then Fork upgrades. */
+  autoBuyFork() {
+    for (let guard = 0; guard < 200; guard++) {
+      const ft = FORK_TALENTS.filter(x => this.canBuyForkTalent(x.id).ok).sort((a, b) => a.cost - b.cost)[0];
+      if (ft) { this.buyForkTalent(ft.id); continue; }
+      if (FORK_TALENTS.some(x => !hasFork(this.s, x.id))) return; // saving up for the next talent
+      const fu = FORK_UPGRADES.filter(x => this.canBuyForkUpgrade(x.id).ok).sort((a, b) => forkUpgradePrice(this.s, a.id) - forkUpgradePrice(this.s, b.id))[0];
+      if (!fu) return;
+      this.buyForkUpgrade(fu.id);
+    }
+  }
+
+  /* ---------------- Distro (v0.5, prestige layer 3) ---------------- */
+  /** Publishes a distro: everything the Fork layer holds resets, packages are paid, the next cycle runs on `flavor`. */
+  distro(flavor: FlavorId): number | null {
+    const s = this.s;
+    if (!canDistro(s) || !FLAVOR_BY_ID[flavor]) return null;
+    const gain = packagesOnDistro(s).toNumber();
+    s.packages += gain;
+    s.lifetimePackages += gain;
+    s.distros++;
+    // The first distro comes with the Base image (rst) for free: the first restart keeps the Fork restart talents
+    const gift = s.distros === 1 && !hasDistro(s, "d_restart");
+    if (gift) s.distroTalents.push("d_restart");
+    if (s.flavor && !s.flavorsDone.includes(s.flavor)) s.flavorsDone.push(s.flavor); // finished a cycle in this flavor
+    s.flavor = flavor;
+    if (s.stats.fastestDistro === null || s.stats.distroTime < s.stats.fastestDistro) s.stats.fastestDistro = s.stats.distroTime;
+    s.stats.distroTime = 0;
+    // The Fork layer starts over, minus what the Distro talents keep
+    s.contributors = 0;
+    s.lifetimeContributors = 0;
+    const keptFork = forkTalentsKept(s);
+    s.forkTalents = s.forkTalents.filter(id => keptFork.includes(id));
+    if (!hasDistro(s, "d_keepall")) s.forkUpgrades = {};
+    s.prs = [];
+    s.prNext = FORK.prGap;
+    s.stats.forkTime = 0;
+    // …and so does everything a fork resets
+    s.stars = new Decimal(hasFork(s, "f_template") ? TEMPLATE_STARS : 0);
+    s.lifetimeStars = new Decimal(0);
+    s.releases = 0;
+    const kept = [...(hasFork(s, "f_keep") ? KEPT_BY_F_KEEP : []), ...(hasFork(s, "f_bench") ? PREBUILT_TALENTS : [])];
+    s.talents = kept.filter((id, i) => kept.indexOf(id) === i);
+    s.upgrades = {};
+    s.challenge = null;
     s.challengesDone = [];
     s.stats.bestRunGens = 0;
     s.rcPending = false;
@@ -603,9 +679,28 @@ export class Engine {
     s.prBoost = { speed: 1, gains: 1, stars: 1 };
     this.activeEvent = null;
     this.resetRun();
-    this.emit({ t: "fork", contributors: gain });
+    this.emit({ t: "distro", packages: gain, flavor, gift });
     this.checkAchievements();
     return gain;
+  }
+
+  canBuyDistroTalent(id: string): BuyResult {
+    const t = DISTRO_TALENT_BY_ID[id];
+    if (!t) return { ok: false, reason: "locked" };
+    if (hasDistro(this.s, id)) return { ok: false, reason: "owned" };
+    if (!t.req.every(r => hasDistro(this.s, r))) return { ok: false, reason: "req" };
+    if (this.s.packages < t.cost) return { ok: false, reason: "packages" };
+    return { ok: true, n: 1 };
+  }
+
+  buyDistroTalent(id: string): BuyResult {
+    const r = this.canBuyDistroTalent(id);
+    if (!r.ok) return r;
+    this.s.packages -= DISTRO_TALENT_BY_ID[id].cost;
+    this.s.distroTalents.push(id);
+    this.emit({ t: "distro_talent", id });
+    this.checkAchievements();
+    return r;
   }
 
   canBuyForkTalent(id: string): BuyResult {
@@ -654,6 +749,7 @@ export class Engine {
     const pr: PullRequest = { n: ++s.prSeq, kind: pickPrKind(), title: Math.floor(Math.random() * PR_TITLES) };
     s.prs.push(pr);
     this.emit({ t: "pr_open", pr });
+    if (hasDistro(s, "d_merge")) this.mergePr(pr.n); // Distro talent "mrg": PRs merge themselves
   }
 
   /** Merges an open PR (by number, or the oldest one). */

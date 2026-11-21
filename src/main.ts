@@ -20,7 +20,11 @@ import { achProgress } from "./core/achievements";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
-import { type Advice, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
+import { type Advice, type DistroAdvice, DistroAdvisor, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
+import {
+  DISTRO_PCT, DISTRO_TALENTS, DISTRO_TALENT_BY_ID, FLAVORS, distroRevealed, distroTalentVisibility,
+  forkTreeComplete, hasDistro, nextPackageAt, packagesExact, packagesGainsMult, packagesOnDistro, UPSTREAM_PACKAGES,
+} from "./core/distro";
 import {
   FORK_TALENTS, FORK_TALENT_BY_ID, FORK_UPGRADES, PR_EFFECTS, contribGainsMult, contributorsOnFork, contributorBreakdown, forkUpgradeLevel,
   forkUpgradePrice, forkRevealed, hasFork, forkTalentVisibility,
@@ -28,7 +32,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.4.14";
+const GAME_VERSION = "0.5.0";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -79,13 +83,16 @@ function toggleClass(el: Element | null, cls: string, on: boolean) {
 /* ================= Layout ================= */
 const app = document.getElementById("app")!;
 let selectedTalent: string = "warm_cache";
-let sideTab: "release" | "challenges" | "fork" | "achievements" | "stats" = "release";
+let sideTab: "release" | "challenges" | "fork" | "distro" | "achievements" | "stats" = "release";
 let mobilePanel: "center" | "shop" | "side" = "center";
 const advisor = new ReleaseAdvisor();
 let advice: Advice = advisor.update(engine.s);
 let advisedLogged = false; // one journal line per run when the advice turns on
 const forkAdvisor = new ForkAdvisor();
 let forkAdvice: ForkAdvice = forkAdvisor.update(engine.s);
+const distroAdvisor = new DistroAdvisor();
+let distroAdvice: DistroAdvice = distroAdvisor.update(engine.s);
+let distroAdvisedLogged = false;
 let forkAdvisedLogged = false;
 let lastAchCount = "";
 let lastSlotCount = -1;
@@ -178,6 +185,7 @@ function buildLayout() {
       <div class="hud-credits"><div class="big" data-r="credits">0</div><div class="sub"><span data-r="rate">0</span> ${t("credits")}${t("per_sec")}</div></div>
       <div class="hud-stars" data-reveal="stars" title="${t("rel.stars")}"><span class="star">⭐</span><span data-r="stars">0</span></div>
       <div class="hud-contrib" data-reveal="forked" title="${t("fk.contributors")}"><span class="fk-glyph">⑂</span><span data-r="contrib">0</span></div>
+      <div class="hud-pkg" data-reveal="distroed" title="${t("ds.packages")}"><span class="pk-glyph">▣</span><span data-r="pkg">0</span></div>
     </div>
     <div class="actions">
       <button class="icon-btn" data-a="save" title="${t("save")}">💾</button>
@@ -232,6 +240,7 @@ function buildLayout() {
         <button data-tab="release">${t("tab.release")} <span class="badge new" data-r="relBadge" hidden>!</span></button>
         <button data-tab="challenges" data-reveal="challenges">${t("tab.challenges")} <span class="badge new" data-r="chNew">${t("rev.new")}</span></button>
         <button data-tab="fork" data-reveal="forked">${t("tab.fork")} <span class="badge new" data-r="forkBadge" hidden></span></button>
+        <button data-tab="distro" data-reveal="distro">${t("tab.distro")} <span class="badge new" data-r="distroBadge" hidden>!</span></button>
         <button data-tab="achievements">${t("tab.achievements")} <span class="badge" data-r="achBadge"></span></button>
         <button data-tab="stats">${t("tab.stats")}</button>
       </div>
@@ -273,6 +282,7 @@ function buildLayout() {
       </div>
       <div class="card tab-body" data-body="fork">
         <div class="fork-sum" data-r="forkSum"></div>
+        <p class="teaser small" data-r="distroTeaser" hidden>${t("ds.teaser")}</p>
         <h3>${t("fk.prs")}</h3>
         <p class="muted small">${t("fk.prs.desc")}</p>
         <div class="pr-list" data-r="prList"></div>
@@ -284,6 +294,29 @@ function buildLayout() {
         <h3>${t("fu.title")}</h3>
         <p class="muted small">${t("fu.desc")}</p>
         <div class="fu-list" data-r="fuList"></div>
+      </div>
+      <div class="card tab-body" data-body="distro">
+        <div class="fork-card distro-card">
+          <div class="fork-title"><span class="pk-glyph">▣</span> <span>${t("ds.title")}</span></div>
+          <div class="muted small" data-r="dsDesc"></div>
+          <div class="ds-flavor small" data-r="dsFlavor"></div>
+          <button class="fork-btn distro-btn" data-r="dsBtn"></button>
+          <div class="fork-calc" data-r="dsCalc"></div>
+          <div class="rel-rate small" data-r="dsRate" hidden></div>
+        </div>
+        <div class="bot" data-r="fbot" hidden>
+          <label class="switch"><input type="checkbox" data-r="fbotOn"><span>${t("ds.fbot")}</span></label>
+          <label class="small">${t("ds.fbot.threshold")} <input type="number" min="0" step="1" data-r="fbotThr"> ⑂</label>
+          <div class="muted small">${t("ds.fbot.hint")}</div>
+        </div>
+        <div class="fork-sum" data-r="dsSum"></div>
+        <h3>${t("ds.flavors")}</h3>
+        <p class="muted small">${t("ds.flavors.desc")}</p>
+        <div class="fu-list" data-r="dsFlavors"></div>
+        <h3>${t("ds.tree")}</h3>
+        <p class="muted small">${t("ds.tree.desc")}</p>
+        <div class="tree" data-r="dtree"></div>
+        <div class="tree-detail" data-r="dtDetail"></div>
       </div>
       <div class="card tab-body" data-body="achievements">
         <div class="muted small" data-r="achHead"></div>
@@ -502,6 +535,12 @@ function bindLayout() {
     if (cur) cmd.run(EVENT_BY_ID[cur.id].cmd, true);
   });
   $("[data-r=forkBtn]").addEventListener("click", confirmFork);
+  $("[data-r=dsBtn]").addEventListener("click", confirmDistro);
+  $<HTMLInputElement>("[data-r=fbotOn]").addEventListener("change", () => cmd.run(`forkbot ${engine.s.autoFork.enabled ? "off" : "on"}`, true));
+  $<HTMLInputElement>("[data-r=fbotThr]").addEventListener("change", ev => {
+    const v = Math.max(0, Math.floor(Number((ev.target as HTMLInputElement).value) || 0));
+    cmd.run(`forkbot ${v === 0 ? "advisor" : v}`, true);
+  });
   $("[data-r=chExit]").addEventListener("click", () => cmd.run("challenge exit", true));
   $("[data-a=save]").addEventListener("click", () => cmd.run("save", true));
   $("[data-a=settings]").addEventListener("click", () => openSettings());
@@ -587,7 +626,7 @@ function render() {
   renderChallengeBanner();
 
   // Progressive reveal
-  const revealed = { stars: starsRevealed(s), pre: !starsRevealed(s), challenges: engine.challengesUnlocked, forked: s.forks > 0 };
+  const revealed = { stars: starsRevealed(s), pre: !starsRevealed(s), challenges: engine.challengesUnlocked, forked: s.forks > 0, distro: distroRevealed(s), distroed: s.distros > 0 };
   app.querySelectorAll<HTMLElement>("[data-reveal]").forEach(el => {
     const show = revealed[el.dataset.reveal as keyof typeof revealed];
     if (el.hidden === show) el.hidden = !show;
@@ -597,6 +636,7 @@ function render() {
   if (chNew.hidden === showNew) chNew.hidden = !showNew;
   if (sideTab === "challenges" && !engine.challengesUnlocked) sideTab = "release";
   if (sideTab === "fork" && s.forks === 0) sideTab = "release";
+  if (sideTab === "distro" && !distroRevealed(s)) sideTab = "release";
 
   // Side tabs
   app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b => toggleClass(b, "on", b.dataset.tab === sideTab));
@@ -611,7 +651,14 @@ function render() {
   if (sideTab === "stats") renderStats();
   renderForkCard();
   if (sideTab === "fork") renderForkTab();
+  if (sideTab === "distro") renderDistroTab();
   setText($("[data-r=contrib]"), fmtInt(s.contributors));
+  setText($("[data-r=pkg]"), fmtInt(s.packages));
+  const db = $("[data-r=distroBadge]");
+  if (db.hidden === !distroAdvice.advised) db.hidden = !distroAdvice.advised;
+  const dt = $("[data-r=distroTeaser]");
+  const showDt = !distroRevealed(s) && s.forks > 0 && s.forkTalents.length >= 10;
+  if (dt.hidden === showDt) dt.hidden = !showDt;
   const fb = $("[data-r=forkBadge]");
   const fbOn = s.prs.length > 0;
   if (fb.hidden === fbOn) fb.hidden = !fbOn;
@@ -1051,6 +1098,7 @@ function renderForkCard() {
     [t("fk.calc.gens", { n: b.gens }), x(b.multGens), b.gens ? "" : "dim"],
     [t("fk.calc.chal", { n: b.chal }), x(b.multChal), b.chal ? "" : "dim"],
     ...(b.multSig > 1 ? [[t("fk.calc.sig"), x(b.multSig)] as [string, string]] : []),
+    ...(b.multDistro !== 1 ? [[t("fk.calc.distro"), x(b.multDistro)] as [string, string]] : []),
     ...(b.ups ? [[t("fk.calc.ups"), `+${b.ups}`] as [string, string]] : []),
     [t("fk.calc.total", { e: b.exact.toFixed(2) }), `${fmtInt(b.total)} ⑂`, "total"],
     [t("fk.calc.next", { s: fmt(b.nextAt) }), t("fk.calc.more", { s: fmt(b.nextAt.sub(b.stars).max(0)) }), "next"],
@@ -1225,6 +1273,159 @@ function confirmFork() {
   );
 }
 
+/* ================= Distro (v0.5) ================= */
+let distroTabKey = "";
+let selectedDistro = "d_restart";
+function renderDistroTab() {
+  const s = engine.s;
+  const pending = packagesOnDistro(s).toNumber();
+  const done = forkTreeComplete(s);
+  setText($("[data-r=dsDesc]"), done ? t("ds.desc") : t("ds.need_tree"));
+  setText($("[data-r=dsFlavor]"), s.flavor ? t("ds.current", { f: t(`fl.${s.flavor}`) }) : t("ds.no_flavor"));
+  const btn = $<HTMLButtonElement>("[data-r=dsBtn]");
+  setText(btn, pending >= 1 ? t("ds.btn", { n: fmtInt(pending) }) : t("ds.btn0"));
+  btn.disabled = pending < 1 || !!s.challenge;
+  toggleClass(btn, "advised", distroAdvice.advised);
+  // How the packages are computed
+  const calc = $("[data-r=dsCalc]");
+  const rows: [string, string, string?][] = [
+    [t("ds.calc.contrib", { c: fmtInt(s.lifetimeContributors) }), packagesExact(s).toNumber().toFixed(2)],
+    ...(hasDistro(s, "d_pkg") ? [[t("ds.calc.pkg"), `×${(1 + DISTRO_PCT.pkg).toFixed(2)}`] as [string, string]] : []),
+    ...(hasDistro(s, "d_upstream") ? [[t("ds.calc.ups"), `+${UPSTREAM_PACKAGES}`] as [string, string]] : []),
+    [t("ds.calc.total"), `${fmtInt(pending)} ▣`, "total"],
+    [t("ds.calc.next", { c: fmtInt(nextPackageAt(s)) }), t("ds.calc.more", { c: fmtInt(Math.max(0, nextPackageAt(s) - s.lifetimeContributors)) }), "next"],
+  ];
+  const ckey = rows.map(r => r.join("|")).join("/");
+  if (calc.dataset.key !== ckey) {
+    calc.dataset.key = ckey;
+    calc.replaceChildren(h("div", { class: "fc-title" }, t("ds.calc.title")),
+      ...rows.map(([l, v, c]) => h("div", { class: "fc-row" + (c ? ` ${c}` : "") }, h("span", {}, l), h("span", { class: "fc-v" }, v))));
+  }
+  const rate = $("[data-r=dsRate]");
+  const showRate = pending >= 1;
+  if (rate.hidden === showRate) rate.hidden = !showRate;
+  if (showRate) setText(rate, t("ds.rate", { r: distroAdvice.rate.toFixed(1), p: distroAdvice.peak.toFixed(1) }) + (distroAdvice.advised ? ` · ${t("ds.adv.now")}` : ""));
+  // Fork bot settings
+  const fbot = $("[data-r=fbot]");
+  const showBot = hasDistro(s, "d_forkbot");
+  if (fbot.hidden === showBot) fbot.hidden = !showBot;
+  if (showBot) {
+    const on = $<HTMLInputElement>("[data-r=fbotOn]");
+    if (on.checked !== s.autoFork.enabled) on.checked = s.autoFork.enabled;
+    const thr = $<HTMLInputElement>("[data-r=fbotThr]");
+    if (document.activeElement !== thr && thr.value !== String(s.autoFork.threshold)) thr.value = String(s.autoFork.threshold);
+  }
+  setText($("[data-r=dsSum]"), t("ds.sum", { p: fmtInt(s.packages), l: fmtInt(s.lifetimePackages), d: fmtInt(s.distros), g: `×${packagesGainsMult(s).toFixed(2)}` }));
+  const key = `${s.distroTalents.join(",")}|${s.packages}|${s.flavor}|${s.flavorsDone.join(",")}|${selectedDistro}|${s.settings.lang}`;
+  if (key === distroTabKey) return;
+  distroTabKey = key;
+  $("[data-r=dsFlavors]").replaceChildren(...FLAVORS.map(f => h("div", { class: "fu" + (s.flavor === f.id ? " on" : "") },
+    h("div", { class: "fu-top" }, h("span", { class: "ft-name" }, `${t(`fl.${f.id}`)} `), h("span", { class: "ft-tag" }, `[${f.tag}]`),
+      h("span", { class: "fu-lvl" }, s.flavor === f.id ? t("ds.fl.current") : s.flavorsDone.includes(f.id) ? t("ds.fl.done") : "")),
+    h("div", { class: "ft-desc" }, t(`fl.${f.id}.desc`)),
+    h("div", { class: "muted small" }, t("ds.fl.bonus", { b: t(`fl.${f.id}.bonus`) }) + (s.flavorsDone.includes(f.id) ? " ✓" : "")))));
+  renderDistroTree();
+}
+
+let distroTreeBuilt = false;
+function buildDistroTree() {
+  const tree = $("[data-r=dtree]");
+  tree.replaceChildren();
+  const rows = Math.max(...DISTRO_TALENTS.map(x => x.row)) + 1;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${TREE_COLS * 100} ${rows * 100}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.classList.add("tree-lines");
+  for (const dt of DISTRO_TALENTS) for (const r of dt.req) {
+    const p = DISTRO_TALENT_BY_ID[r];
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", String(p.col * 100 + 50)); line.setAttribute("y1", String(p.row * 100 + 50));
+    line.setAttribute("x2", String(dt.col * 100 + 50)); line.setAttribute("y2", String(dt.row * 100 + 50));
+    line.dataset.to = dt.id; line.dataset.from = r;
+    svg.append(line);
+  }
+  tree.append(svg);
+  for (const dt of DISTRO_TALENTS) {
+    const node = h("button", { class: "node fnode dnode", "data-dt": dt.id, title: t(`dt.${dt.id}`) },
+      h("span", { class: "node-icon" }, dt.tag), h("span", { class: "node-cost" }, `${dt.cost}▣`));
+    node.style.left = `${(dt.col + 0.5) * (100 / TREE_COLS)}%`;
+    node.addEventListener("click", () => { selectedDistro = dt.id; distroTabKey = ""; render(); });
+    node.addEventListener("dblclick", () => cmd.run(`distro buy ${dt.tag}`, true));
+    tree.append(node);
+  }
+  distroTreeBuilt = true;
+}
+function renderDistroTree() {
+  if (!distroTreeBuilt || !$("[data-r=dtree]").firstChild) buildDistroTree();
+  const s = engine.s;
+  const tree = $("[data-r=dtree]");
+  const vis = Object.fromEntries(DISTRO_TALENTS.map(x => [x.id, distroTalentVisibility(s, x.id)]));
+  if (vis[selectedDistro] === "hidden") selectedDistro = "d_restart";
+  const rows = Math.max(...DISTRO_TALENTS.filter(x => vis[x.id] !== "hidden").map(x => x.row)) + 1;
+  tree.style.aspectRatio = `${TREE_COLS} / ${rows}`;
+  $(".tree-lines", tree).setAttribute("viewBox", `0 0 ${TREE_COLS * 100} ${rows * 100}`);
+  for (const dt of DISTRO_TALENTS) {
+    const node = $(`[data-dt=${dt.id}]`, tree);
+    node.style.top = `${(dt.row + 0.5) * (100 / rows)}%`;
+    toggleClass(node, "hidden", vis[dt.id] === "hidden");
+    toggleClass(node, "fog", vis[dt.id] === "fog");
+    setText($(".node-icon", node), vis[dt.id] === "fog" ? "???" : dt.tag);
+    node.title = vis[dt.id] === "shown" ? t(`dt.${dt.id}`) : "???";
+    const owned = hasDistro(s, dt.id);
+    const reqOk = dt.req.every(r => hasDistro(s, r));
+    toggleClass(node, "owned", owned);
+    toggleClass(node, "avail", !owned && reqOk);
+    toggleClass(node, "afford", !owned && reqOk && s.packages >= dt.cost);
+    toggleClass(node, "locked", !owned && !reqOk && vis[dt.id] === "shown");
+    toggleClass(node, "sel", dt.id === selectedDistro);
+  }
+  tree.querySelectorAll<SVGLineElement>("line").forEach(l => {
+    l.classList.toggle("lit", hasDistro(s, l.dataset.from!) && hasDistro(s, l.dataset.to!));
+    l.classList.toggle("hidden", vis[l.dataset.from!] !== "shown" || vis[l.dataset.to!] === "hidden");
+  });
+  const dt = DISTRO_TALENT_BY_ID[selectedDistro];
+  if (vis[dt.id] === "fog") {
+    $("[data-r=dtDetail]").replaceChildren(h("div", {}, h("span", { class: "ft-tag" }, "[???]"), ` ${t("tree.fog")}`));
+    return;
+  }
+  const owned = hasDistro(s, dt.id);
+  const reqOk = dt.req.every(r => hasDistro(s, r));
+  const buy = h("button", { class: "claim-btn" }, owned ? t("fk.owned") : `${t("fk.buy")} · ${dt.cost} ▣`) as HTMLButtonElement;
+  buy.disabled = owned || !reqOk || s.packages < dt.cost;
+  buy.addEventListener("click", () => cmd.run(`distro buy ${dt.tag}`, true));
+  $("[data-r=dtDetail]").replaceChildren(
+    h("div", {}, h("span", { class: "ft-tag" }, `[${dt.tag}]`), h("strong", {}, t(`dt.${dt.id}`))),
+    h("div", {}, t(`dt.${dt.id}.desc`)),
+    dt.req.length ? h("div", { class: "muted small" }, t("fk.req", { r: dt.req.map(r => DISTRO_TALENT_BY_ID[r].tag).join(" + ") })) : "",
+    buy,
+  );
+}
+
+/** Publishing a distro: pick the flavor of the next cycle, then confirm. */
+function confirmDistro() {
+  const s = engine.s;
+  const n = packagesOnDistro(s).toNumber();
+  const cancel = h("button", { class: "claim-btn" }, t("fk.cancel"));
+  cancel.addEventListener("click", closeModal);
+  const choices = FLAVORS.map(f => {
+    const b = h("button", { class: "flavor-choice" },
+      h("strong", {}, `${t(`fl.${f.id}`)} `), h("span", { class: "ft-tag" }, `[${f.tag}]`),
+      h("div", { class: "small" }, t(`fl.${f.id}.desc`)),
+      h("div", { class: "muted small" }, s.flavorsDone.includes(f.id) ? t("ds.fl.done") : t("ds.fl.bonus", { b: t(`fl.${f.id}.bonus`) })));
+    b.addEventListener("click", () => { closeModal(); cmd.run(`distro ${f.id} --yes`, true); });
+    return b;
+  });
+  openModal(
+    h("h2", {}, `▣ ${t("ds.title")}`),
+    h("p", {}, t("ds.confirm", { n: fmtInt(n) })),
+    h("ul", { class: "small" }, h("li", {}, t("ds.resets")), h("li", {}, t("ds.keeps"))),
+    s.distros === 0 ? h("p", { class: "small", style: "color: var(--cyan)" }, t("ds.gift")) : "",
+    h("p", { class: "small" }, t("ds.pick")),
+    h("div", { class: "flavor-grid" }, ...choices),
+    h("div", { class: "modal-actions" }, cancel),
+  );
+}
+
 function renderStats() {
   const s = engine.s;
   const rows: [string, string][] = [
@@ -1247,6 +1448,12 @@ function renderStats() {
       ["st.fork_time", fmtTime(s.stats.forkTime)],
       ["st.prs", fmtInt(s.stats.prsMerged)],
       ["st.all_stars", fmt(new Decimal(s.stats.allStars))],
+    ] as [string, string][] : []),
+    ...(s.distros > 0 ? [
+      ["st.distros", fmtInt(s.distros)],
+      ["st.packages", fmtInt(s.lifetimePackages)],
+      ["st.fastest_distro", s.stats.fastestDistro === null ? "—" : fmtTime(s.stats.fastestDistro)],
+      ["st.distro_time", fmtTime(s.stats.distroTime)],
     ] as [string, string][] : []),
     ...(gensRevealed(s) ? [
       ["st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`] as [string, string],
@@ -1517,11 +1724,28 @@ engine.on((e: GameEvent) => {
     case "buff_end":
       break;
     case "fork":
-      term.banner(t("fk.banner", { n: fmtInt(e.contributors), f: fmtInt(engine.s.forks) }));
-      toast(`⑂ ${t("fk.title")}`, t("fk.toast", { n: fmtInt(e.contributors) }));
+      // Forks made by the Fork bot (Distro talent): one journal line, no banner or toast
+      if (e.auto) term.println(["[ FORK ]", "c-violet"], " " + t("ds.fbot.log", { n: fmtInt(e.contributors), f: fmtInt(engine.s.forks) }));
+      else {
+        term.banner(t("fk.banner", { n: fmtInt(e.contributors), f: fmtInt(engine.s.forks) }));
+        toast(`⑂ ${t("fk.title")}`, t("fk.toast", { n: fmtInt(e.contributors) }));
+      }
       buildTree();
       forkTabKey = "";
       lastAchCount = "";
+      break;
+    case "distro":
+      term.banner(t("ds.banner", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`), d: fmtInt(engine.s.distros) }));
+      toast(`▣ ${t("ds.title")}`, t("ds.toast", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`) }));
+      if (e.gift) term.println(OK, " " + t("ds.gift_log"));
+      buildTree();
+      forkTabKey = distroTabKey = "";
+      lastAchCount = "";
+      engine.save();
+      break;
+    case "distro_talent":
+      term.println(OK, " " + t("ds.bought", { t: t(`dt.${e.id}`) }));
+      distroTabKey = "";
       break;
     case "fork_upgrade":
       term.println(OK, " " + t("fu.bought", { u: t(`fu.${e.id}`), n: e.level }));
@@ -1637,7 +1861,14 @@ function loop() {
 
   advice = advisor.update(engine.s);
   forkAdvice = forkAdvisor.update(engine.s);
-  if (!forkAdvice.advised) forkAdvisedLogged = false;
+  distroAdvice = distroAdvisor.update(engine.s);
+  if (!distroAdvice.advised) distroAdvisedLogged = false;
+  else if (!distroAdvisedLogged) {
+    distroAdvisedLogged = true;
+    term.println(["[ DISTRO ]", "c-violet"], " " + t("ds.adv.log", { n: fmtInt(distroAdvice.pending) }));
+  }
+  const forkBotOn = hasDistro(engine.s, "d_forkbot") && engine.s.autoFork.enabled;
+  if (!forkAdvice.advised || forkBotOn) forkAdvisedLogged = forkBotOn && forkAdvice.advised;
   else if (!forkAdvisedLogged) {
     forkAdvisedLogged = true;
     term.println(["[ FORK ]", "c-violet"], " " + t("fk.adv.log", { n: fmtInt(forkAdvice.pending) }));

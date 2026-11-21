@@ -5,6 +5,7 @@ import { CHALLENGES } from "./challenges";
 import { TALENTS } from "./talents";
 import { EVENT_BY_ID, RC_STARS_PCT } from "./events";
 import { AWESOME_STARS, FORK, contribGainsMult, forkGainsMult, forkSpeedMult, forkStarsMult, hasFork } from "./fork";
+import { distroGenReqMult, distroGrowthDelta, distroOfflineEff, distroStarsMult, flavorOf, packagesGainsMult } from "./distro";
 const TALENT_REQ: Record<string, string[]> = Object.fromEntries(TALENTS.map(t => [t.id, t.req]));
 import { offlineCapHours, offlineEff, optRewardMult, optSpeedMult } from "./upgrades";
 
@@ -113,11 +114,12 @@ export const BAL = {
 export const gensRevealed = (s: GameState) => starsRevealed(s);
 /** Level needed for the next generation of this run, rounded to 5. */
 export const genRequired = (s: GameState, k: GenKey) =>
-  Math.max(5, Math.round((BAL.genBase * Math.pow(BAL.genGrowth, s.gens[k]) * (hasFork(s, "f_mirrors") ? BAL.genMirrors : 1)) / 5) * 5);
+  Math.max(5, Math.round((BAL.genBase * Math.pow(BAL.genGrowth, s.gens[k]) * (hasFork(s, "f_mirrors") ? BAL.genMirrors : 1) * distroGenReqMult(s)) / 5) * 5);
 export const totalGens = (s: GameState) => s.gens.cpu + s.gens.ram + s.gens.disk;
-export const genSpeedMult = (s: GameState) => Math.pow(BAL.genCpu, s.gens.cpu);
-export const genFailMult = (s: GameState) => Math.pow(BAL.genDiskFail, s.gens.disk);
-export const genRewardMult = (s: GameState) => Decimal.pow(BAL.genRam, s.gens.ram).mul(Decimal.pow(BAL.genDisk, s.gens.disk));
+// Distro flavor "Source" (Gentoo): every generation counts 1.5× (genPow)
+export const genSpeedMult = (s: GameState) => Math.pow(BAL.genCpu, s.gens.cpu * flavorOf(s).genPow);
+export const genFailMult = (s: GameState) => Math.pow(BAL.genDiskFail, s.gens.disk * flavorOf(s).genPow);
+export const genRewardMult = (s: GameState) => Decimal.pow(BAL.genRam, s.gens.ram * flavorOf(s).genPow).mul(Decimal.pow(BAL.genDisk, s.gens.disk * flavorOf(s).genPow));
 
 /* ---------- Build events (active boosts) ---------- */
 // The boosts of caught events, multiplied together if several of the same kind run at once.
@@ -191,7 +193,7 @@ export const achStarsMult = (s: GameState) => 1 + achBonus(s, "stars") / 100;
 
 export function rewardMultiplier(s: GameState): Decimal {
   let m = starMultiplier(s).mul(achGainsMult(s)).mul(optRewardMult(s)).mul(genRewardMult(s)).mul(eventGainsMult(s))
-    .mul(contribGainsMult(s)).mul(s.prBoost.gains).mul(forkGainsMult(s));
+    .mul(contribGainsMult(s)).mul(s.prBoost.gains).mul(forkGainsMult(s)).mul(packagesGainsMult(s));
   if (on(s, "code_review")) m = m.mul(BAL.revReward);
   if (on(s, "lto")) m = m.mul(BAL.ltoReward);
   if (challengeDone(s, "debug_build")) m = m.mul(2);
@@ -213,7 +215,7 @@ export const RELEASE_BASE = new Decimal(2e4);
 
 /** Credits per star² for the next release: grows with every version shipped. */
 export function releaseBase(s: GameState): Decimal {
-  const growth = hasFork(s, "f_lts") ? BAL.releaseGrowthLts : BAL.releaseGrowth;
+  const growth = (hasFork(s, "f_lts") ? BAL.releaseGrowthLts : BAL.releaseGrowth) + distroGrowthDelta(s); // Distro flavor (Rolling −, Stable +)
   return Decimal.pow(growth, s.releases).mul(RELEASE_BASE).mul(Decimal.pow(FORK.releaseBaseMult, s.forks));
 }
 
@@ -222,7 +224,7 @@ export function starGainMultiplier(s: GameState): number {
   if (on(s, "semver")) m *= 2;
   if (challengeDone(s, "no_cache")) m *= 1.5;
   if (s.rcPending) m *= 1 + RC_STARS_PCT / 100; // "Release candidate" event
-  m *= s.prBoost.stars * forkStarsMult(s);
+  m *= s.prBoost.stars * forkStarsMult(s) * distroStarsMult(s);
   return m;
 }
 
@@ -280,5 +282,5 @@ export const autoScaleInterval = (s: GameState) => (on(s, "as_fast") ? 0.25 : 2)
 /* ---------- Offline progress ---------- */
 export const OFFLINE_GRACE_SECONDS = 300;
 export const offlineUnlocked = (s: GameState) => on(s, "offline_runners");
-export const offlineEfficiency = (s: GameState) => (offlineUnlocked(s) ? offlineEff(s) : 0);
-export const offlineCapSeconds = (s: GameState) => offlineCapHours(s) * 3600;
+export const offlineEfficiency = (s: GameState) => (offlineUnlocked(s) ? Math.min(1, offlineEff(s) + distroOfflineEff(s)) : 0);
+export const offlineCapSeconds = (s: GameState) => offlineCapHours(s) * 3600 * flavorOf(s).offlineHours;

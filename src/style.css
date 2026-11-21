@@ -550,3 +550,21 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .tut-bar { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
 .tut-bar i { display: block; height: 100%; width: 0; background: var(--violet); transition: width .25s; }
 .tut-prog-t { white-space: nowrap; }
+
+/* ---------- v0.5 Distro (third layer): its own colour, cyan ---------- */
+:root { --cyan: #22d3ee; }
+.hud-pkg { display: flex; align-items: center; gap: 6px; font-size: 22px; font-weight: 700; color: var(--cyan); }
+.hud-pkg[hidden] { display: none; }
+.pk-glyph { color: var(--cyan); font-weight: 700; }
+.distro-card { border-color: var(--cyan); }
+.distro-btn { background: var(--cyan); border-color: var(--cyan); }
+.ds-flavor { margin-top: 4px; color: var(--cyan); }
+.dnode.owned { border-color: var(--cyan); }
+.fu.on { border-color: var(--cyan); }
+.flavor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.flavor-choice {
+  text-align: left; font: inherit; font-size: 12.5px; padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  background: var(--panel-2); color: var(--fg); border: 1px solid var(--border-2); display: flex; flex-direction: column; gap: 3px;
+}
+.flavor-choice:hover { border-color: var(--cyan); }
+@media (max-width: 600px) { .flavor-grid { grid-template-columns: 1fr; } }
