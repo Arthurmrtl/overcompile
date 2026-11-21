@@ -1426,7 +1426,6 @@ function confirmDistro() {
     h("h2", {}, `▣ ${t("ds.title")}`),
     h("p", {}, t("ds.confirm", { n: fmtInt(n) })),
     h("ul", { class: "small" }, h("li", {}, t("ds.resets")), h("li", {}, t("ds.keeps"))),
-    s.distros === 0 ? h("p", { class: "small", style: "color: var(--cyan)" }, t("ds.gift")) : "",
     h("p", { class: "small" }, t("ds.pick")),
     h("div", { class: "flavor-grid" }, ...choices),
     h("div", { class: "modal-actions" }, cancel),
@@ -1744,7 +1743,6 @@ engine.on((e: GameEvent) => {
     case "distro":
       term.banner(t("ds.banner", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`), d: fmtInt(engine.s.distros) }));
       toast(`▣ ${t("ds.title")}`, t("ds.toast", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`) }));
-      if (e.gift) term.println(OK, " " + t("ds.gift_log"));
       buildTree();
       forkTabKey = distroTabKey = "";
       lastAchCount = "";
