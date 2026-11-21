@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { exportSave } from "../src/core/state";
 // Balance simulation: a reasonably smart player, played at 0.25 s ticks.
 // Usage: npm run sim -- [hours]
 import { Engine } from "../src/core/engine";
@@ -168,6 +170,12 @@ while (t < H * 3600) {
   if (!process.env.NODISTRO) {
     const da = distroAdvisor.update(s);
     if (da.advised) {
+      // SAVE_DISTRO=<file>: write the save right before the first distro, then stop
+      if (process.env.SAVE_DISTRO && s.distros === 0) {
+        writeFileSync(process.env.SAVE_DISTRO, exportSave(s));
+        console.log(`saved before the first distro at ${fmt(t)} → ${process.env.SAVE_DISTRO}`);
+        process.exit(0);
+      }
       const cycle = t - distroStart;
       const contribs = s.lifetimeContributors;
       const from = s.flavor ?? "none";

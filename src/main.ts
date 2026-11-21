@@ -32,7 +32,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.1";
+const GAME_VERSION = "0.5.2";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -183,9 +183,11 @@ function buildLayout() {
     <div class="brand"><span class="logo">overcompile</span><span class="cursor">▌</span><span class="ver">v${GAME_VERSION}</span></div>
     <div class="hud">
       <div class="hud-credits"><div class="big" data-r="credits">0</div><div class="sub"><span data-r="rate">0</span> ${t("credits")}${t("per_sec")}</div></div>
-      <div class="hud-stars" data-reveal="stars" title="${t("rel.stars")}"><span class="star">⭐</span><span data-r="stars">0</span></div>
-      <div class="hud-contrib" data-reveal="forked" title="${t("fk.contributors")}"><span class="fk-glyph">⑂</span><span data-r="contrib">0</span></div>
-      <div class="hud-pkg" data-reveal="distroed" title="${t("ds.packages")}"><span class="pk-glyph">▣</span><span data-r="pkg">0</span></div>
+      <div class="hud-cur">
+        <div class="hud-stars" data-reveal="stars" title="${t("rel.stars")}"><span class="star">⭐</span><span data-r="stars">0</span></div>
+        <div class="hud-contrib" data-reveal="forked" title="${t("fk.contributors")}"><span class="fk-glyph">⑂</span><span data-r="contrib">0</span></div>
+        <div class="hud-pkg" data-reveal="distroed" title="${t("ds.packages")}"><span class="pk-glyph">▣</span><span data-r="pkg">0</span></div>
+      </div>
     </div>
     <div class="actions">
       <button class="icon-btn" data-a="save" title="${t("save")}">💾</button>
