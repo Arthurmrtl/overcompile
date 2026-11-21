@@ -1,4 +1,5 @@
 import Decimal from "break_eternity.js";
+import type { FlavorId } from "./distro";
 import type { PullRequest } from "./fork";
 
 export type HwKey = "cpu" | "ram" | "disk" | "jobs";
@@ -75,6 +76,9 @@ export interface GameState {
     allStars: number;          // stars earned over every fork (stats only)
     gensTotal: number;         // generations ever done (achievements, never reset)
     bestRunGens: number;       // most generations in one run during this fork cycle (contributors)
+    distroTime: number;        // time since the last distro (or since the start)
+    fastestDistro: number | null;
+    allContributors: number;   // contributors earned over every distro (stats only)
   };
   settings: { lang: Lang; notation: Notation; logLevel: "full" | "reduced" | "minimal"; buyAmount: BuyAmount };
   /* ---------- Fork (v0.4, prestige layer 2) ---------- */
@@ -91,11 +95,22 @@ export interface GameState {
   prNext: number;      // seconds before the next PR
   prSeq: number;       // last PR number
   prBoost: { speed: number; gains: number; stars: number };
+  /* ---------- Distro (v0.5, prestige layer 3) ---------- */
+  distros: number;
+  /** Unspent packages (Distro talents) and every package ever earned (passive bonus, never reset). */
+  packages: number;
+  lifetimePackages: number;
+  distroTalents: string[];
+  /** The base of the current Distro cycle (null before the first distro), and the ones finished at least once. */
+  flavor: FlavorId | null;
+  flavorsDone: FlavorId[];
+  /** Distro talent "Fork bot": fork on its own once the fork pays this many contributors (0: when the advisor says). */
+  autoFork: { enabled: boolean; threshold: number };
   lastSeen: number;
   createdAt: number;
 }
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -134,7 +149,7 @@ export function newState(): GameState {
     seen: [],
     achClaimed: [],
     achievements: [],
-    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0, forkTime: 0, fastestFork: null, prsMerged: 0, allStars: 0, gensTotal: 0, bestRunGens: 0 },
+    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0, forkTime: 0, fastestFork: null, prsMerged: 0, allStars: 0, gensTotal: 0, bestRunGens: 0, distroTime: 0, fastestDistro: null, allContributors: 0 },
     settings: { lang: browserLang(), notation: "standard", logLevel: "reduced", buyAmount: 1 },
     forks: 0,
     contributors: 0,
@@ -145,6 +160,13 @@ export function newState(): GameState {
     prNext: 600,
     prSeq: 0,
     prBoost: { speed: 1, gains: 1, stars: 1 },
+    distros: 0,
+    packages: 0,
+    lifetimePackages: 0,
+    distroTalents: [],
+    flavor: null,
+    flavorsDone: [],
+    autoFork: { enabled: true, threshold: 0 },
     lastSeen: now,
     createdAt: now,
   };
@@ -173,6 +195,7 @@ export function deserialize(json: string): GameState {
     autobuy: { ...base.autobuy, ...raw.autobuy },
     autogen: { ...base.autogen, ...raw.autogen },
     autoRelease: { ...base.autoRelease, ...raw.autoRelease },
+    autoFork: { ...base.autoFork, ...raw.autoFork },
     stats: { ...base.stats, ...raw.stats },
     settings: { ...base.settings, ...raw.settings },
   };
@@ -188,6 +211,8 @@ export function deserialize(json: string): GameState {
   s.forkUpgrades = { ...(raw.forkUpgrades ?? {}) };
   s.prs = Array.isArray(raw.prs) ? raw.prs.map((p: PullRequest) => ({ ...p })) : [];
   s.prBoost = { ...base.prBoost, ...raw.prBoost };
+  s.distroTalents = [...(raw.distroTalents ?? [])];
+  s.flavorsDone = [...(raw.flavorsDone ?? [])];
   // v0.2.2–0.2.4 first-run objectives became the first tiers of the achievement chains
   if (!raw.achClaimed) {
     const map: Record<string, string> = {
@@ -263,6 +288,11 @@ function migrate(s: GameState, from: number) {
   if (from < 9) {
     // v0.4.8 → v0.4.9: per-hardware switches of the Fork talent `rnv` (auto-generation), all on
     s.autogen = { cpu: true, ram: true, disk: true };
+  }
+  if (from < 10) {
+    // v0.4.14 → v0.5.0: Distro layer. Nothing to convert: a new layer, empty
+    s.stats.distroTime = s.stats.playTime;
+    s.stats.allContributors = s.lifetimeContributors;
   }
   s.version = SAVE_VERSION;
 }

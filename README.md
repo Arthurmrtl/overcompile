@@ -48,7 +48,7 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## Content (v0.4.14)
+## Content (v0.5.0)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (buys the cheapest upgrade every 2 s): not sold before the first release (the first run is played by hand), then priced at 25 % of the current release threshold until the permanent `as` talent (10★)
@@ -58,6 +58,7 @@ scripts/sim.ts     pacing simulation
 - Release advisor: stars/min of the current run; the Release button pulses (and the journal says so) when shipping is worth it
 - Optimizations: infinite star upgrades, price ×3 per level (rewards, build speed, warm start, offline efficiency/duration)
 - **Fork** (v0.4, second prestige layer, `fork`): once the whole release tree is owned, fork the project. Releases, stars, the release tree, optimizations, challenges and generations reset, and the release threshold starts again at 20K like a new game; you earn **contributors** from the stars earned since the last fork (+3 % per generation in the cycle's best run and +10 % per challenge done). Every contributor ever earned gives rewards ×(1 + 0.25·log2(1 + total)); unspent ones buy **Fork talents** (15, drawn as a tree, never reset): restart boosts (starting stars, hardware levels and release talents, Auto-Scaling from the start, automatic events and generations) and fixed % bonuses (rewards, build speed, stars, contributors), then infinite **Fork upgrades** (Bounties rewards +10 %/level, Mentoring stars +3 %/level). After the first fork, contributors open **pull requests** (`gh pr`): merging one boosts the run until the next release. A fork advisor says when forking is worth it
+- **Distro** (v0.5, third prestige layer, `distro`): once the whole Fork tree is owned, publish a distro. The whole Fork layer starts over (forks, contributors, Fork tree and upgrades) plus everything a fork resets, for **packages** (▣), computed from the contributors earned since the last distro. Each Distro cycle runs on a **flavor** picked when publishing: Rolling (releases much faster), Stable (slow releases, more stars and contributors), Source (stronger generations, more build events) or Desktop (better offline progress); finishing a first cycle in each flavor gives its permanent bonus. The first distro also gives the first Distro talent (Base image) for free. Packages give a logarithmic passive bonus and buy the **Distro tree** (10 talents, never reset), which gives the Fork tree back step by step, then automates the Fork layer: auto-merged PRs, a **Fork bot** (`forkbot`), maintainers that buy Fork talents, challenges kept across forks. A distro advisor says when publishing is worth it
 - Hardware generations (`gen`, inspired by Revolution Idle's ascension), a small prestige inside each run: once CPU, RAM or Disk reaches the required level (25, then ×1.6 each time in the same run), move it to the next generation. It goes back to level 1 for a big bonus until the next release (CPU: builds ×1.12 faster · RAM: rewards ×1.2 · Disk: rewards ×1.08, failures ×0.88); every release resets the generations
 - Build events (`events`): every 3–6 min something shows up for 12 s (20 s with the `pgr` talent); click it or type its command for a boost. All positive: coffee break (`coffee`, builds ×2 · 30 s), `cargo update` (+1 min of income), flaky test (`retry`, 0 % failures · 45 s), express code review (`approve`, rewards ×3 · 20 s), merge conflict (`git merge`, every job finishes instantly ×3), CVE patched (`patch`, +5 min of income), prod on fire (`hotfix`, rewards ×7 · 15 s), release candidate (`rc`, +10 % stars on the next release). None offline or during a challenge
 - Offline progress: the first 5 minutes of absence always count; beyond that it must be unlocked
@@ -74,7 +75,7 @@ scripts/sim.ts     pacing simulation
 ## Roadmap
 
 - v0.4 — Prestige layer 2: Fork (Contributors, PRs) + `crontab` automation scripting
-- v0.5 — Prestige layer 3: Distro (Arch / Debian / NixOS rule sets)
+- v0.5 — Prestige layer 3: Distro with flavors and Fork automation (v0.5.0), then `crontab` and Distro achievements (v0.5.1)
 
 ## License
 
