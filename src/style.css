@@ -52,6 +52,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .hud-credits { text-align: center; }
 .hud-credits .big { font-size: 24px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .hud-credits .sub { color: var(--dim); font-size: 11px; }
+.hud-cur { display: flex; align-items: center; gap: 28px; }
 .hud-stars { display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 700; color: var(--amber); }
 .actions { display: flex; gap: 6px; }
 .icon-btn { background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 6px; width: 34px; height: 34px; }
@@ -307,8 +308,17 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 @media (max-width: 900px) {
   .top { padding: 8px 12px; gap: 10px; }
   .ver, .cursor { display: none; }
-  .hud { gap: 14px; justify-content: flex-end; }
+  /* Logo, credits and buttons on the first line; the prestige counters (⭐ ⑂ ▣) on a thin
+     second line, which only shows once there is one: four counters never fit on one line */
+  .top { flex-wrap: wrap; row-gap: 2px; }
+  .hud { display: contents; }
+  .hud-credits { flex: 1; min-width: 0; }
   .hud-credits .big { font-size: 19px; }
+  .hud-credits .sub { font-size: 10px; white-space: nowrap; }
+  .actions { flex: none; }
+  .top .hud-cur { order: 3; flex: 1 0 100%; justify-content: center; gap: 22px; }
+  .top .hud-cur:not(:has(> :not([hidden]))) { display: none; }
+  .top .hud-stars, .top .hud-contrib, .top .hud-pkg { font-size: 15px; gap: 4px; white-space: nowrap; }
   .layout { grid-template-columns: minmax(0, 1fr); padding: 8px 8px calc(68px + env(safe-area-inset-bottom)); }
   .layout .col, .layout .col-handle { display: none; }
   .layout[data-mobile=shop] .col-shop,
@@ -570,3 +580,9 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 }
 .flavor-choice:hover { border-color: var(--cyan); }
 @media (max-width: 600px) { .flavor-grid { grid-template-columns: 1fr; } }
+
+/* Narrow phones */
+@media (max-width: 400px) {
+  .logo { font-size: 15px; }
+  .top { column-gap: 8px; }
+}
