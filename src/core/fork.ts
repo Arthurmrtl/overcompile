@@ -1,6 +1,7 @@
 import Decimal from "break_eternity.js";
 import type { GameState } from "./state";
 import { TALENTS } from "./talents";
+import { distroContribMult } from "./distro";
 
 /**
  * Fork (v0.4): second prestige layer, above releases.
@@ -123,7 +124,7 @@ function curve(ratio: Decimal): Decimal {
 
 export function contributorMultiplier(s: GameState): number {
   const gens = s.stats.bestRunGens; // best run of the cycle (generations are per run)
-  return (1 + FORK.genBonus * gens) * (1 + FORK.chalBonus * s.challengesDone.length) * (1 + (hasFork(s, "f_rel") ? FORK_PCT.rel : 0));
+  return (1 + FORK.genBonus * gens) * (1 + FORK.chalBonus * s.challengesDone.length) * (1 + (hasFork(s, "f_rel") ? FORK_PCT.rel : 0)) * distroContribMult(s);
 }
 
 /** Contributors the fork would pay right now, before rounding down. */
@@ -142,16 +143,17 @@ export function contributorBreakdown(s: GameState) {
   const multGens = 1 + FORK.genBonus * gens;
   const multChal = 1 + FORK.chalBonus * chal;
   const multSig = hasFork(s, "f_rel") ? 1 + FORK_PCT.rel : 1;
+  const multDistro = distroContribMult(s); // packages, Distro talent ctb, flavor (v0.5)
   const ups = hasFork(s, "f_upstream") ? UPSTREAM_CONTRIBUTORS : 0;
   const base = curve(s.lifetimeStars.div(FORK.starsBase));
   const total = contributorsOnFork(s).toNumber();
   // Stars of the cycle for one more contributor: invert the curve (the max of two branches → the lower inverse)
-  const needBase = Math.max(1, (total + 1 - ups) / (multGens * multChal * multSig));
+  const needBase = Math.max(1, (total + 1 - ups) / (multGens * multChal * multSig * multDistro));
   const early = new Decimal(2).pow((needBase - 1) / FORK.earlyK);
   const late = new Decimal(needBase).pow(1 / FORK.lateExp);
   const nextAt = early.min(late).mul(FORK.starsBase).ceil();
   const exact = contributorsExact(s).toNumber();
-  return { stars: s.lifetimeStars, base: base.toNumber(), gens, multGens, chal, multChal, multSig, ups, exact, total, nextAt };
+  return { stars: s.lifetimeStars, base: base.toNumber(), gens, multGens, chal, multChal, multSig, multDistro, ups, exact, total, nextAt };
 }
 
 /** Stars to earn in this cycle for the first contributor. */

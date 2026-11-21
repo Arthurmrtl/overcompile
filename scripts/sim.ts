@@ -9,6 +9,8 @@ import { UPGRADES, upgradePrice } from "../src/core/upgrades";
 import { CHALLENGES } from "../src/core/challenges";
 import { ADV, ReleaseAdvisor } from "../src/core/advisor";
 import { GEN_KEYS } from "../src/core/state";
+import { DISTRO, DISTRO_TALENTS, FLAVORS, type FlavorId } from "../src/core/distro";
+import { DISTRO_ADV, DistroAdvisor } from "../src/core/advisor";
 
 import { BAL } from "../src/core/formulas";
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("BAL_")) (BAL as any)[k.slice(4)] = Number(v);
@@ -32,6 +34,24 @@ let treeLoggedForks = -1;
 let cycleStart = 0;
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("FORK_")) (FORK as any)[k.slice(5)] = Number(v);
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("FADV_")) (FORK_ADV as any)[k.slice(5)] = Number(v);
+for (const [k, v] of Object.entries(process.env)) if (k.startsWith("DISTRO_")) (DISTRO as any)[k.slice(7)] = Number(v);
+for (const [k, v] of Object.entries(process.env)) if (k.startsWith("DADV_")) (DISTRO_ADV as any)[k.slice(5)] = Number(v);
+const distroAdvisor = new DistroAdvisor();
+let distroStart = 0;
+let forkTreeLogged = -1;
+/** The player tries every flavor once (to get each permanent bonus), then picks FLAVOR (default stable). */
+function pickFlavor(): FlavorId {
+  const order: FlavorId[] = ["rolling", "stable", "source", "desktop"];
+  const next = order.find(f => !s.flavorsDone.includes(f) && s.flavor !== f);
+  return (process.env.FLAVOR as FlavorId) ?? next ?? "stable";
+}
+function spendPackages() {
+  for (;;) {
+    const dt = DISTRO_TALENTS.filter(x => e.canBuyDistroTalent(x.id).ok).sort((a, b) => a.cost - b.cost)[0];
+    if (!dt) break;
+    e.buyDistroTalent(dt.id);
+  }
+}
 
 function spendContributors() {
   // Fork talents first (cheapest first), then the infinite Fork upgrades (cheapest first)
@@ -57,7 +77,7 @@ function spendStars() {
   }
 }
 
-let forkAt = 0, asForkLogged = 0; const asAfterFork: number[] = [];
+let forkAt = 0, asForkLogged = 0, lastForksSeen = 0; const asAfterFork: number[] = [];
 while (t < H * 3600) {
   if (!s.pipeline) e.compile();
   if (!s.perks.ci_cd.unlocked) e.buyPerk("ci_cd");
@@ -126,6 +146,37 @@ while (t < H * 3600) {
         cycleStart = t;
         spendContributors();
         const line = `${fmt(t)}  FORK #${s.forks}  +${gain} contributors after ${fmt(cycle)} (cycle stars ${Math.round(stars)}, lifetime contributors ${s.lifetimeContributors}, fork talents ${s.forkTalents.length}/${FORK_TALENTS.length}, upgrades ${JSON.stringify(s.forkUpgrades)})`;
+        console.log(line);
+        milestones.push(line.trim());
+      }
+    }
+  }
+  // Forks made by the Fork bot (Distro talent): log them and spend like the player would
+  if (s.forks !== lastForksSeen) {
+    if (s.forks > lastForksSeen + 0 && t - forkAt > 1) {
+      console.log(`${fmt(t)}  FORK #${s.forks} (bot)  lifetime contributors ${s.lifetimeContributors}, fork talents ${s.forkTalents.length}/${FORK_TALENTS.length}`);
+      cycleStart = t; forkAt = t;
+    }
+    lastForksSeen = s.forks;
+    spendContributors();
+  }
+  if (s.forkTalents.length === FORK_TALENTS.length && forkTreeLogged !== s.distros) {
+    forkTreeLogged = s.distros;
+    milestones.push(`fork tree complete ${fmt(t)} (distro cycle ${s.distros + 1}, ${fmt(t - distroStart)} into it)`);
+  }
+  // Distro when the distro advisor says so
+  if (!process.env.NODISTRO) {
+    const da = distroAdvisor.update(s);
+    if (da.advised) {
+      const cycle = t - distroStart;
+      const contribs = s.lifetimeContributors;
+      const from = s.flavor ?? "none";
+      const flavor = pickFlavor();
+      const gain = e.distro(flavor);
+      if (gain !== null) {
+        distroStart = t; cycleStart = t; forkAt = t; lastForksSeen = s.forks;
+        spendPackages(); spendContributors(); spendStars();
+        const line = `${fmt(t)}  DISTRO #${s.distros}  +${gain} packages after ${fmt(cycle)} on ${from} (cycle contributors ${contribs}, lifetime packages ${s.lifetimePackages}, distro talents ${s.distroTalents.length}/${DISTRO_TALENTS.length}, kept fork talents ${s.forkTalents.length}) → ${flavor}`;
         console.log(line);
         milestones.push(line.trim());
       }

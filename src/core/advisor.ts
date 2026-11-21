@@ -1,4 +1,5 @@
 import Decimal from "break_eternity.js";
+import { packagesExact, packagesOnDistro } from "./distro";
 import type { GameState } from "./state";
 import { starsExact, starsOnRelease } from "./formulas";
 import { contributorsExact, contributorsOnFork } from "./fork";
@@ -80,6 +81,30 @@ export class ForkAdvisor {
     if (pending >= 1 && rate > this.peak) this.peak = rate;
     const advised = pending >= 1 && !s.challenge &&
       (rate < this.peak * FORK_ADV.peakDrop || pending >= Math.max(1, s.lifetimeContributors * FORK_ADV.lifetimeShare));
+    return { pending, rate, peak: this.peak, advised };
+  }
+}
+
+/**
+ * Distro advisor (v0.5): packages per hour of the current Distro cycle (60 min minimum);
+ * advised when the rate falls under its peak, or when the distro alone doubles the packages ever earned.
+ */
+export const DISTRO_ADV = { peakDrop: 0.9, lifetimeShare: 1, minWindowMin: 60 };
+
+export interface DistroAdvice { pending: number; rate: number; peak: number; advised: boolean }
+
+export class DistroAdvisor {
+  private peak = 0;
+  private lastDistros = -1;
+
+  update(s: GameState): DistroAdvice {
+    if (s.distros !== this.lastDistros) { this.peak = 0; this.lastDistros = s.distros; }
+    const pending = packagesOnDistro(s).toNumber();
+    const hours = Math.max(s.stats.distroTime / 60, DISTRO_ADV.minWindowMin) / 60;
+    const rate = packagesExact(s).toNumber() / hours;
+    if (pending >= 1 && rate > this.peak) this.peak = rate;
+    const advised = pending >= 1 && !s.challenge &&
+      (rate < this.peak * DISTRO_ADV.peakDrop || pending >= Math.max(1, s.lifetimePackages * DISTRO_ADV.lifetimeShare));
     return { pending, rate, peak: this.peak, advised };
   }
 }

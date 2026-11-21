@@ -15,6 +15,9 @@ import {
 import { UPGRADES, UPGRADE_BY_ID, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { GEN_KEYS, type GenKey, type HwKey, HW_KEYS, PERK_KEYS, type PerkKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
+import {
+  DISTRO_TALENTS, FLAVORS, type FlavorId, distroRevealed, distroTalentVisibility, forkTreeComplete, hasDistro, nextPackageAt, packagesOnDistro,
+} from "./core/distro";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
 import { setLang, t } from "./i18n";
 import { FAIL, INFO, OK, STAR, type Seg, type Terminal } from "./ui/terminal";
@@ -218,6 +221,8 @@ export function createCommands(c: GameCtx) {
         ["shop", t("help.shop")], ["perk", t("help.perk")], ["toggle", t("help.toggle")],
         ["status", t("help.status")], ["goals", t("help.goals")], ["claim", t("help.claim")], ["release", starsRevealed(e().s) ? t("help.release") : t("rev.help")], ["tree", t("help.tree")],
         ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ...(forkRevealed(e().s) ? [["fork", t("help.fork")] as [string, string]] : []),
+        ...(distroRevealed(e().s) ? [["distro", t("help.distro")] as [string, string]] : []),
+        ...(hasDistro(e().s, "d_forkbot") ? [["forkbot", t("help.forkbot")] as [string, string]] : []),
     ...(e().s.forks > 0 ? [["gh pr", t("help.gh")] as [string, string]] : []), ...(on(e().s, "as_jobs") ? [["autoscale", t("help.autoscale")] as [string, string]] : []), ["events", t("help.events")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
@@ -405,6 +410,58 @@ export function createCommands(c: GameCtx) {
       say(["  " + t("fk.resets"), "c-dim"]);
       say(["  " + t("fk.keeps"), "c-dim"]);
       if (n >= 1) say(["  fork --yes", "c-green"]);
+    },
+    distro(args) {
+      const en = e();
+      const s = en.s;
+      const [sub, arg] = args;
+      if (sub === "buy") {
+        const dt = DISTRO_TALENTS.find(x => x.id === arg || x.tag === arg);
+        if (!dt || distroTalentVisibility(s, dt.id) !== "shown") return void say(t("ds.usage"));
+        const r = en.buyDistroTalent(dt.id);
+        if (!r.ok) say(INFO, " " + t(r.reason === "packages" ? "ds.no_pkg" : r.reason === "req" ? "fk.no_req" : "fk.owned"));
+        return;
+      }
+      if (sub === "tree") {
+        say(["[DISTRO TREE]", "c-bold"], `  ${t("ds.packages")}: ${fmtInt(s.packages)}`);
+        for (const dt of DISTRO_TALENTS) {
+          const v = distroTalentVisibility(s, dt.id);
+          if (v === "hidden") continue;
+          if (v === "fog") { say("  ", ["[?]", "c-dim"], " ", ["???", "c-dim"]); continue; }
+          const state = hasDistro(s, dt.id) ? ["[✓]", "c-green"] : dt.req.every(r => hasDistro(s, r)) ? ["[ ]", ""] : ["[-]", "c-dim"];
+          say("  ", state as Seg, " ", [pad(dt.tag, 5), "c-violet"], pad(t(`dt.${dt.id}`), 22), [`${dt.cost} ▣  `, "c-amber"], [t(`dt.${dt.id}.desc`), "c-dim"]);
+        }
+        say(["  distro buy <tag>", "c-dim"]);
+        return;
+      }
+      const flavor = FLAVORS.find(f => f.id === sub || f.tag === sub);
+      if (flavor) {
+        if (args[1] !== "--yes" && args[1] !== "-y") return void say(INFO, " " + t("ds.confirm_cmd", { f: flavor.id }));
+        if (s.challenge) return void say(INFO, " " + t("fk.in_challenge"));
+        if (!forkTreeComplete(s)) return void say(INFO, " " + t("ds.need_tree"));
+        if (en.distro(flavor.id as FlavorId) === null) say(INFO, " " + t("ds.need_contrib", { c: fmtInt(nextPackageAt(s)) }));
+        return;
+      }
+      if (sub && sub !== "status") return void say(t("ds.usage"));
+      // Status
+      say(["[DISTRO]", "c-bold"], s.flavor ? `  ${t("ds.current", { f: t(`fl.${s.flavor}`) })}` : "");
+      if (!forkTreeComplete(s)) return void say("  " + t("ds.need_tree"));
+      const n = packagesOnDistro(s).toNumber();
+      say("  " + (n >= 1 ? t("ds.status", { n: fmtInt(n) }) : t("ds.need_contrib", { c: fmtInt(nextPackageAt(s)) })));
+      for (const f of FLAVORS) say("  ", [pad(f.id, 9), "c-violet"], pad(`[${f.tag}]`, 10), [t(`fl.${f.id}.desc`), "c-dim"], s.flavorsDone.includes(f.id) ? [" ✓", "c-green"] : "");
+      if (n >= 1) say(["  distro <rolling|stable|source|desktop> --yes", "c-green"]);
+    },
+    forkbot(args) {
+      const s = e().s;
+      const a = (args[0] ?? "").toLowerCase();
+      if (a === "on" || a === "off") s.autoFork.enabled = a === "on";
+      else if (a === "advisor") s.autoFork.threshold = 0;
+      else if (/^\d+$/.test(a)) s.autoFork.threshold = Number(a);
+      else if (a) return void say(t("ds.fbot.usage"));
+      say(OK, " " + t("ds.fbot.state", {
+        s: s.autoFork.enabled ? t("perk.enabled") : t("perk.disabled"),
+        w: s.autoFork.threshold > 0 ? t("ds.fbot.at", { n: fmtInt(s.autoFork.threshold) }) : t("ds.fbot.adv"),
+      }));
     },
     gh(args) {
       const en = e();
@@ -661,6 +718,8 @@ export function createCommands(c: GameCtx) {
     if (name === "gen") return gensRevealed(en.s);
     if (name === "fork") return forkRevealed(en.s);
     if (name === "gh") return en.s.forks > 0;
+    if (name === "distro") return distroRevealed(en.s);
+    if (name === "forkbot") return hasDistro(en.s, "d_forkbot");
     if (name === "autoscale") return on(en.s, "as_jobs");
     if (name === "challenge") return en.challengesUnlocked;
     return true;
@@ -685,9 +744,9 @@ export function createCommands(c: GameCtx) {
     buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "auto_cpu", "auto_ram", "auto_disk", "auto_jobs", "release_bot"],
     optimize: UPGRADES.map(u => u.id), gen: GEN_KEYS, challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
-    cargo: ["update"], git: ["merge"], autoscale: ["jobs"], fork: ["tree", "buy", "upgrade", "--yes"], gh: ["pr"],
+    cargo: ["update"], git: ["merge"], autoscale: ["jobs"], fork: ["tree", "buy", "upgrade", "--yes"], distro: ["tree", "buy", ...FLAVORS.map(f => f.id)], forkbot: ["on", "off", "advisor"], gh: ["pr"],
   };
-  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "autoscale", "fork", "gh", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
+  const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "autoscale", "fork", "distro", "forkbot", "gh", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
     ...new Set(BUILD_EVENTS.map(ev => ev.cmd.split(" ")[0]))];
 
   function complete(line: string): string[] {
