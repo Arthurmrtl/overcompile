@@ -1,5 +1,6 @@
 import "./style.css";
 import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
+import { initPwa, installMode, promptInstall } from "./ui/pwa";
 import Decimal from "break_eternity.js";
 import { Engine, type GameEvent } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
@@ -32,7 +33,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.2";
+const GAME_VERSION = "0.5.3";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -1574,6 +1575,17 @@ function openSettings() {
       setText(msg, t("set.import.fail"));
     }
   });
+  // Installable app (PWA): the browser's prompt, or the iPhone how-to
+  const mode = installMode();
+  const install: Node[] = [];
+  if (mode === "prompt") {
+    const btn = h("button", { class: "btn" }, t("set.install"));
+    btn.addEventListener("click", async () => { await promptInstall(); openSettings(); });
+    install.push(h("hr"), btn, h("div", { class: "small muted" }, t("set.install.desc")));
+  } else if (mode === "ios") {
+    install.push(h("hr"), h("div", { class: "small" }, h("strong", {}, t("set.install")), " · ", t("set.install.ios")),
+      h("div", { class: "small muted" }, t("set.install.ios_save")));
+  }
   const tutBtn = h("button", { class: "btn" }, t("set.tutorial"));
   tutBtn.addEventListener("click", () => { replayTutorial(); closeModal(); render(); });
   const resetBtn = h("button", { class: "btn danger" }, t("set.reset"));
@@ -1602,6 +1614,7 @@ function openSettings() {
     area,
     h("div", { class: "row" }, exportBtn, importBtn),
     msg,
+    ...install,
     h("hr"),
     tutBtn,
     resetBtn,
@@ -1952,6 +1965,7 @@ async function halt() {
 
 /* ================= Start ================= */
 buildLayout();
+initPwa(() => { /* the Settings read installMode() each time they open */ });
 initTutorial({
   engine: () => engine,
   show: (panel, tab) => {
