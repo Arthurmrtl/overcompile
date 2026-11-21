@@ -392,6 +392,8 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .obj.ready .obj-name { color: var(--fg); font-weight: 700; }
 .claim-btn { flex: none; background: var(--green-d); border: 1px solid var(--green); color: #fff; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
 .claim-btn:hover { background: #16a34a; }
+.claim-btn:disabled { opacity: .4; }
+.claim-btn:disabled:hover { background: var(--green-d); }
 .obj-count { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 
 /* ---------- v0.2.5: claimable achievements ---------- */

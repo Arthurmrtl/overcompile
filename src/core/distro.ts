@@ -24,7 +24,7 @@ export const DISTRO = {
   earlyK: 2,         // early curve: 1 + earlyK × log2(contributors / contribBase)
   lateExp: 0.6,      // late curve: (contributors / contribBase) ^ lateExp, whichever is higher
   contribLog: 0.2,   // passive: contributors × (1 + contribLog × log2(1 + lifetime packages))
-  gainsLog: 0.25,    // passive: rewards × (1 + gainsLog × log2(1 + lifetime packages))
+  gainsLog: 0.5,     // passive: rewards × (1 + gainsLog × log2(1 + lifetime packages)); 0.25 → 0.5 in v0.5.1 (the first distro is a full reset)
 };
 
 /* ---------------- Flavors ---------------- */

@@ -32,7 +32,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.0";
+const GAME_VERSION = "0.5.1";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -239,7 +239,7 @@ function buildLayout() {
       <div class="tabs" role="tablist">
         <button data-tab="release">${t("tab.release")} <span class="badge new" data-r="relBadge" hidden>!</span></button>
         <button data-tab="challenges" data-reveal="challenges">${t("tab.challenges")} <span class="badge new" data-r="chNew">${t("rev.new")}</span></button>
-        <button data-tab="fork" data-reveal="forked">${t("tab.fork")} <span class="badge new" data-r="forkBadge" hidden></span></button>
+        <button data-tab="fork" data-reveal="fork">${t("tab.fork")} <span class="badge new" data-r="forkBadge" hidden></span></button>
         <button data-tab="distro" data-reveal="distro">${t("tab.distro")} <span class="badge new" data-r="distroBadge" hidden>!</span></button>
         <button data-tab="achievements">${t("tab.achievements")} <span class="badge" data-r="achBadge"></span></button>
         <button data-tab="stats">${t("tab.stats")}</button>
@@ -256,13 +256,7 @@ function buildLayout() {
         <div class="muted small" data-r="relHint"></div>
         <div class="rel-rc small" data-r="relRc" hidden></div>
         <div class="rel-rate small" data-r="relRate" hidden></div>
-        <div class="fork-card" data-r="forkCard" hidden>
-          <div class="fork-title"><span class="fk-glyph">⑂</span> <span data-r="forkTitle"></span></div>
-          <div class="muted small" data-r="forkDesc"></div>
-          <button class="fork-btn" data-r="forkBtn" hidden></button>
-          <div class="fork-calc" data-r="forkCalc" hidden></div>
-          <div class="rel-rate small" data-r="forkRate" hidden></div>
-        </div>
+        <p class="teaser small" data-r="forkTeaser" hidden>${t("fk.teaser_tree")}</p>
         <div class="bot" data-r="bot" hidden>
           <label class="switch"><input type="checkbox" data-r="botOn"><span>${t("rel.bot")}</span></label>
           <label class="small">${t("rel.bot.threshold")} <input type="number" min="1" step="1" data-r="botThr"> ⭐</label>
@@ -281,12 +275,21 @@ function buildLayout() {
         <div class="ch-list" data-r="chList"></div>
       </div>
       <div class="card tab-body" data-body="fork">
-        <div class="fork-sum" data-r="forkSum"></div>
+        <div class="fork-card" data-r="forkCard" hidden>
+          <div class="fork-title"><span class="fk-glyph">⑂</span> <span data-r="forkTitle"></span></div>
+          <div class="muted small" data-r="forkDesc"></div>
+          <button class="fork-btn" data-r="forkBtn" hidden></button>
+          <div class="fork-calc" data-r="forkCalc" hidden></div>
+          <div class="rel-rate small" data-r="forkRate" hidden></div>
+        </div>
+        <div class="fork-sum" data-r="forkSum" data-reveal="forked"></div>
         <p class="teaser small" data-r="distroTeaser" hidden>${t("ds.teaser")}</p>
-        <h3>${t("fk.prs")}</h3>
-        <p class="muted small">${t("fk.prs.desc")}</p>
-        <div class="pr-list" data-r="prList"></div>
-        <div class="pr-boost small" data-r="prBoost"></div>
+        <div data-reveal="forked">
+          <h3>${t("fk.prs")}</h3>
+          <p class="muted small">${t("fk.prs.desc")}</p>
+          <div class="pr-list" data-r="prList"></div>
+          <div class="pr-boost small" data-r="prBoost"></div>
+        </div>
         <h3>${t("fk.tree")}</h3>
         <p class="muted small">${t("fk.tree.desc")}</p>
         <div class="tree" data-r="ftree"></div>
@@ -626,7 +629,7 @@ function render() {
   renderChallengeBanner();
 
   // Progressive reveal
-  const revealed = { stars: starsRevealed(s), pre: !starsRevealed(s), challenges: engine.challengesUnlocked, forked: s.forks > 0, distro: distroRevealed(s), distroed: s.distros > 0 };
+  const revealed = { stars: starsRevealed(s), pre: !starsRevealed(s), challenges: engine.challengesUnlocked, forked: s.forks > 0, fork: s.forks > 0 || treeComplete(s), distro: distroRevealed(s), distroed: s.distros > 0 };
   app.querySelectorAll<HTMLElement>("[data-reveal]").forEach(el => {
     const show = revealed[el.dataset.reveal as keyof typeof revealed];
     if (el.hidden === show) el.hidden = !show;
@@ -635,7 +638,7 @@ function render() {
   const showNew = engine.challengesUnlocked && !s.seen.includes("challenges");
   if (chNew.hidden === showNew) chNew.hidden = !showNew;
   if (sideTab === "challenges" && !engine.challengesUnlocked) sideTab = "release";
-  if (sideTab === "fork" && s.forks === 0) sideTab = "release";
+  if (sideTab === "fork" && s.forks === 0 && !treeComplete(s)) sideTab = "release";
   if (sideTab === "distro" && !distroRevealed(s)) sideTab = "release";
 
   // Side tabs
@@ -660,9 +663,13 @@ function render() {
   const showDt = !distroRevealed(s) && s.forks > 0 && s.forkTalents.length >= 10;
   if (dt.hidden === showDt) dt.hidden = !showDt;
   const fb = $("[data-r=forkBadge]");
-  const fbOn = s.prs.length > 0;
+  const fbOn = s.prs.length > 0 || (forkAdvice.advised && treeComplete(s) && !s.challenge);
   if (fb.hidden === fbOn) fb.hidden = !fbOn;
-  if (fbOn) setText(fb, `${s.prs.length}`);
+  if (fbOn) setText(fb, s.prs.length ? `${s.prs.length}` : "!");
+  // Release tab: only the teaser before the first fork; the fork itself lives in the Fork tab
+  const ft = $("[data-r=forkTeaser]");
+  const showFt = forkRevealed(s) && s.forks === 0 && !treeComplete(s) && !s.challenge;
+  if (ft.hidden === showFt) ft.hidden = !showFt;
   renderEvents();
 }
 
@@ -1067,11 +1074,11 @@ function updateAchBars() {
   }
 }
 
-/** Release tab: Fork teaser, then the fork button once the release tree is complete. */
+/** Fork tab: the fork button once the release tree is complete (like the Distro card in the Distro tab). */
 function renderForkCard() {
   const s = engine.s;
   const card = $("[data-r=forkCard]");
-  const show = forkRevealed(s) && !s.challenge;
+  const show = (s.forks > 0 || treeComplete(s)) && !s.challenge;
   if (card.hidden === show) card.hidden = !show;
   if (!show) return;
   const done = treeComplete(s);
@@ -1419,7 +1426,6 @@ function confirmDistro() {
     h("h2", {}, `▣ ${t("ds.title")}`),
     h("p", {}, t("ds.confirm", { n: fmtInt(n) })),
     h("ul", { class: "small" }, h("li", {}, t("ds.resets")), h("li", {}, t("ds.keeps"))),
-    s.distros === 0 ? h("p", { class: "small", style: "color: var(--cyan)" }, t("ds.gift")) : "",
     h("p", { class: "small" }, t("ds.pick")),
     h("div", { class: "flavor-grid" }, ...choices),
     h("div", { class: "modal-actions" }, cancel),
@@ -1737,7 +1743,6 @@ engine.on((e: GameEvent) => {
     case "distro":
       term.banner(t("ds.banner", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`), d: fmtInt(engine.s.distros) }));
       toast(`▣ ${t("ds.title")}`, t("ds.toast", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`) }));
-      if (e.gift) term.println(OK, " " + t("ds.gift_log"));
       buildTree();
       forkTabKey = distroTabKey = "";
       lastAchCount = "";

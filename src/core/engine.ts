@@ -40,7 +40,7 @@ export type GameEvent =
   | { t: "event_missed"; id: string }
   | { t: "buff_end"; id: string }
   | { t: "fork"; contributors: number; auto?: boolean }
-  | { t: "distro"; packages: number; flavor: FlavorId; gift: boolean }
+  | { t: "distro"; packages: number; flavor: FlavorId }
   | { t: "distro_talent"; id: string }
   | { t: "fork_talent"; id: string }
   | { t: "fork_upgrade"; id: string; level: number }
@@ -648,9 +648,6 @@ export class Engine {
     s.packages += gain;
     s.lifetimePackages += gain;
     s.distros++;
-    // The first distro comes with the Base image (rst) for free: the first restart keeps the Fork restart talents
-    const gift = s.distros === 1 && !hasDistro(s, "d_restart");
-    if (gift) s.distroTalents.push("d_restart");
     if (s.flavor && !s.flavorsDone.includes(s.flavor)) s.flavorsDone.push(s.flavor); // finished a cycle in this flavor
     s.flavor = flavor;
     if (s.stats.fastestDistro === null || s.stats.distroTime < s.stats.fastestDistro) s.stats.fastestDistro = s.stats.distroTime;
@@ -679,7 +676,7 @@ export class Engine {
     s.prBoost = { speed: 1, gains: 1, stars: 1 };
     this.activeEvent = null;
     this.resetRun();
-    this.emit({ t: "distro", packages: gain, flavor, gift });
+    this.emit({ t: "distro", packages: gain, flavor });
     this.checkAchievements();
     return gain;
   }
