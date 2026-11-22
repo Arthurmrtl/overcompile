@@ -380,7 +380,8 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .hw.maxed .hw-price { color: var(--dim); }
 
 /* ---------- v0.2.1: progressive reveal ---------- */
-[data-reveal][hidden] { display: none !important; }
+/* `hidden` always wins over a class that sets `display` (v0.5.7: the Ansible switch showed without the talent) */
+[hidden] { display: none !important; }
 .teaser { margin: 0 0 12px; padding: 10px 12px; border: 1px dashed var(--border-2); border-radius: 6px; color: var(--fg); }
 .badge.new { color: var(--bg); background: var(--green); border-radius: 3px; padding: 0 4px; font-weight: 700; }
 .badge.new[hidden] { display: none; }
