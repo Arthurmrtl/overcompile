@@ -33,7 +33,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.5";
+const GAME_VERSION = "0.5.6";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -265,6 +265,7 @@ function buildLayout() {
         </div>
         <div data-reveal="stars">
           <h3>${t("rel.tree")}</h3>
+          <label class="switch small" data-r="ansAuto" hidden><input type="checkbox"><span>${t("rel.ans")}</span></label>
           <div class="tree" data-r="tree"></div>
           <div class="tree-detail" data-r="treeDetail"></div>
           <h3>${t("opt.title")}</h3>
@@ -549,6 +550,7 @@ function bindLayout() {
   $("[data-r=chExit]").addEventListener("click", () => cmd.run("challenge exit", true));
   $("[data-a=settings]").addEventListener("click", () => openSettings());
   $<HTMLInputElement>("[data-r=botOn]").addEventListener("change", () => cmd.run("toggle release_bot", true));
+  $<HTMLInputElement>("[data-r=ansAuto] input").addEventListener("change", () => cmd.run("tree auto", true));
   $<HTMLInputElement>("[data-r=botThr]").addEventListener("change", ev => {
     const v = Math.max(1, Math.floor(Number((ev.target as HTMLInputElement).value) || 1));
     engine.s.autoRelease.threshold = v;
@@ -824,8 +826,8 @@ function renderRelease() {
   const showRate = starsRevealed(s) && can && !s.challenge;
   if (rateEl.hidden === showRate) rateEl.hidden = !showRate;
   if (showRate) {
-    const r = t("adv.rate", { r: fmtRate(advice.rate), p: fmtRate(advice.peak) });
-    setText(rateEl, advised ? `${r} · ${t(advice.rate < advice.peak * 0.9 ? "adv.now_slow" : "adv.now_big")}` : r);
+    // Only the current pace: the button, the badge and the highlight already say when to ship
+    setText(rateEl, t("adv.rate", { r: fmtRate(advice.rate) }));
     toggleClass(rateEl, "on", advised);
   }
 
@@ -848,6 +850,11 @@ function renderRelease() {
   const bot = $("[data-r=bot]");
   const ownsBot = has(s, "release_bot");
   if (bot.hidden === ownsBot) bot.hidden = !ownsBot;
+  // Fork talent `ans` (Ansible): switch for the automatic purchase of talents and optimizations
+  const ans = $("[data-r=ansAuto]");
+  const showAns = hasFork(s, "f_ansible");
+  if (ans.hidden === showAns) ans.hidden = !showAns;
+  if (showAns) { const box = $<HTMLInputElement>("input", ans); if (box.checked !== s.autoStars) box.checked = s.autoStars; }
   const botOn = $<HTMLInputElement>("[data-r=botOn]");
   if (botOn.checked !== s.autoRelease.enabled) botOn.checked = s.autoRelease.enabled;
   const thr = $<HTMLInputElement>("[data-r=botThr]");
@@ -1125,8 +1132,8 @@ function renderForkCard() {
   toggleClass(btn, "advised", forkAdvice.advised);
   const showRate = pending >= 1;
   if (rate.hidden === showRate) rate.hidden = !showRate;
-  if (showRate) setText(rate, t("fk.rate", { r: forkAdvice.rate.toFixed(forkAdvice.rate < 10 ? 1 : 0), p: forkAdvice.peak.toFixed(forkAdvice.peak < 10 ? 1 : 0) })
-    + (forkAdvice.advised ? ` · ${t("fk.adv.now")}` : ""));
+  if (showRate) setText(rate, t("fk.rate", { r: forkAdvice.rate.toFixed(forkAdvice.rate < 10 ? 1 : 0) }));
+  toggleClass(rate, "on", forkAdvice.advised);
 }
 
 let forkTabKey = "";
@@ -1312,7 +1319,8 @@ function renderDistroTab() {
   const rate = $("[data-r=dsRate]");
   const showRate = pending >= 1;
   if (rate.hidden === showRate) rate.hidden = !showRate;
-  if (showRate) setText(rate, t("ds.rate", { r: distroAdvice.rate.toFixed(1), p: distroAdvice.peak.toFixed(1) }) + (distroAdvice.advised ? ` · ${t("ds.adv.now")}` : ""));
+  if (showRate) setText(rate, t("ds.rate", { r: distroAdvice.rate.toFixed(1) }));
+  toggleClass(rate, "on", distroAdvice.advised);
   // Fork bot settings
   const fbot = $("[data-r=fbot]");
   const showBot = hasDistro(s, "d_forkbot");
@@ -1673,6 +1681,15 @@ engine.on((e: GameEvent) => {
     case "autobuy":
       autobuys[e.key] = (autobuys[e.key] ?? 0) + e.n;
       break;
+    case "autostars": {
+      // One quiet journal line per batch, no toast (automation should not get in the way)
+      const parts: string[] = [];
+      if (e.talents.length) parts.push(e.talents.map(id => t(`t.${id}`)).join(", "));
+      if (e.opts) parts.push(t("ans.opts", { n: e.opts }));
+      term.println(["[ ANS ]", "c-dim"], [" " + parts.join(" · "), "c-dim"]);
+      if (e.talents.length) buildTree();
+      break;
+    }
     case "achievement": {
       const r = Engine.rewardOf(e.id);
       const rt = r ? rewardText(r) : "";

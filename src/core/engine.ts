@@ -5,7 +5,7 @@ import {
   HW, OFFLINE_GRACE_SECONDS, perkLocked, perkPrice, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
   expectedRate, genRequired, gensRevealed, has, starsRevealed, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
 } from "./formulas";
-import { TALENT_BY_ID } from "./talents";
+import { TALENTS, TALENT_BY_ID } from "./talents";
 import {
   FORK, FORK_TALENTS, FORK_UPGRADES, FORK_TALENT_BY_ID, FORK_UPGRADE_BY_ID, KEPT_BY_F_KEEP, forkUpgradePrice, PREBUILT_TALENTS, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
   TEMPLATE_STARS,
@@ -14,7 +14,7 @@ import {
 import {
   type BuildEvent, EVENT_BY_ID, EVENT_GAP, EVENT_WINDOW, PAGER_GAP_MULT, PAGER_WINDOW, eligibleEvents, pickEvent,
 } from "./events";
-import { UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
+import { UPGRADES, UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
 import {
   DISTRO_TALENT_BY_ID, type FlavorId, FLAVOR_BY_ID, canDistro, flavorOf, forkTalentsKept, hasDistro, packagesOnDistro,
 } from "./distro";
@@ -30,6 +30,7 @@ export type GameEvent =
   | { t: "interrupted" }
   | { t: "achievement"; id: string }
   | { t: "autobuy"; key: HwKey; n: number }
+  | { t: "autostars"; talents: string[]; opts: number }
   | { t: "release"; stars: Decimal; auto: boolean }
   | { t: "challenge_start"; id: string }
   | { t: "challenge_done"; id: string }
@@ -55,6 +56,7 @@ export class Engine {
   private listeners: ((e: GameEvent) => void)[] = [];
   private muted = false;
   private autoScaleTimer = 0;
+  private autoStarsTimer = 0;
   private offline = false;
   /** Build events: countdown to the next one, and the one on screen (not saved). */
   private eventTimer = Engine.nextGap(false);
@@ -144,6 +146,13 @@ export class Engine {
     if (s.perks.auto_scaling.enabled && this.autoScaleTimer >= autoScaleInterval(s)) {
       this.autoScaleTimer = 0;
       this.autoScale();
+    }
+
+    // Fork talent `ans` (Ansible): stars buy release talents, then optimizations (once a second)
+    this.autoStarsTimer += dt;
+    if (hasFork(s, "f_ansible") && s.autoStars && !s.challenge && this.autoStarsTimer >= 1) {
+      this.autoStarsTimer = 0;
+      this.autoBuyStars();
     }
 
     // Fork talent `rnv` (Renovate): generations happen on their own, per-hardware switch
@@ -625,6 +634,23 @@ export class Engine {
     this.emit({ t: "fork", contributors: gain, auto });
     this.checkAchievements();
     return gain;
+  }
+
+  /** Fork talent "ans" (Ansible): stars buy release talents (cheapest first), then optimizations (cheapest first). */
+  autoBuyStars() {
+    const talents: string[] = [];
+    let opts = 0;
+    for (let guard = 0; guard < 500; guard++) {
+      const tal = TALENTS.filter(x => this.canBuyTalent(x.id).ok).sort((a, b) => a.cost - b.cost)[0];
+      if (tal) { this.buyTalent(tal.id); talents.push(tal.id); continue; }
+      if (TALENTS.some(x => !has(this.s, x.id))) break; // saving up for the next talent
+      const up = UPGRADES.filter(x => this.canBuyUpgrade(x.id).ok)
+        .sort((a, b) => upgradePrice(this.s, a.id).cmp(upgradePrice(this.s, b.id)))[0];
+      if (!up) break;
+      this.buyUpgrade(up.id);
+      opts++;
+    }
+    if (talents.length || opts) this.emit({ t: "autostars", talents, opts });
   }
 
   /** Distro talent "abuy": contributors buy Fork talents (cheapest first), then Fork upgrades. */
