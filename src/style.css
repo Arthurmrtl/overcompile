@@ -181,6 +181,7 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .term .l.banner::before, .term .l.banner::after { content: ""; flex: 1; border-top: 3px double var(--amber); opacity: .7; }
 .term .l.banner span { flex: none; }
 .term .l { white-space: pre-wrap; word-break: break-word; min-height: 1.45em; }
+.term-form { display: contents; }
 .term-row { display: flex; white-space: pre; }
 .term-input { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; border-radius: 0; outline: none; caret-color: var(--green); }
 .c-green { color: var(--green); } .c-red { color: var(--red); } .c-blue { color: var(--blue); }
