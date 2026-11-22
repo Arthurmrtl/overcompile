@@ -7,7 +7,7 @@ import {
 } from "./formulas";
 import { TALENTS, TALENT_BY_ID } from "./talents";
 import {
-  FORK, FORK_TALENTS, FORK_UPGRADES, FORK_TALENT_BY_ID, FORK_UPGRADE_BY_ID, KEPT_BY_F_KEEP, forkUpgradePrice, PREBUILT_TALENTS, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
+  FORK, FORK_TALENTS, FORK_UPGRADES, FORK_TALENT_BY_ID, FORK_UPGRADE_BY_ID, forkUpgradePrice, keptReleaseTalents, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
   TEMPLATE_STARS,
   canFork, contributorsOnFork, hasFork, pickPrKind, prGap,
 } from "./fork";
@@ -618,7 +618,7 @@ export class Engine {
     s.stars = new Decimal(hasFork(s, "f_template") ? TEMPLATE_STARS : 0);
     s.lifetimeStars = new Decimal(0);
     s.releases = 0;
-    const kept = [...(hasFork(s, "f_keep") ? KEPT_BY_F_KEEP : []), ...(hasFork(s, "f_bench") ? PREBUILT_TALENTS : [])];
+    const kept = keptReleaseTalents(s);
     s.talents = s.talents.filter(id => kept.includes(id));
     for (const id of kept) if (!s.talents.includes(id)) s.talents.push(id); // in case a later talent was skipped
     s.upgrades = {};
@@ -691,8 +691,7 @@ export class Engine {
     s.stars = new Decimal(hasFork(s, "f_template") ? TEMPLATE_STARS : 0);
     s.lifetimeStars = new Decimal(0);
     s.releases = 0;
-    const kept = [...(hasFork(s, "f_keep") ? KEPT_BY_F_KEEP : []), ...(hasFork(s, "f_bench") ? PREBUILT_TALENTS : [])];
-    s.talents = kept.filter((id, i) => kept.indexOf(id) === i);
+    s.talents = keptReleaseTalents(s);
     s.upgrades = {};
     s.challenge = null;
     s.challengesDone = [];

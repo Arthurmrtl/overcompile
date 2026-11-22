@@ -83,6 +83,15 @@ export const KEPT_BY_F_KEEP = ["ci_preinstalled", "as_perm", "as_fast", "as_ctrl
 export const TEMPLATE_STARS = 10;
 /** Release talents a fork starts with when `f_bench` (prebuilt binaries) is owned. */
 export const PREBUILT_TALENTS = ["warm_cache", "code_review", "ci_preinstalled"];
+/** Release talents a fork keeps with `f_ansible` (v0.5.8): without the Release bot, the
+ *  first releases after a fork had to be done by hand, so nothing ran offline or with the Fork bot. */
+export const KEPT_BY_ANSIBLE = ["release_bot"];
+/** Every release talent the next fork (or distro) starts with. */
+export const keptReleaseTalents = (s: GameState): string[] => [...new Set([
+  ...(hasFork(s, "f_keep") ? KEPT_BY_F_KEEP : []),
+  ...(hasFork(s, "f_bench") ? PREBUILT_TALENTS : []),
+  ...(hasFork(s, "f_ansible") ? KEPT_BY_ANSIBLE : []),
+])];
 export const SEED_LEVELS = 10;      // f_sponsors: extra CPU/RAM/Disk levels at the start of every run
 export const AWESOME_STARS = 2;     // f_awesome: flat stars added to every release
 export const UPSTREAM_CONTRIBUTORS = 2; // f_upstream: flat contributors added to every fork
