@@ -61,9 +61,20 @@ export class Terminal {
     this.input.setAttribute("autocapitalize", "off");
     this.input.setAttribute("spellcheck", "false");
     this.input.setAttribute("aria-label", "terminal input");
+    this.input.setAttribute("autocorrect", "off");
     this.input.setAttribute("enterkeyhint", "send");
     row.append(this.ps1, this.input);
-    this.body.append(this.out, row);
+    // The prompt sits in a <form>: on iPhone (above all the installed app) the keyboard's
+    // return key does not always reach `keydown` as "Enter", but it always submits the form.
+    const form = document.createElement("form");
+    form.className = "term-form";
+    form.setAttribute("action", "");
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      this.submit();
+    });
+    form.append(row);
+    this.body.append(this.out, form);
     this.root.append(top, this.body);
     this.renderPrompt();
 
@@ -164,17 +175,22 @@ export class Terminal {
     this.out.replaceChildren();
   }
 
+  /** Runs the typed line (return key, or the form submit on mobile keyboards). */
+  private submit() {
+    const line = this.input.value;
+    this.input.value = "";
+    if (line.trim() && this.history[this.history.length - 1] !== line) this.history.push(line);
+    this.hIdx = this.history.length;
+    this.stickToBottom = true;
+    this.hooks.onCommand(line);
+  }
+
   private onKey(e: KeyboardEvent) {
     const key = e.key;
     const ctrl = e.ctrlKey || e.metaKey;
-    if (key === "Enter") {
-      e.preventDefault();
-      const line = this.input.value;
-      this.input.value = "";
-      if (line.trim() && this.history[this.history.length - 1] !== line) this.history.push(line);
-      this.hIdx = this.history.length;
-      this.stickToBottom = true;
-      this.hooks.onCommand(line);
+    if (key === "Enter" || e.keyCode === 13) {
+      e.preventDefault(); // handled here, so the form is not submitted a second time
+      this.submit();
     } else if (e.ctrlKey && key.toLowerCase() === "c") {
       if (this.input.selectionStart !== this.input.selectionEnd) return; // let the browser copy
       e.preventDefault();
