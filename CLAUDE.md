@@ -58,14 +58,14 @@ Règles d'architecture :
 
 ## Sauvegarde : à ne pas casser
 
-- Stockage dans `localStorage`, clé `overcompile-save`. Sauvegarde automatique ; export/import en texte dans les paramètres.
+- Stockage dans `localStorage`, clé `overcompile-save`. Sauvegarde automatique toutes les 15 s, à la fermeture de l'onglet et quand la page passe en arrière-plan ; export/import en texte dans les paramètres. **Tranché (v0.5.4, Arthur : « le bouton save ne sert à rien ») :** plus de bouton 💾 dans l'en-tête ; la commande `save` reste dans le terminal.
 - `SAVE_VERSION` vaut actuellement **10**. Si tu changes la forme de `GameState` :
   1. incrémente `SAVE_VERSION` ;
   2. ajoute une étape dans `migrate()` qui convertit les anciennes sauvegardes ;
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.5.3)
+## Mécaniques actuelles (v0.5.4)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -89,7 +89,7 @@ La courbe est volontairement généreuse au début : 2★ à ×1,6 le seuil, 3�
 
 **Découverte progressive.** Avant la 1re release, le joueur ne voit que l'objectif (« Publier v1.0.0 → ??? ») : ni étoiles, ni arbre, ni optimisations. Les challenges apparaissent après 3 releases. Une commande pas encore débloquée répond `bash: X: command not found`. L'arbre a un « brouillard » : seuls les talents adjacents à ceux qu'on possède sont visibles, et l'arbre ne prend que la hauteur des rangées visibles (v0.3.4, sinon gros vide sur mobile). Ne divulgue rien de verrouillé (UI, aide, `guide`, succès cachés).
 
-**Arbre de release (talents).** 15 talents, du premier (`inc`, Cache chaud, 1★) au dernier (`bot`, Release bot, 100★). Ils sont identifiés par des **tags texte**, et **Tranché :** pas d'emojis dans l'arbre (« ça fait gamin / IA »). Même chose pour les succès depuis la v0.3.5 (Arthur : « moins IA slop ») : tags `[ ]` à faire, `[!]` à récupérer, `[✓]` récupéré, `[?]` secret, et `[ ACH ]` dans le journal. Les autres emojis de l'interface (💾 ⚙ 🔒 ⭐, icônes des événements) restent pour l'instant.
+**Arbre de release (talents).** 15 talents, du premier (`inc`, Cache chaud, 1★) au dernier (`bot`, Release bot, 100★). Ils sont identifiés par des **tags texte**, et **Tranché :** pas d'emojis dans l'arbre (« ça fait gamin / IA »). Même chose pour les succès depuis la v0.3.5 (Arthur : « moins IA slop ») : tags `[ ]` à faire, `[!]` à récupérer, `[✓]` récupéré, `[?]` secret, et `[ ACH ]` dans le journal. Les autres emojis de l'interface (⚙ 🔒 ⭐, icônes des événements) restent pour l'instant.
 
 Branche Auto-Scaling :
 - `as` (10★ depuis la v0.3.2) : Auto-Scaling permanent (conservé après une release) ;
@@ -127,7 +127,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
 - Onglet Fork (ouvert quand l'arbre de release est complet), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
 - Simulation v0.4.1 (`npm run sim -- 10`, 3 runs ; le joueur forke quand le conseiller le dit, fusionne toutes les PR, achète les talents Fork puis les améliorations) : 1er fork vers 3 h 10–3 h 20 avec 5–6 contributeurs ; 2e cycle 35–45 min, 3e ~22 min, ensuite cycles stables de 33–36 min ; contributeurs par fork en hausse lente (5 → 12 → 24 → 30 → 50 → 75 au 12e fork) ; arbre Fork complet au 5e fork (~5 h 20), puis ~1 niveau d'amélioration Fork par fork. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
-- `crontab` : prévu en talent final de l'arbre Distro (v0.5.4).
+- `crontab` : prévu en talent final de l'arbre Distro (v0.5.5).
 
 **Distro** (`src/core/distro.ts`, v0.5, 3e couche de prestige). **Tranché (Arthur, 21/11/2026, Whiteboard « overcompile v0.5 — Distro ») :** concept C, « Distro avec saveurs » (en jeu : **« Base » en FR** depuis la v0.5.1, « saveur » sonnait faux ; « Flavor » en EN ; le code garde `flavor`) ; monnaie **▣ Paquets** (« Utilisateurs » était trop proche de « contributeurs ») ; « en avançant, le pain devient automatique » : la 3e couche automatise la 2e, comme le Release bot l'a fait pour les releases.
 - Condition : **arbre Fork complet** (les 15 talents). Avant, un teaser « Distro → ??? » dans l'onglet Fork (à partir de 10 talents Fork). L'onglet Distro (couleur cyan, compteur ▣ dans l'en-tête) s'ouvre quand l'arbre est complet.
@@ -145,7 +145,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - Commandes : `distro` (état et saveurs), `distro tree`, `distro buy <tag>`, `distro <rolling|stable|source|desktop> --yes`, `forkbot`. Astuces du tuto : ouverture de l'onglet Distro, 1re distro.
 - Sauvegarde v10 : `distros`, `packages`, `lifetimePackages`, `distroTalents`, `flavor`, `flavorsDone`, `autoFork`, stats `distroTime`, `fastestDistro`, `allContributors`.
 - Simulation v0.5.0 (3 runs de 16 h ; le joueur publie quand le conseiller le dit, essaie chaque saveur une fois puis prend Stable) : rien ne change avant la Distro (1re étoile 20–22 min, arbre 3 h 00–3 h 02) ; arbre Fork complet et 1re distro 4 h 53–5 h 17 (le vrai jeu d'Arthur : arbre Fork à 8 h 45) ; 2e cycle 1 h 23–1 h 43 depuis la v0.5.1 (vrai reset, `gainsLog` 0,5), puis cycles stables d'~1 h 06 ; paquets par distro 1–2 → 15, pas d'emballement ; arbre Distro complet vers la 6e distro. Options : `NODISTRO=1`, `FLAVOR=<id>` (toujours la même saveur), `DISTRO_<clé>=valeur`, `DADV_<clé>=valeur`.
-- Pas encore fait : `crontab` (v0.5.4, talent final de l'arbre Distro), succès Distro.
+- Pas encore fait : `crontab` (v0.5.5, talent final de l'arbre Distro), succès Distro.
 - Une seule saveur active par cycle ; seuls les bonus permanents se cumulent. Idée à l'étude : talent tardif « Dual boot » (2 saveurs actives).
 
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
@@ -224,7 +224,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
 - **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), réglage libre de la priorité Jobs (v0.4.10), colonnes redimensionnables sur PC (v0.4.11), tuto interactif et astuces au déblocage (v0.4.12), barre de progression du tuto (v0.4.13), toasts discrets sur PC (v0.4.14).
-- **v0.5** : couche **Distro** avec saveurs et automatisation du Fork (v0.5.0), onglet Fork qui porte le fork, « Base » en FR, 1re distro en vrai reset (v0.5.1), en-tête mobile sur deux lignes (v0.5.2), appli installable PWA (v0.5.3), puis **`crontab`** en talent final de l'arbre Distro (v0.5.4) et des succès Distro.
+- **v0.5** : couche **Distro** avec saveurs et automatisation du Fork (v0.5.0), onglet Fork qui porte le fork, « Base » en FR, 1re distro en vrai reset (v0.5.1), en-tête mobile sur deux lignes (v0.5.2), appli installable PWA (v0.5.3), bouton de sauvegarde retiré (v0.5.4), puis **`crontab`** en talent final de l'arbre Distro (v0.5.5) et des succès Distro.
 - **v0.6 (idée)** : paquets en parallèle (concept B du Whiteboard v0.5 : plusieurs projets, dépendances, répartition des Jobs).
 
 ## Façon de travailler avec Arthur
