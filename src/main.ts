@@ -33,7 +33,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.3";
+const GAME_VERSION = "0.5.4";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -191,7 +191,6 @@ function buildLayout() {
       </div>
     </div>
     <div class="actions">
-      <button class="icon-btn" data-a="save" title="${t("save")}">💾</button>
       <button class="icon-btn" data-a="settings" title="${t("settings")}">⚙</button>
     </div>
   </header>
@@ -548,7 +547,6 @@ function bindLayout() {
     cmd.run(`forkbot ${v === 0 ? "advisor" : v}`, true);
   });
   $("[data-r=chExit]").addEventListener("click", () => cmd.run("challenge exit", true));
-  $("[data-a=save]").addEventListener("click", () => cmd.run("save", true));
   $("[data-a=settings]").addEventListener("click", () => openSettings());
   $<HTMLInputElement>("[data-r=botOn]").addEventListener("change", () => cmd.run("toggle release_bot", true));
   $<HTMLInputElement>("[data-r=botThr]").addEventListener("change", ev => {
