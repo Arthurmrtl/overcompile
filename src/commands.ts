@@ -543,8 +543,12 @@ export function createCommands(c: GameCtx) {
       else if (r === "done") say(t("term.ch_already"));
       else if (r === "active") say(t("term.ch_active"));
     },
-    tree() {
+    tree(args) {
       const en = e();
+      if (args[0]?.toLowerCase() === "auto" && hasFork(en.s, "f_ansible")) {
+        en.s.autoStars = !en.s.autoStars;
+        return void say(INFO, " " + t("term.ans_auto", { s: en.s.autoStars ? t("perk.enabled") : t("perk.disabled") }));
+      }
       say(["[RELEASE TREE]", "c-bold"], `  ⭐ ${fmt(en.s.stars)}`);
       say("");
       for (const tal of TALENTS) {

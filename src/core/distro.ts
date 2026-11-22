@@ -89,7 +89,7 @@ export function distroTalentVisibility(s: GameState, id: string): "shown" | "fog
 
 /** Fork talents a distro keeps with d_restart, d_autokeep, d_keepall. */
 export const KEPT_RESTART = ["f_template", "f_iac", "f_sponsors", "f_lts", "f_bench"];
-export const KEPT_AUTO = ["f_keep", "f_dependabot", "f_renovate", "f_mirrors"];
+export const KEPT_AUTO = ["f_keep", "f_dependabot", "f_renovate", "f_mirrors", "f_ansible"];
 export function forkTalentsKept(s: GameState): string[] {
   if (hasDistro(s, "d_keepall")) return FORK_TALENTS.map(t => t.id);
   const kept = [...(hasDistro(s, "d_restart") ? KEPT_RESTART : []), ...(hasDistro(s, "d_autokeep") ? KEPT_AUTO : [])];
@@ -109,7 +109,10 @@ export const DISTRO_PCT = { pkg: 0.2, contrib: 0.25 };
 export const UPSTREAM_PACKAGES = 1;
 
 /* ---------------- Condition and packages ---------------- */
-export const forkTreeComplete = (s: GameState) => FORK_TALENTS.every(t => s.forkTalents.includes(t.id));
+/** Fork talents that are optional for the Distro: Ansible (v0.5.6) came after players had finished the tree. */
+const DISTRO_OPTIONAL = ["f_ansible"];
+export const forkTreeComplete = (s: GameState) =>
+  FORK_TALENTS.every(t => DISTRO_OPTIONAL.includes(t.id) || s.forkTalents.includes(t.id));
 export const distroRevealed = (s: GameState) => s.distros > 0 || forkTreeComplete(s);
 
 function curve(ratio: Decimal): Decimal {

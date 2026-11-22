@@ -61,6 +61,7 @@ export const FORK_TALENTS: ForkTalent[] = [
   { id: "f_renovate", tag: "rnv", cost: 5, req: ["f_mirrors"], row: 3, col: 3 },            // generations happen on their own (v0.4.9, per-hardware switch)
   { id: "f_keep", tag: "kp", cost: 8, req: ["f_dependabot", "f_bench"], row: 4, col: 1 },   // a fork keeps the CI and Auto-Scaling talents
   { id: "f_awesome", tag: "awe", cost: 5, req: ["f_bench", "f_hn"], row: 4, col: 3 },       // +2 stars on every release
+  { id: "f_ansible", tag: "ans", cost: 8, req: ["f_keep"], row: 5, col: 0 },               // stars buy release talents, then optimizations, on their own (v0.5.5)
   { id: "f_rel", tag: "sig", cost: 8, req: ["f_keep", "f_awesome"], row: 5, col: 2 },       // contributors +10 % on every fork
   { id: "f_upstream", tag: "ups", cost: 13, req: ["f_rel"], row: 6, col: 2 },               // +2 contributors on every fork
 ];

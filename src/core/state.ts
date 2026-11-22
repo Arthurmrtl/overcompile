@@ -106,11 +106,13 @@ export interface GameState {
   flavorsDone: FlavorId[];
   /** Distro talent "Fork bot": fork on its own once the fork pays this many contributors (0: when the advisor says). */
   autoFork: { enabled: boolean; threshold: number };
+  /** Fork talent `ans` (Ansible, v0.5.5): stars buy release talents, then optimizations, on their own. */
+  autoStars: boolean;
   lastSeen: number;
   createdAt: number;
 }
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -167,6 +169,7 @@ export function newState(): GameState {
     flavor: null,
     flavorsDone: [],
     autoFork: { enabled: true, threshold: 0 },
+    autoStars: true,
     lastSeen: now,
     createdAt: now,
   };
@@ -293,6 +296,10 @@ function migrate(s: GameState, from: number) {
     // v0.4.14 → v0.5.0: Distro layer. Nothing to convert: a new layer, empty
     s.stats.distroTime = s.stats.playTime;
     s.stats.allContributors = s.lifetimeContributors;
+  }
+  if (from < 11) {
+    // v0.5.4 → v0.5.5: switch of the Fork talent `ans` (Ansible), on by default
+    s.autoStars = true;
   }
   s.version = SAVE_VERSION;
 }
