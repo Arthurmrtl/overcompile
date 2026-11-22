@@ -66,7 +66,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.5.8)
+## Mécaniques actuelles (v0.5.9)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -128,7 +128,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
 - Onglet Fork (ouvert quand l'arbre de release est complet), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
 - Simulation v0.4.1 (`npm run sim -- 10`, 3 runs ; le joueur forke quand le conseiller le dit, fusionne toutes les PR, achète les talents Fork puis les améliorations) : 1er fork vers 3 h 10–3 h 20 avec 5–6 contributeurs ; 2e cycle 35–45 min, 3e ~22 min, ensuite cycles stables de 33–36 min ; contributeurs par fork en hausse lente (5 → 12 → 24 → 30 → 50 → 75 au 12e fork) ; arbre Fork complet au 5e fork (~5 h 20), puis ~1 niveau d'amélioration Fork par fork. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
-- `crontab` : prévu en talent final de l'arbre Distro (v0.5.9).
+- `crontab` : prévu en talent final de l'arbre Distro (v0.5.10).
 
 **Distro** (`src/core/distro.ts`, v0.5, 3e couche de prestige). **Tranché (Arthur, 21/11/2026, Whiteboard « overcompile v0.5 — Distro ») :** concept C, « Distro avec saveurs » (en jeu : **« Base » en FR** depuis la v0.5.1, « saveur » sonnait faux ; « Flavor » en EN ; le code garde `flavor`) ; monnaie **▣ Paquets** (« Utilisateurs » était trop proche de « contributeurs ») ; « en avançant, le pain devient automatique » : la 3e couche automatise la 2e, comme le Release bot l'a fait pour les releases.
 - Condition : **arbre Fork complet** (les 15 talents d'origine ; `ans`, arrivé en v0.5.6, est facultatif pour ne pas retirer l'accès à ceux qui avaient fini l'arbre). Avant, un teaser « Distro → ??? » dans l'onglet Fork (à partir de 10 talents Fork). L'onglet Distro (couleur cyan, compteur ▣ dans l'en-tête) s'ouvre quand l'arbre est complet.
@@ -146,10 +146,11 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - Commandes : `distro` (état et saveurs), `distro tree`, `distro buy <tag>`, `distro <rolling|stable|source|desktop> --yes`, `forkbot`. Astuces du tuto : ouverture de l'onglet Distro, 1re distro.
 - Sauvegarde v10 : `distros`, `packages`, `lifetimePackages`, `distroTalents`, `flavor`, `flavorsDone`, `autoFork`, stats `distroTime`, `fastestDistro`, `allContributors`.
 - Simulation v0.5.0 (3 runs de 16 h ; le joueur publie quand le conseiller le dit, essaie chaque saveur une fois puis prend Stable) : rien ne change avant la Distro (1re étoile 20–22 min, arbre 3 h 00–3 h 02) ; arbre Fork complet et 1re distro 4 h 53–5 h 17 (le vrai jeu d'Arthur : arbre Fork à 8 h 45) ; 2e cycle 1 h 23–1 h 43 depuis la v0.5.1 (vrai reset, `gainsLog` 0,5), puis cycles stables d'~1 h 06 ; paquets par distro 1–2 → 15, pas d'emballement ; arbre Distro complet vers la 6e distro. Options : `NODISTRO=1`, `FLAVOR=<id>` (toujours la même saveur), `DISTRO_<clé>=valeur`, `DADV_<clé>=valeur`.
-- Pas encore fait : `crontab` (v0.5.9, talent final de l'arbre Distro), succès Distro.
+- Pas encore fait : `crontab` (v0.5.10, talent final de l'arbre Distro), succès Distro.
 - Une seule saveur active par cycle ; seuls les bonus permanents se cumulent. Idée à l'étude : talent tardif « Dual boot » (2 saveurs actives).
 
 **Hors ligne.** Les 5 premières minutes d'absence comptent toujours à 100 %, pour couvrir un téléphone en veille ou un changement d'onglet. Au-delà, rien sans le talent `off` (10 % d'efficacité, 2 h max), qu'on améliore ensuite avec des optimisations (jusqu'à 100 % et 24 h). **Tranché :** c'est volontairement faible au début.
+- **Résumé « Pendant ton absence » : toutes les récompenses. Tranché (v0.5.9, Arthur : « il faut afficher sur cet écran toutes les récompenses, les nouvelles monnaies, et à chaque fois qu'on rajoute des features/monnaies faut l'ajouter aussi ici ») :** le moteur compte tout à partir de ses propres événements (`OfflineGains`, `tallyOffline()` dans `engine.ts`), ce qui résiste aux remises à zéro pendant l'absence (releases, forks) : crédits gagnés, builds, matériel acheté, générations, releases et ★, talents et optimisations achetés par Ansible, forks et ⑂, achats Fork automatiques, PR fusionnées, succès. L'écran lit une seule liste (`OFFLINE_LINES` dans `main.ts`), une ligne n'apparaît que si elle n'est pas à zéro. **Règle : toute nouvelle monnaie ou automatisation qui peut tourner hors ligne ajoute son compteur dans `OfflineGains` / `tallyOffline()` et sa ligne dans `OFFLINE_LINES`, en EN et en FR.** Avant la v0.5.9, le résumé faisait des différences « avant / après » (faussées par les resets) et ne voyait jamais les succès (les événements étaient coupés pendant l'absence).
 
 **Challenges** (débloqués après 3 releases) : Single-core, Debug build -O0, Friday deploy, No cache. Ce sont des releases sous contrainte qui donnent un bonus permanent. Quitter un challenge en cours de run rend les perks que les talents donnent (CI/CD avec `ci`, Auto-Scaling avec `as`) : avant la v0.4.2, sortir de No cache laissait la run sans CI/CD jusqu'à la release suivante.
 
@@ -225,7 +226,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
 - **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), réglage libre de la priorité Jobs (v0.4.10), colonnes redimensionnables sur PC (v0.4.11), tuto interactif et astuces au déblocage (v0.4.12), barre de progression du tuto (v0.4.13), toasts discrets sur PC (v0.4.14).
-- **v0.5** : couche **Distro** avec saveurs et automatisation du Fork (v0.5.0), onglet Fork qui porte le fork, « Base » en FR, 1re distro en vrai reset (v0.5.1), en-tête mobile sur deux lignes (v0.5.2), appli installable PWA (v0.5.3), bouton de sauvegarde retiré (v0.5.4), touche retour du terminal sur iPhone (v0.5.5), talent Fork Ansible et lignes de rythme allégées (v0.5.6), case Ansible cachée sans le talent (v0.5.7), Ansible garde le Release bot (v0.5.8), puis **`crontab`** en talent final de l'arbre Distro (v0.5.9) et des succès Distro.
+- **v0.5** : couche **Distro** avec saveurs et automatisation du Fork (v0.5.0), onglet Fork qui porte le fork, « Base » en FR, 1re distro en vrai reset (v0.5.1), en-tête mobile sur deux lignes (v0.5.2), appli installable PWA (v0.5.3), bouton de sauvegarde retiré (v0.5.4), touche retour du terminal sur iPhone (v0.5.5), talent Fork Ansible et lignes de rythme allégées (v0.5.6), case Ansible cachée sans le talent (v0.5.7), Ansible garde le Release bot (v0.5.8), résumé hors ligne complet (v0.5.9), puis **`crontab`** en talent final de l'arbre Distro (v0.5.10) et des succès Distro.
 - **v0.6 (idée)** : paquets en parallèle (concept B du Whiteboard v0.5 : plusieurs projets, dépendances, répartition des Jobs).
 
 ## Façon de travailler avec Arthur

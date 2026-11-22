@@ -211,6 +211,12 @@ const en: Dict = {
   "off.credits": "+{x} credits",
   "off.upgrades": "{n} hardware upgrades bought",
   "off.releases": "{n} releases shipped (+{s} ⭐)",
+  "off.gens": "{n} hardware generations",
+  "off.talents": "{n} release talents bought by Ansible",
+  "off.opts": "{n} optimization levels bought by Ansible",
+  "off.forks": "{n} forks (+{c} ⑂ contributors)",
+  "off.forkbuys": "{n} Fork talents and upgrades bought",
+  "off.prs": "{n} pull requests merged",
   "off.nothing": "Your pipeline wasn't running with CI/CD, so nothing happened. Unlock CI/CD to progress while away!",
 
   // Terminal messages
@@ -874,6 +880,12 @@ const fr: Dict = {
   "off.credits": "+{x} crédits",
   "off.upgrades": "{n} améliorations de matériel achetées",
   "off.releases": "{n} releases publiées (+{s} ⭐)",
+  "off.gens": "{n} générations de matériel",
+  "off.talents": "{n} talents de release achetés par Ansible",
+  "off.opts": "{n} niveaux d'optimisation achetés par Ansible",
+  "off.forks": "{n} forks (+{c} ⑂ contributeurs)",
+  "off.forkbuys": "{n} talents et améliorations Fork achetés",
+  "off.prs": "{n} pull requests fusionnées",
   "off.nothing": "Ton pipeline ne tournait pas avec la CI/CD, il ne s'est rien passé. Débloque la CI/CD pour progresser hors ligne !",
 
   "term.welcome": "Tape 'help' pour voir les commandes. Tout ce que tu cliques est aussi une commande.",
