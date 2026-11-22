@@ -33,7 +33,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.7";
+const GAME_VERSION = "0.5.8";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
