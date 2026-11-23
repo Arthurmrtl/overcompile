@@ -33,7 +33,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.10";
+const GAME_VERSION = "0.5.11";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -300,6 +300,7 @@ function buildLayout() {
           <div class="pr-boost small" data-r="prBoost"></div>
         </div>
         <h3>${t("fk.tree")}</h3>
+        <label class="switch small" data-r="abuyAuto" hidden><input type="checkbox"><span>${t("fk.abuy")}</span></label>
         <p class="muted small">${t("fk.tree.desc")}</p>
         <div class="tree" data-r="ftree"></div>
         <div class="tree-detail" data-r="ftDetail"></div>
@@ -552,6 +553,7 @@ function bindLayout() {
   $("[data-a=settings]").addEventListener("click", () => openSettings());
   $<HTMLInputElement>("[data-r=botOn]").addEventListener("change", () => cmd.run("toggle release_bot", true));
   $<HTMLInputElement>("[data-r=ansAuto] input").addEventListener("change", () => cmd.run("tree auto", true));
+  $<HTMLInputElement>("[data-r=abuyAuto] input").addEventListener("change", () => cmd.run("fork auto", true));
   $<HTMLInputElement>("[data-r=botThr]").addEventListener("change", ev => {
     const v = Math.max(1, Math.floor(Number((ev.target as HTMLInputElement).value) || 1));
     engine.s.autoRelease.threshold = v;
@@ -1141,6 +1143,11 @@ let forkTabKey = "";
 /** Fork tab: summary, open pull requests, Fork talents. */
 function renderForkTab() {
   const s = engine.s;
+  // Distro talent `abuy`: switch for the contributors' automatic purchases (so ⑂ never vanish unexplained)
+  const abuy = $("[data-r=abuyAuto]");
+  const showAbuy = hasDistro(s, "d_autobuy");
+  if (abuy.hidden === showAbuy) abuy.hidden = !showAbuy;
+  if (showAbuy) { const box = $<HTMLInputElement>("input", abuy); if (box.checked !== s.autoContrib) box.checked = s.autoContrib; }
   // Fork bot settings (Distro talent fbot), shown in the Fork tab next to the fork button
   const fbot = $("[data-r=fbot]");
   const showBot = hasDistro(s, "d_forkbot");

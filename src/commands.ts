@@ -366,6 +366,11 @@ export function createCommands(c: GameCtx) {
       const en = e();
       const s = en.s;
       const [sub, arg] = args;
+      if (sub === "auto" && hasDistro(s, "d_autobuy")) {
+        s.autoContrib = !s.autoContrib;
+        if (s.autoContrib) en.autoBuyFork(); // spend what is already waiting
+        return void say(INFO, " " + t("term.abuy_auto", { s: s.autoContrib ? t("perk.enabled") : t("perk.disabled") }));
+      }
       if (sub === "buy") {
         const ft = FORK_TALENTS.find(x => x.id === arg || x.tag === arg);
         if (!ft) return void say(t("fk.usage"));

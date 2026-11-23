@@ -108,11 +108,13 @@ export interface GameState {
   autoFork: { enabled: boolean; threshold: number };
   /** Fork talent `ans` (Ansible, v0.5.5): stars buy release talents, then optimizations, on their own. */
   autoStars: boolean;
+  /** Distro talent `abuy` (Maintainers): switch for the contributors' automatic purchases (v0.5.11). */
+  autoContrib: boolean;
   lastSeen: number;
   createdAt: number;
 }
 
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -170,6 +172,7 @@ export function newState(): GameState {
     flavorsDone: [],
     autoFork: { enabled: true, threshold: 0 },
     autoStars: true,
+    autoContrib: true,
     lastSeen: now,
     createdAt: now,
   };
@@ -300,6 +303,10 @@ function migrate(s: GameState, from: number) {
   if (from < 11) {
     // v0.5.4 → v0.5.5: switch of the Fork talent `ans` (Ansible), on by default
     s.autoStars = true;
+  }
+  if (from < 12) {
+    // v0.5.10 → v0.5.11: switch of the Distro talent `abuy`, on by default (it always ran before)
+    s.autoContrib = true;
   }
   s.version = SAVE_VERSION;
 }
