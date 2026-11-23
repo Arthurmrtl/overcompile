@@ -23,7 +23,7 @@ import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 import { type Advice, type DistroAdvice, DistroAdvisor, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
 import {
-  DISTRO_PCT, DISTRO_TALENTS, DISTRO_TALENT_BY_ID, FLAVORS, distroRevealed, distroTalentVisibility,
+  DISTRO_PCT, DISTRO_TALENTS, DISTRO_TALENT_BY_ID, FLAVORS, type Flavor, distroRevealed, distroTalentVisibility,
   forkTreeComplete, hasDistro, nextPackageAt, packagesExact, packagesGainsMult, packagesOnDistro, UPSTREAM_PACKAGES,
 } from "./core/distro";
 import {
@@ -33,7 +33,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.12";
+const GAME_VERSION = "0.5.13";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -320,6 +320,7 @@ function buildLayout() {
         <div class="fork-sum" data-r="dsSum"></div>
         <h3>${t("ds.flavors")}</h3>
         <p class="muted small">${t("ds.flavors.desc")}</p>
+        <div class="ds-perm" data-r="dsPerm" hidden></div>
         <div class="fu-list" data-r="dsFlavors"></div>
         <h3>${t("ds.tree")}</h3>
         <p class="muted small">${t("ds.tree.desc")}</p>
@@ -1343,11 +1344,24 @@ function renderDistroTab() {
   const key = `${s.distroTalents.join(",")}|${s.packages}|${s.flavor}|${s.flavorsDone.join(",")}|${selectedDistro}|${s.settings.lang}`;
   if (key === distroTabKey) return;
   distroTabKey = key;
-  $("[data-r=dsFlavors]").replaceChildren(...FLAVORS.map(f => h("div", { class: "fu" + (s.flavor === f.id ? " on" : "") },
-    h("div", { class: "fu-top" }, h("span", { class: "ft-name" }, `${t(`fl.${f.id}`)} `), h("span", { class: "ft-tag" }, `[${f.tag}]`),
-      h("span", { class: "fu-lvl" }, s.flavor === f.id ? t("ds.fl.current") : s.flavorsDone.includes(f.id) ? t("ds.fl.done") : "")),
-    h("div", { class: "ft-desc" }, t(`fl.${f.id}.desc`)),
-    h("div", { class: "muted small" }, t("ds.fl.bonus", { b: t(`fl.${f.id}.bonus`) }) + (s.flavorsDone.includes(f.id) ? " ✓" : "")))));
+  const doneFl: Flavor[] = FLAVORS.filter(f => s.flavorsDone.includes(f.id));
+  const perm = $("[data-r=dsPerm]");
+  perm.hidden = doneFl.length === 0;
+  perm.replaceChildren(h("div", { class: "ds-perm-h" }, t("ds.fl.summary", { n: doneFl.length, t: FLAVORS.length })),
+    ...doneFl.map(f => h("div", { class: "ds-perm-l" }, h("span", { class: "ds-perm-ok" }, "[✓] "), t("ds.fl.permline", { n: t(`fl.${f.id}`), b: t(`fl.${f.id}.perm`) }))));
+  $("[data-r=dsFlavors]").replaceChildren(...FLAVORS.map(f => {
+    const isDone = s.flavorsDone.includes(f.id), isCur = s.flavor === f.id;
+    const badges: Node[] = [];
+    if (isCur) badges.push(h("span", { class: "fl-badge cur" }, t("ds.fl.st.current")));
+    if (isDone) badges.push(h("span", { class: "fl-badge done" }, t("ds.fl.st.done")));
+    return h("div", { class: "fu fl-card" + (isCur ? " on" : "") + (isDone ? " done" : "") },
+      h("div", { class: "fu-top" }, h("span", { class: "ft-name" }, t(`fl.${f.id}`)), h("span", { class: "ft-tag" }, `[${f.tag}]`)),
+      ...(badges.length ? [h("div", { class: "fl-badges" }, ...badges)] : []),
+      h("div", { class: "ft-desc" }, t(`fl.${f.id}.desc`)),
+      isDone
+        ? h("div", { class: "fl-perm" }, t("ds.fl.perm", { b: t(`fl.${f.id}.perm`) }))
+        : h("div", { class: "fl-todo" }, t("ds.fl.bonus", { b: t(`fl.${f.id}.bonus`) })));
+  }));
   renderDistroTree();
 }
 
