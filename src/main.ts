@@ -33,7 +33,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.9";
+const GAME_VERSION = "0.5.10";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -285,6 +285,12 @@ function buildLayout() {
           <div class="fork-calc" data-r="forkCalc" hidden></div>
           <div class="rel-rate small" data-r="forkRate" hidden></div>
         </div>
+        <!-- Fork bot (Distro talent fbot): set here, next to the fork button, like the Release bot in the Release tab -->
+        <div class="bot" data-r="fbot" hidden>
+          <label class="switch"><input type="checkbox" data-r="fbotOn"><span>${t("ds.fbot")}</span></label>
+          <label class="small">${t("ds.fbot.threshold")} <input type="number" min="0" step="1" data-r="fbotThr"> ⑂</label>
+          <div class="muted small">${t("ds.fbot.hint")}</div>
+        </div>
         <div class="fork-sum" data-r="forkSum" data-reveal="forked"></div>
         <p class="teaser small" data-r="distroTeaser" hidden>${t("ds.teaser")}</p>
         <div data-reveal="forked">
@@ -309,11 +315,6 @@ function buildLayout() {
           <button class="fork-btn distro-btn" data-r="dsBtn"></button>
           <div class="fork-calc" data-r="dsCalc"></div>
           <div class="rel-rate small" data-r="dsRate" hidden></div>
-        </div>
-        <div class="bot" data-r="fbot" hidden>
-          <label class="switch"><input type="checkbox" data-r="fbotOn"><span>${t("ds.fbot")}</span></label>
-          <label class="small">${t("ds.fbot.threshold")} <input type="number" min="0" step="1" data-r="fbotThr"> ⑂</label>
-          <div class="muted small">${t("ds.fbot.hint")}</div>
         </div>
         <div class="fork-sum" data-r="dsSum"></div>
         <h3>${t("ds.flavors")}</h3>
@@ -1140,6 +1141,16 @@ let forkTabKey = "";
 /** Fork tab: summary, open pull requests, Fork talents. */
 function renderForkTab() {
   const s = engine.s;
+  // Fork bot settings (Distro talent fbot), shown in the Fork tab next to the fork button
+  const fbot = $("[data-r=fbot]");
+  const showBot = hasDistro(s, "d_forkbot");
+  if (fbot.hidden === showBot) fbot.hidden = !showBot;
+  if (showBot) {
+    const on = $<HTMLInputElement>("[data-r=fbotOn]");
+    if (on.checked !== s.autoFork.enabled) on.checked = s.autoFork.enabled;
+    const thr = $<HTMLInputElement>("[data-r=fbotThr]");
+    if (document.activeElement !== thr && thr.value !== String(s.autoFork.threshold)) thr.value = String(s.autoFork.threshold);
+  }
   setText($("[data-r=forkSum]"), t("fk.sum", {
     c: fmtInt(s.contributors), l: fmtInt(s.lifetimeContributors), f: fmtInt(s.forks),
     g: `×${contribGainsMult(s).toFixed(2)}`,
@@ -1321,16 +1332,6 @@ function renderDistroTab() {
   if (rate.hidden === showRate) rate.hidden = !showRate;
   if (showRate) setText(rate, t("ds.rate", { r: distroAdvice.rate.toFixed(1) }));
   toggleClass(rate, "on", distroAdvice.advised);
-  // Fork bot settings
-  const fbot = $("[data-r=fbot]");
-  const showBot = hasDistro(s, "d_forkbot");
-  if (fbot.hidden === showBot) fbot.hidden = !showBot;
-  if (showBot) {
-    const on = $<HTMLInputElement>("[data-r=fbotOn]");
-    if (on.checked !== s.autoFork.enabled) on.checked = s.autoFork.enabled;
-    const thr = $<HTMLInputElement>("[data-r=fbotThr]");
-    if (document.activeElement !== thr && thr.value !== String(s.autoFork.threshold)) thr.value = String(s.autoFork.threshold);
-  }
   setText($("[data-r=dsSum]"), t("ds.sum", { p: fmtInt(s.packages), l: fmtInt(s.lifetimePackages), d: fmtInt(s.distros), g: `×${packagesGainsMult(s).toFixed(2)}` }));
   const key = `${s.distroTalents.join(",")}|${s.packages}|${s.flavor}|${s.flavorsDone.join(",")}|${selectedDistro}|${s.settings.lang}`;
   if (key === distroTabKey) return;
