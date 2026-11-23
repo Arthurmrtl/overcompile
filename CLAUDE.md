@@ -41,6 +41,7 @@ src/
   ui/terminal.ts   widget terminal (flux de build, ligne de statut, journal, prompt, historique, Tab)
   ui/tutorial.ts   tuto interactif et astuces au déblocage
   ui/pwa.ts        appli installable : service worker, invite d'installation
+  ui/wakelock.ts   garder l'écran allumé (Screen Wake Lock)
 public/            manifest.webmanifest, sw.js, icons/ (copiés tels quels dans dist/, pour la PWA)
   commands.ts      toutes les commandes du terminal
   main.ts          mise en page, rendu des panneaux, journal d'événements, boucle (100 ms), GAME_VERSION
@@ -66,7 +67,7 @@ Règles d'architecture :
   3. vérifie qu'une sauvegarde de la version précédente se charge sans perte.
 - Des joueurs (dont Arthur) ont des parties en cours : une sauvegarde perdue est un bug bloquant.
 
-## Mécaniques actuelles (v0.5.13)
+## Mécaniques actuelles (v0.5.14)
 
 **Boucle de base.** Un build prend ~5 s et peut échouer (25 % au départ). Les Jobs exécutent plusieurs builds en parallèle. Matériel :
 - CPU : builds plus rapides, mais plus d'échecs ;
@@ -128,7 +129,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - **Conseiller de fork** : contributeurs par heure du cycle (30 min minimum), conseille quand le rythme baisse ou quand le fork double les contributeurs gagnés. Bouton qui clignote, ligne `[ FORK ]` dans le journal.
 - Onglet Fork (ouvert quand l'arbre de release est complet), compteur `⑂` dans l'en-tête, 7 succès Fork, lignes de stats.
 - Simulation v0.4.1 (`npm run sim -- 10`, 3 runs ; le joueur forke quand le conseiller le dit, fusionne toutes les PR, achète les talents Fork puis les améliorations) : 1er fork vers 3 h 10–3 h 20 avec 5–6 contributeurs ; 2e cycle 35–45 min, 3e ~22 min, ensuite cycles stables de 33–36 min ; contributeurs par fork en hausse lente (5 → 12 → 24 → 30 → 50 → 75 au 12e fork) ; arbre Fork complet au 5e fork (~5 h 20), puis ~1 niveau d'amélioration Fork par fork. Options : `NOFORK=1`, `FORK_<clé>=valeur`, `FADV_<clé>=valeur`.
-- `crontab` : prévu en talent final de l'arbre Distro (v0.5.14).
+- `crontab` : prévu en talent final de l'arbre Distro (v0.5.15).
 
 **Distro** (`src/core/distro.ts`, v0.5, 3e couche de prestige). **Tranché (Arthur, 21/11/2026, Whiteboard « overcompile v0.5 — Distro ») :** concept C, « Distro avec saveurs » (en jeu : **« Base » en FR** depuis la v0.5.1, « saveur » sonnait faux ; « Flavor » en EN ; le code garde `flavor`) ; monnaie **▣ Paquets** (« Utilisateurs » était trop proche de « contributeurs ») ; « en avançant, le pain devient automatique » : la 3e couche automatise la 2e, comme le Release bot l'a fait pour les releases.
 - Condition : **arbre Fork complet** (les 15 talents d'origine ; `ans`, arrivé en v0.5.6, est facultatif pour ne pas retirer l'accès à ceux qui avaient fini l'arbre). Avant, un teaser « Distro → ??? » dans l'onglet Fork (à partir de 10 talents Fork). L'onglet Distro (couleur cyan, compteur ▣ dans l'en-tête) s'ouvre quand l'arbre est complet.
@@ -146,7 +147,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 - Commandes : `distro` (état et saveurs), `distro tree`, `distro buy <tag>`, `distro <rolling|stable|source|desktop> --yes`, `forkbot`. Astuces du tuto : ouverture de l'onglet Distro, 1re distro.
 - Sauvegarde v10 : `distros`, `packages`, `lifetimePackages`, `distroTalents`, `flavor`, `flavorsDone`, `autoFork`, stats `distroTime`, `fastestDistro`, `allContributors`.
 - Simulation v0.5.0 (3 runs de 16 h ; le joueur publie quand le conseiller le dit, essaie chaque saveur une fois puis prend Stable) : rien ne change avant la Distro (1re étoile 20–22 min, arbre 3 h 00–3 h 02) ; arbre Fork complet et 1re distro 4 h 53–5 h 17 (le vrai jeu d'Arthur : arbre Fork à 8 h 45) ; 2e cycle 1 h 23–1 h 43 depuis la v0.5.1 (vrai reset, `gainsLog` 0,5), puis cycles stables d'~1 h 06 ; paquets par distro 1–2 → 15, pas d'emballement ; arbre Distro complet vers la 6e distro. Options : `NODISTRO=1`, `FLAVOR=<id>` (toujours la même saveur), `DISTRO_<clé>=valeur`, `DADV_<clé>=valeur`.
-- Pas encore fait : `crontab` (v0.5.14, talent final de l'arbre Distro), succès Distro.
+- Pas encore fait : `crontab` (v0.5.15, talent final de l'arbre Distro), succès Distro.
 - **Cartes des Bases (v0.5.13, Arthur : « la vue est pas top sur run distro déjà fait et le bonus définitif »)** : encadré vert « Bonus permanents (n/4) » au-dessus des cartes, qui liste les bonus acquis ; sur chaque carte, une pastille sur sa propre ligne (`[✓] acquis` en vert, `[>] ce cycle` en cyan), carte terminée sur fond vert avec « Permanent : … » en vert ; les autres gardent « 1er cycle terminé : … » en gris.
 - Une seule saveur active par cycle ; seuls les bonus permanents se cumulent. Idée à l'étude : talent tardif « Dual boot » (2 saveurs actives).
 
@@ -166,6 +167,7 @@ Ces talents remplacent les anciens autobuyers par ressource, qui faisaient doubl
 **Mobile.** Sur écran tactile, le jeu ne place jamais le curseur dans le terminal tout seul : le clavier ne s'ouvre que si on touche la ligne du prompt. Pendant la saisie, la barre d'onglets et le bloc Pipeline sont masqués pour laisser toute la hauteur au terminal. **v0.5.5 (Arthur : « les commandes marchent pas dans le terminal sur iPhone en application installée ») :** le prompt est dans un `<form>` ; la touche retour du clavier iPhone n'arrive pas toujours en `keydown` « Enter », mais elle envoie toujours le formulaire. `keydown` Enter et `submit` passent par la même fonction, sans double exécution. La hauteur suit la zone réellement visible (`100dvh` + `visualViewport`), y compris avec la zone du geste d'accueil sur iPhone. **En-tête (v0.5.2, Arthur : les cr/s chevauchaient le logo avec toutes les monnaies) :** logo, crédits et boutons sur la 1re ligne ; ⭐ ⑂ ▣ sur une 2e ligne fine (`.hud-cur`), affichée seulement quand l'un d'eux est visible. Quatre compteurs ne tiennent pas sur une ligne à 360–412 px. Rien ne change sur PC.
 
 **Appli installable (PWA, v0.5.3, Arthur : « on avait parlé d'applications mobile et de Steam », option retenue avant la v1 ; Play Store et Steam éventuellement après, App Store déconseillé).** Manifeste, icônes `>_` et service worker (`public/`). Le service worker prend la page **réseau d'abord** (on a toujours la dernière version en ligne, la copie en cache ne sert que hors connexion) ; nginx ne met jamais en cache `sw.js` ni le manifeste. Pas de pop-up : Paramètres → « Installer l'appli » (invite du navigateur sur Android/PC Chrome ; sur iPhone, explication Partager → « Sur l'écran d'accueil »). Même origine donc même sauvegarde que le site, **sauf sur iPhone** où l'appli installée a son propre stockage : le texte demande d'exporter puis d'importer. Rien en `file://` (pas de service worker).
+- **Écran allumé (v0.5.14, Arthur : sur Android, l'appli installée se verrouille après 30 s, « l'angoisse pour un idle quand on farm ») :** API Screen Wake Lock (`src/ui/wakelock.ts`). Case « Garder l'écran allumé » dans les Paramètres, **activée par défaut dans l'appli installée**, désactivée dans un onglet. Préférence d'appareil (`localStorage` `overcompile-wakelock`, hors sauvegarde). Le verrou est repris quand la page redevient visible et au premier toucher. La case n'apparaît que si le navigateur gère l'API.
 
 **Tranché (v0.4.3, Arthur) :** la barre d'onglets du bas sur mobile n'a plus d'emojis (« IA slop ») : icônes au trait en SVG (`NAV_ICONS` dans `main.ts`, couleur du thème). Le 3e onglet s'appelle **Progression / Progress** et plus « Release », car il contient aussi Challenges, Fork, Succès et Stats.
 
@@ -227,7 +229,7 @@ Pour tester dans un vrai navigateur, `npm run build` puis ouvrir `dist/index.htm
 
 - **v0.3** (en cours) : générations de matériel (`gen`, v0.3.0), événements de build (v0.3.1), puis correctifs et équilibrage selon les retours de jeu, et peut-être les points ci-dessus.
 - **v0.4** : couche de prestige **Fork** (v0.4.0 : contributeurs, arbre Fork, PR `gh pr`), rééquilibrage du fork, arbre Fork dessiné et bonus en % (v0.4.1), correctif de sortie de challenge (v0.4.2), barre d'onglets mobile (v0.4.3), brouillard de l'arbre Fork (v0.4.4), générations par run (v0.4.5), détail du calcul des contributeurs (v0.4.6), prix normal de l'Auto-Scaling avec `iac` et cache du Disk (v0.4.7), toasts mobiles et tableau du calcul des contributeurs (v0.4.8), génération automatique `rnv` (v0.4.9), réglage libre de la priorité Jobs (v0.4.10), colonnes redimensionnables sur PC (v0.4.11), tuto interactif et astuces au déblocage (v0.4.12), barre de progression du tuto (v0.4.13), toasts discrets sur PC (v0.4.14).
-- **v0.5** : couche **Distro** avec saveurs et automatisation du Fork (v0.5.0), onglet Fork qui porte le fork, « Base » en FR, 1re distro en vrai reset (v0.5.1), en-tête mobile sur deux lignes (v0.5.2), appli installable PWA (v0.5.3), bouton de sauvegarde retiré (v0.5.4), touche retour du terminal sur iPhone (v0.5.5), talent Fork Ansible et lignes de rythme allégées (v0.5.6), case Ansible cachée sans le talent (v0.5.7), Ansible garde le Release bot (v0.5.8), résumé hors ligne complet (v0.5.9), Fork bot dans l'onglet Fork (v0.5.10), interrupteur des Mainteneurs (v0.5.11), perks rendus à la réussite d'un challenge (v0.5.12), cartes des Bases plus lisibles (v0.5.13), puis **`crontab`** en talent final de l'arbre Distro (v0.5.14) et des succès Distro.
+- **v0.5** : couche **Distro** avec saveurs et automatisation du Fork (v0.5.0), onglet Fork qui porte le fork, « Base » en FR, 1re distro en vrai reset (v0.5.1), en-tête mobile sur deux lignes (v0.5.2), appli installable PWA (v0.5.3), bouton de sauvegarde retiré (v0.5.4), touche retour du terminal sur iPhone (v0.5.5), talent Fork Ansible et lignes de rythme allégées (v0.5.6), case Ansible cachée sans le talent (v0.5.7), Ansible garde le Release bot (v0.5.8), résumé hors ligne complet (v0.5.9), Fork bot dans l'onglet Fork (v0.5.10), interrupteur des Mainteneurs (v0.5.11), perks rendus à la réussite d'un challenge (v0.5.12), cartes des Bases plus lisibles (v0.5.13), écran gardé allumé (v0.5.14), puis **`crontab`** en talent final de l'arbre Distro (v0.5.15) et des succès Distro.
 - **v0.6 (idée)** : paquets en parallèle (concept B du Whiteboard v0.5 : plusieurs projets, dépendances, répartition des Jobs).
 
 ## Façon de travailler avec Arthur

@@ -1,6 +1,7 @@
 import "./style.css";
 import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
 import { initPwa, installMode, promptInstall } from "./ui/pwa";
+import { initWakeLock, setWakeLock, wakeLockEnabled, wakeLockSupported } from "./ui/wakelock";
 import Decimal from "break_eternity.js";
 import { Engine, type GameEvent, type OfflineGains } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
@@ -33,7 +34,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.13";
+const GAME_VERSION = "0.5.14";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -1614,6 +1615,14 @@ function openSettings() {
     install.push(h("hr"), h("div", { class: "small" }, h("strong", {}, t("set.install")), " · ", t("set.install.ios")),
       h("div", { class: "small muted" }, t("set.install.ios_save")));
   }
+  // Keep the screen on (device preference, outside the save)
+  const wake: Node[] = [];
+  if (wakeLockSupported()) {
+    const box = h("input", { type: "checkbox" }) as HTMLInputElement;
+    box.checked = wakeLockEnabled();
+    box.addEventListener("change", () => setWakeLock(box.checked));
+    wake.push(h("label", { class: "switch" }, box, t("set.wake")), h("div", { class: "small muted" }, t("set.wake.desc")));
+  }
   const tutBtn = h("button", { class: "btn" }, t("set.tutorial"));
   tutBtn.addEventListener("click", () => { replayTutorial(); closeModal(); render(); });
   const resetBtn = h("button", { class: "btn danger" }, t("set.reset"));
@@ -1638,6 +1647,7 @@ function openSettings() {
     h("label", { class: "field" }, h("span", {}, t("set.lang")), langSel),
     h("label", { class: "field" }, h("span", {}, t("set.notation")), notSel),
     h("label", { class: "field" }, h("span", {}, t("set.log")), logSel),
+    ...wake,
     h("hr"),
     area,
     h("div", { class: "row" }, exportBtn, importBtn),
@@ -2019,6 +2029,7 @@ async function halt() {
 /* ================= Start ================= */
 buildLayout();
 initPwa(() => { /* the Settings read installMode() each time they open */ });
+initWakeLock();
 initTutorial({
   engine: () => engine,
   show: (panel, tab) => {
