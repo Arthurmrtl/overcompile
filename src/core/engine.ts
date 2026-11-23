@@ -200,6 +200,7 @@ export class Engine {
       const id = s.challenge;
       s.challenge = null;
       s.challengesDone.push(id);
+      this.afterChallenge(id); // v0.5.12: completing gave nothing back, only quitting did
       this.emit({ t: "challenge_done", id });
     }
 
@@ -623,18 +624,24 @@ export class Engine {
     const id = this.s.challenge;
     if (!id) return false;
     this.s.challenge = null;
-    if (id === "single_core" && on(this.s, "monorepo") && this.s.hw.jobs < 2) {
-      this.s.hw.jobs = 2;
-      this.s.slots.push({ progress: 0, running: this.s.pipeline && this.ciActive });
-    }
-    // Talents count again once the challenge is left (No cache disables the tree): give back
-    // the perks the run would have started with, instead of waiting for the next release.
-    const p = this.s.perks;
-    if (on(this.s, "ci_preinstalled") && !p.ci_cd.unlocked) p.ci_cd = { unlocked: true, enabled: true };
-    if (on(this.s, "as_perm") && !p.auto_scaling.unlocked) p.auto_scaling = { unlocked: true, enabled: true };
-    if (p.ci_cd.enabled && !this.s.pipeline) this.compile();
+    this.afterChallenge(id);
     this.emit({ t: "challenge_exit", id });
     return true;
+  }
+
+  /** Once a challenge ends (quit or completed), talents count again (No cache disables the tree):
+   *  give back what the run would have started with, instead of waiting for the next release. */
+  private afterChallenge(_id: string) {
+    const s = this.s;
+    // Single-core locks Jobs at 1, No cache starts the run without `mono`: both get their 2nd job back
+    if (on(s, "monorepo") && s.hw.jobs < 2) {
+      s.hw.jobs = 2;
+      s.slots.push({ progress: 0, running: s.pipeline && this.ciActive });
+    }
+    const p = s.perks;
+    if (on(s, "ci_preinstalled") && !p.ci_cd.unlocked) p.ci_cd = { unlocked: true, enabled: true };
+    if (on(s, "as_perm") && !p.auto_scaling.unlocked) p.auto_scaling = { unlocked: true, enabled: true };
+    if (p.ci_cd.enabled && !s.pipeline) this.compile();
   }
 
   /* ---------------- Fork (prestige layer 2) ---------------- */
