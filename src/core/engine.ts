@@ -665,7 +665,7 @@ export class Engine {
     s.prBoost = { speed: 1, gains: 1, stars: 1 };
     this.activeEvent = null;
     this.resetRun();
-    if (hasDistro(s, "d_autobuy")) this.autoBuyFork();
+    if (hasDistro(s, "d_autobuy") && s.autoContrib) this.autoBuyFork();
     this.emit({ t: "fork", contributors: gain, auto });
     this.checkAchievements();
     return gain;
