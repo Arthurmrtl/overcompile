@@ -2,7 +2,7 @@ import "./style.css";
 import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
 import { initPwa, installMode, promptInstall } from "./ui/pwa";
 import Decimal from "break_eternity.js";
-import { Engine, type GameEvent } from "./core/engine";
+import { Engine, type GameEvent, type OfflineGains } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
 import {
   HW, JOBS_PRIO_STEPS, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
@@ -33,7 +33,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.8";
+const GAME_VERSION = "0.5.9";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -1627,15 +1627,27 @@ function openSettings() {
   );
 }
 
+/** Every reward the offline summary can list, in order; a line shows only when its count is above 0.
+ *  A new currency or automation adds its counter in OfflineGains (engine.ts) and one line here. */
+const OFFLINE_LINES: ((g: OfflineGains) => string | null)[] = [
+  g => g.hardware > 0 ? t("off.upgrades", { n: fmtInt(g.hardware) }) : null,
+  g => g.generations > 0 ? t("off.gens", { n: fmtInt(g.generations) }) : null,
+  g => g.releases > 0 ? t("off.releases", { n: fmtInt(g.releases), s: fmt(g.stars) }) : null,
+  g => g.talents > 0 ? t("off.talents", { n: fmtInt(g.talents) }) : null,
+  g => g.optimizations > 0 ? t("off.opts", { n: fmtInt(g.optimizations) }) : null,
+  g => g.forks > 0 ? t("off.forks", { n: fmtInt(g.forks), c: fmtInt(g.contributors) }) : null,
+  g => g.forkBuys > 0 ? t("off.forkbuys", { n: fmtInt(g.forkBuys) }) : null,
+  g => g.prs > 0 ? t("off.prs", { n: fmtInt(g.prs) }) : null,
+];
+
 function showOffline(rep: NonNullable<ReturnType<Engine["simulateOffline"]>>) {
   if (rep.away < 60) return; // short absences are silent
   const items = [
     h("li", {}, t("off.credits", { x: fmt(rep.credits) })),
     h("li", {}, t("off.builds", { n: fmtInt(rep.builds), f: fmtInt(rep.fails) })),
   ];
-  if (rep.upgrades > 0) items.push(h("li", {}, t("off.upgrades", { n: fmtInt(rep.upgrades) })));
-  if (rep.releases > 0) items.push(h("li", {}, t("off.releases", { n: rep.releases, s: fmt(rep.stars) })));
-  for (const a of rep.achievements) items.push(h("li", {}, `[!] ${t(`a.${a}`)}`));
+  for (const line of OFFLINE_LINES) { const text = line(rep.gains); if (text) items.push(h("li", {}, text)); }
+  for (const a of rep.gains.achievements) items.push(h("li", {}, `[!] ${t(`a.${a}`)}`));
   openModal(
     h("h2", {}, `🌙 ${t("off.title")}`),
     h("p", {}, t("off.time", { t: fmtTime(rep.away) })),
@@ -1646,7 +1658,11 @@ function showOffline(rep: NonNullable<ReturnType<Engine["simulateOffline"]>>) {
     rep.capped ? h("p", { class: "muted small" }, t("off.capped", { h: offlineCapHours(engine.s) })) : "",
     h("ul", { class: "off-list" }, ...items),
   );
-  term.println(INFO, ` ${t("off.title")} (${fmtTime(rep.away)}): +${fmt(rep.credits)} ${t("credits")}`);
+  const extra = [
+    rep.gains.releases > 0 ? `+${fmt(rep.gains.stars)} ⭐` : "",
+    rep.gains.forks > 0 ? `+${fmtInt(rep.gains.contributors)} ⑂` : "",
+  ].filter(Boolean).join(", ");
+  term.println(INFO, ` ${t("off.title")} (${fmtTime(rep.away)}): +${fmt(rep.credits)} ${t("credits")}${extra ? `, ${extra}` : ""}`);
 }
 
 /* ================= Game events → terminal ================= */

@@ -51,6 +51,39 @@ export type GameEvent =
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" | "contributors" | "packages" };
 
+/** What happened while away, counted from the engine's events (see simulateOffline). */
+export interface OfflineGains {
+  credits: Decimal;        // earned (not the balance: the Auto-Scaling spends it)
+  hardware: number;        // hardware levels bought by the Auto-Scaling
+  generations: number;
+  releases: number;
+  stars: Decimal;
+  talents: number;         // release talents bought by Ansible
+  optimizations: number;   // optimization levels bought by Ansible
+  forks: number;
+  contributors: number;
+  forkBuys: number;        // Fork talents and upgrade levels bought by the Distro auto-buy
+  prs: number;             // pull requests merged
+  achievements: string[];
+}
+export const newOfflineGains = (): OfflineGains => ({
+  credits: new Decimal(0), hardware: 0, generations: 0, releases: 0, stars: new Decimal(0), talents: 0, optimizations: 0,
+  forks: 0, contributors: 0, forkBuys: 0, prs: 0, achievements: [],
+});
+function tallyOffline(g: OfflineGains, e: GameEvent) {
+  switch (e.t) {
+    case "builds": g.credits = g.credits.add(e.credits); break;
+    case "pr_merged": if (e.credits) g.credits = g.credits.add(e.credits); g.prs++; break;
+    case "autobuy": g.hardware += e.n; break;
+    case "generation": g.generations++; break;
+    case "release": g.releases++; g.stars = g.stars.add(e.stars); break;
+    case "autostars": g.talents += e.talents.length; g.optimizations += e.opts; break;
+    case "fork": g.forks++; g.contributors += e.contributors; break;
+    case "fork_talent": case "fork_upgrade": g.forkBuys++; break;
+    case "achievement": g.achievements.push(e.id); break;
+  }
+}
+
 export class Engine {
   s: GameState;
   private listeners: ((e: GameEvent) => void)[] = [];
@@ -75,8 +108,10 @@ export class Engine {
     this.listeners.push(fn);
   }
   private emit(e: GameEvent) {
+    this.tap?.(e); // offline summary: sees every event, even muted ones
     if (!this.muted) for (const fn of this.listeners) fn(e);
   }
+  private tap: ((e: GameEvent) => void) | null = null;
 
   /* ---------------- Persistence ---------------- */
   static load(): Engine {
@@ -828,19 +863,21 @@ export class Engine {
     const eff = offlineEfficiency(s);
     const counted = Math.min(beyond, offlineCapSeconds(s));
     const simulated = grace + counted * eff;
-    const before = { credits: s.totalEarned, builds: s.stats.builds, fails: s.stats.fails, cpu: s.hw.cpu, ram: s.hw.ram, disk: s.hw.disk, jobs: s.hw.jobs, releases: s.releases, stars: s.lifetimeStars };
+    const before = { builds: s.stats.builds, fails: s.stats.fails };
     const steps = Math.min(2000, Math.ceil(simulated));
     const dt = simulated / steps;
-    const newAchievements: string[] = [];
-    const collect = (e: GameEvent) => { if (e.t === "achievement") newAchievements.push(e.id); };
-    this.listeners.push(collect);
+    // Everything earned while away is counted from the game's own events, so resets during
+    // the absence (release, fork) do not break the totals. A new currency or automation adds
+    // its event here and one line in the offline summary (main.ts, OFFLINE_LINES).
+    const got = newOfflineGains();
+    this.tap = e => tallyOffline(got, e);
     this.muted = true;
     this.offline = true; // no events while away
     this.activeEvent = null;
     for (let i = 0; i < steps; i++) this.tick(dt);
     this.offline = false;
     this.muted = false;
-    this.listeners = this.listeners.filter(l => l !== collect);
+    this.tap = null;
     // Play time counts real time, not simulated time
     s.stats.playTime += seconds - simulated;
     return {
@@ -850,13 +887,10 @@ export class Engine {
       unlocked: eff > 0,
       capped: beyond > counted,
       simulated,
-      credits: s.totalEarned.sub(before.credits).max(0), // earned, not balance (Auto-Scaling spends it)
+      credits: got.credits,
       builds: s.stats.builds - before.builds,
       fails: s.stats.fails - before.fails,
-      upgrades: (s.hw.cpu - before.cpu) + (s.hw.ram - before.ram) + (s.hw.disk - before.disk) + (s.hw.jobs - before.jobs),
-      releases: s.releases - before.releases,
-      stars: s.lifetimeStars.sub(before.stars),
-      achievements: newAchievements,
+      gains: got,
     };
   }
 
