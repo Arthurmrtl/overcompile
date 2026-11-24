@@ -48,7 +48,7 @@ src/
 scripts/sim.ts     pacing simulation
 ```
 
-## Content (v0.5.14)
+## Content (v0.5.15)
 
 - Hardware: CPU / RAM / Disk (with Incrust's trade-offs) + Jobs (parallel builds, up to 16)
 - Perks: CI/CD (idle mode), Auto-Scaling (buys the cheapest upgrade every 2 s): not sold before the first release (the first run is played by hand), then priced at 25 % of the current release threshold until the permanent `as` talent (10★)
@@ -75,7 +75,7 @@ scripts/sim.ts     pacing simulation
 ## Roadmap
 
 - v0.4 — Prestige layer 2: Fork (Contributors, PRs) + `crontab` automation scripting
-- v0.5 — Prestige layer 3: Distro with flavors and Fork automation (v0.5.0), the fork moved to the Fork tab (v0.5.1), a two-line mobile header (v0.5.2), an installable app (PWA, v0.5.3), no more save button since the game autosaves (v0.5.4), the terminal's return key on iPhone (v0.5.5), the Ansible Fork talent that buys release talents and optimizations (v0.5.6), a fix for its switch showing without the talent (v0.5.7), Ansible keeping the Release bot through forks (v0.5.8), a complete offline summary (v0.5.9), the Fork bot settings in the Fork tab (v0.5.10), a switch for the Maintainers auto-buy (v0.5.11), perks given back when a challenge is completed (v0.5.12), clearer flavor cards with permanent bonuses (v0.5.13), keep the screen on (v0.5.14), then `crontab` and Distro achievements (v0.5.15)
+- v0.5 — Prestige layer 3: Distro with flavors and Fork automation (v0.5.0), the fork moved to the Fork tab (v0.5.1), a two-line mobile header (v0.5.2), an installable app (PWA, v0.5.3), no more save button since the game autosaves (v0.5.4), the terminal's return key on iPhone (v0.5.5), the Ansible Fork talent that buys release talents and optimizations (v0.5.6), a fix for its switch showing without the talent (v0.5.7), Ansible keeping the Release bot through forks (v0.5.8), a complete offline summary (v0.5.9), the Fork bot settings in the Fork tab (v0.5.10), a switch for the Maintainers auto-buy (v0.5.11), perks given back when a challenge is completed (v0.5.12), clearer flavor cards with permanent bonuses (v0.5.13), keep the screen on (v0.5.14), Distro tree in cyan (v0.5.15), then `crontab` and Distro achievements (v0.5.16)
 
 ## License
 

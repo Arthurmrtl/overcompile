@@ -573,7 +573,13 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .distro-card { border-color: var(--cyan); }
 .distro-btn { background: var(--cyan); border-color: var(--cyan); }
 .ds-flavor { margin-top: 4px; color: var(--cyan); }
-.dnode.owned { border-color: var(--cyan); }
+/* Distro tree in the Distro colour (cyan), not the Fork violet */
+.dnode .node-cost { color: var(--cyan); }
+.dnode.owned { border-color: var(--cyan); background: #0b2a33; }
+.dnode.owned .node-icon, .dnode.owned .node-cost { color: var(--cyan); }
+[data-r=dtDetail] .ft-tag { color: var(--cyan); }
+[data-r=dsFlavors] .ft-tag { color: var(--cyan); }
+[data-r=dsCalc] .fc-row.total .fc-v { color: var(--cyan); }
 .fu.on { border-color: var(--cyan); }
 .fl-card.done { border-color: var(--green-d); background: #0f2419; }
 .fl-card.done.on { border-color: var(--cyan); }
