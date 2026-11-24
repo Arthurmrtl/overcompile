@@ -66,6 +66,9 @@ export const flavorDone = (s: GameState, id: FlavorId) => s.flavorsDone.includes
 
 /* ---------------- Distro talents (paid in packages, never reset) ---------------- */
 export interface DistroTalent { id: string; tag: string; cost: number; req: string[]; row: number; col: number }
+/** Talents that keep something through a reset: they act on the next fork / distro (shown in the tree detail). */
+export const NEXT_FORK_DISTRO_TALENTS = ["d_chal"];
+export const NEXT_DISTRO_TALENTS = ["d_restart", "d_autokeep", "d_keepall"];
 export const DISTRO_TALENTS: DistroTalent[] = [
   { id: "d_restart", tag: "rst", cost: 1, req: [], row: 0, col: 2 },                        // a distro keeps the Fork restart talents (tpl, iac, spn, lts, bin)
   { id: "d_merge", tag: "mrg", cost: 1, req: ["d_restart"], row: 1, col: 1 },               // pull requests merge themselves

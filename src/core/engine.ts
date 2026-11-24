@@ -8,7 +8,7 @@ import {
 import { TALENTS, TALENT_BY_ID } from "./talents";
 import {
   FORK, FORK_TALENTS, FORK_UPGRADES, FORK_TALENT_BY_ID, FORK_UPGRADE_BY_ID, forkUpgradePrice, keptReleaseTalents, PR_EFFECTS, PR_TITLES, type PullRequest, SEED_LEVELS,
-  TEMPLATE_STARS,
+  PREBUILT_TALENTS, TEMPLATE_STARS,
   canFork, contributorsOnFork, hasFork, pickPrKind, prGap,
 } from "./fork";
 import {
@@ -569,8 +569,17 @@ export class Engine {
     const r = this.canBuyTalent(id);
     if (!r.ok) return r;
     this.s.stars = this.s.stars.sub(TALENT_BY_ID[id].cost);
+    this.grantTalent(id);
+    this.checkAchievements();
+    return r;
+  }
+
+  /** Owns a release talent and applies what it gives right away (bought, or given by a Fork talent). */
+  private grantTalent(id: string) {
+    if (this.s.talents.includes(id)) return;
     this.s.talents.push(id);
-    if (id === "monorepo" && this.s.hw.jobs < 2) {
+    if (this.s.challenge === "no_cache") return; // No cache: talents are off, afterChallenge() gives the perks back
+    if (id === "monorepo" && this.s.hw.jobs < 2 && !inChallenge(this.s, "single_core")) {
       this.s.hw.jobs = 2;
       this.s.slots.push({ progress: 0, running: this.s.pipeline && this.ciActive });
     }
@@ -580,8 +589,14 @@ export class Engine {
     if (id === "as_perm" && !this.s.perks.auto_scaling.unlocked) {
       this.s.perks.auto_scaling = { unlocked: true, enabled: true };
     }
-    this.checkAchievements();
-    return r;
+  }
+
+  /** Start-of-run hardware levels (opt_boot, f_sponsors) also count for the current run when bought. */
+  private addBootLevels(n: number) {
+    const hw = this.s.hw;
+    if (!inChallenge(this.s, "single_core")) hw.cpu += n;
+    hw.ram += n;
+    hw.disk += n;
   }
 
   /* ---------------- Optimizations (infinite star upgrades) ---------------- */
@@ -598,6 +613,7 @@ export class Engine {
     if (!r.ok) return r;
     this.s.stars = this.s.stars.sub(upgradePrice(this.s, id));
     this.s.upgrades[id] = (this.s.upgrades[id] ?? 0) + 1;
+    if (id === "opt_boot") this.addBootLevels(3); // v0.5.16: talents act as soon as they are bought
     this.checkAchievements();
     return r;
   }
@@ -762,6 +778,8 @@ export class Engine {
     if (!r.ok) return r;
     this.s.packages -= DISTRO_TALENT_BY_ID[id].cost;
     this.s.distroTalents.push(id);
+    // v0.5.16: talents act as soon as they are bought ("keep" talents act on the next reset by nature)
+    if (id === "d_autobuy" && this.s.autoContrib) this.autoBuyFork();
     this.emit({ t: "distro_talent", id });
     this.checkAchievements();
     return r;
@@ -781,7 +799,11 @@ export class Engine {
     if (!r.ok) return r;
     this.s.contributors -= FORK_TALENT_BY_ID[id].cost;
     this.s.forkTalents.push(id);
-    // "iac" makes Auto-Scaling buyable at once; "keep"/others act on the next fork or run
+    // v0.5.16: talents act as soon as they are bought, start-of-fork/run bonuses included;
+    // "keep" talents (kp, ans's Release bot) act on the next fork by nature
+    if (id === "f_template") this.s.stars = this.s.stars.add(TEMPLATE_STARS);
+    if (id === "f_bench") for (const tid of PREBUILT_TALENTS) this.grantTalent(tid);
+    if (id === "f_sponsors") this.addBootLevels(SEED_LEVELS);
     this.emit({ t: "fork_talent", id });
     this.checkAchievements();
     return r;
