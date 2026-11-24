@@ -25,16 +25,16 @@ import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/term
 import { type Advice, type DistroAdvice, DistroAdvisor, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
 import {
   DISTRO_PCT, DISTRO_TALENTS, DISTRO_TALENT_BY_ID, FLAVORS, type Flavor, distroRevealed, distroTalentVisibility,
-  forkTreeComplete, hasDistro, nextPackageAt, packagesExact, packagesGainsMult, packagesOnDistro, UPSTREAM_PACKAGES,
+  forkTreeComplete, hasDistro, NEXT_DISTRO_TALENTS, NEXT_FORK_DISTRO_TALENTS, nextPackageAt, packagesExact, packagesGainsMult, packagesOnDistro, UPSTREAM_PACKAGES,
 } from "./core/distro";
 import {
   FORK_TALENTS, FORK_TALENT_BY_ID, FORK_UPGRADES, PR_EFFECTS, contribGainsMult, contributorsOnFork, contributorBreakdown, forkUpgradeLevel,
   forkUpgradePrice, forkRevealed, hasFork, forkTalentVisibility,
-  starsForFirstContributor, treeComplete,
+  NEXT_FORK_TALENTS, starsForFirstContributor, treeComplete,
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.5.15";
+const GAME_VERSION = "0.5.16";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -1280,6 +1280,7 @@ function renderForkTree() {
   $("[data-r=ftDetail]").replaceChildren(
     h("div", {}, h("span", { class: "ft-tag" }, `[${ft.tag}]`), h("strong", {}, t(`ft.${ft.id}`))),
     h("div", {}, t(`ft.${ft.id}.desc`)),
+    NEXT_FORK_TALENTS.includes(ft.id) ? h("div", { class: "td-next small" }, t("tree.next.fork")) : "",
     ft.req.length ? h("div", { class: "muted small" }, t("fk.req", { r: ft.req.map(r => FORK_TALENT_BY_ID[r].tag).join(" + ") })) : "",
     btn,
   );
@@ -1435,6 +1436,8 @@ function renderDistroTree() {
   $("[data-r=dtDetail]").replaceChildren(
     h("div", {}, h("span", { class: "ft-tag" }, `[${dt.tag}]`), h("strong", {}, t(`dt.${dt.id}`))),
     h("div", {}, t(`dt.${dt.id}.desc`)),
+    NEXT_DISTRO_TALENTS.includes(dt.id) ? h("div", { class: "td-next small" }, t("tree.next.distro"))
+      : NEXT_FORK_DISTRO_TALENTS.includes(dt.id) ? h("div", { class: "td-next small" }, t("tree.next.fork")) : "",
     dt.req.length ? h("div", { class: "muted small" }, t("fk.req", { r: dt.req.map(r => DISTRO_TALENT_BY_ID[r].tag).join(" + ") })) : "",
     buy,
   );

@@ -81,6 +81,8 @@ export function forkTalentVisibility(s: GameState, id: string): "shown" | "fog" 
 /** Release talents a fork keeps with `f_keep`. */
 export const KEPT_BY_F_KEEP = ["ci_preinstalled", "as_perm", "as_fast", "as_ctrl", "as_jobs"];
 export const TEMPLATE_STARS = 10;
+/** Talents that keep something through a reset: they can only act on the next fork / distro (shown in the tree detail). */
+export const NEXT_FORK_TALENTS = ["f_keep"];
 /** Release talents a fork starts with when `f_bench` (prebuilt binaries) is owned. */
 export const PREBUILT_TALENTS = ["warm_cache", "code_review", "ci_preinstalled"];
 /** Release talents a fork keeps with `f_ansible` (v0.5.8): without the Release bot, the

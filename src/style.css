@@ -251,6 +251,7 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .tree-detail { background: var(--panel-2); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
 .td-name { font-weight: 800; }
 .td-desc { color: var(--fg); }
+.td-next { color: var(--amber); }
 .learn-btn { margin-top: 6px; align-self: flex-start; background: transparent; border: 1px solid var(--border-2); border-radius: 6px; padding: 6px 12px; color: var(--dim); }
 .learn-btn.afford { border-color: var(--amber); color: var(--amber); font-weight: 700; }
 
