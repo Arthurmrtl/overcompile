@@ -660,3 +660,39 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .mod-lvl { color: var(--orange); font-weight: 700; }
 
 .mtx-state { color: var(--violet); margin: 2px 0 8px; }
+
+/* ---------- Loot roulette (v0.6.4): CS-style crate opening ---------- */
+.rl-overlay { position: fixed; inset: 0; z-index: 40; background: #000c; display: flex; align-items: center; justify-content: center; padding: 12px; }
+.rl-box { width: min(720px, 100%); background: var(--panel); border: 1px solid var(--orange); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 0 40px #fb923c33; }
+.rl-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rl-title { font-weight: 700; color: var(--orange); }
+.rl-window { position: relative; height: 104px; overflow: hidden; border-radius: 8px; background: #0b0f14; border: 1px solid var(--border);
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent); }
+.rl-strip { display: flex; gap: 6px; padding: 8px 0; will-change: transform; }
+.rl-card { flex: 0 0 106px; height: 86px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border);
+  border-bottom-width: 4px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; font-size: 12px; }
+.rl-card .rl-name { font-weight: 700; color: var(--fg); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-card .rl-tag { font-size: 10px; }
+.rl-card.r0 { border-bottom-color: var(--dim); } .rl-card.r0 .rl-tag { color: var(--dim); }
+.rl-card.r1 { border-bottom-color: var(--blue); background: #0f1a2b; } .rl-card.r1 .rl-tag { color: var(--blue); }
+.rl-card.r2 { border-bottom-color: var(--violet); background: #1a1430; } .rl-card.r2 .rl-tag { color: var(--violet); }
+.rl-card.r3 { border-bottom-color: var(--amber); background: #2a200b; } .rl-card.r3 .rl-tag { color: var(--amber); }
+.rl-card.win { outline: 2px solid var(--orange); box-shadow: 0 0 18px #fb923c88; }
+.rl-marker { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+.rl-marker::before, .rl-marker::after { content: ""; position: absolute; left: -6px; border: 7px solid transparent; }
+.rl-marker::before { top: 0; border-top-color: var(--orange); }
+.rl-marker::after { bottom: 0; border-bottom-color: var(--orange); }
+.rl-result:empty { display: none; }
+.rl-won { text-align: center; padding: 10px; border-radius: 8px; border: 1px solid var(--border); animation: rl-pop .35s ease-out; }
+.rl-won-h { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.rl-won.r1 { border-color: var(--blue); } .rl-won.r1 .mod-rar { color: var(--blue); }
+.rl-won.r2 { border-color: var(--violet); box-shadow: 0 0 20px #a78bfa44; } .rl-won.r2 .mod-rar { color: var(--violet); }
+.rl-won.r3 { border-color: var(--amber); box-shadow: 0 0 28px #fbbf2466; } .rl-won.r3 .mod-rar { color: var(--amber); }
+.rl-won.r0 .mod-rar { color: var(--dim); }
+@keyframes rl-pop { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.rl-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.btn.mk-open { border-color: var(--orange); color: var(--orange); }
+.mk-crates { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.mk-crates-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--orange); border-radius: 8px; background: #2a160b; }
+.mk-crate-n { font-weight: 700; color: var(--orange); margin-right: auto; }
+.mk-crates .switch span { color: var(--orange); }

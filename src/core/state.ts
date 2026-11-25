@@ -127,6 +127,10 @@ export interface GameState {
     loaded: number[];
     /** Recycle new common modules at once (switch next to the inventory). */
     autoRecycle: boolean;
+    /** v0.6.4: modules already rolled, waiting in their crate (opened with the roulette). */
+    crates: KModule[];
+    /** Open crates as they come, without the roulette (switch next to the crates). */
+    autoOpen: boolean;
     /** Milestone 5 %: distros publish themselves at a package threshold (0: when the advisor says). */
     cron: { enabled: boolean; threshold: number; rotate: boolean };
   };
@@ -134,7 +138,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -148,7 +152,7 @@ function browserLang(): Lang {
 export function newMarket(): GameState["market"] {
   return {
     unlocked: false, installs: 0, seed: (Math.random() * 2 ** 32) >>> 0, nextUid: 1, modules: [], loaded: [],
-    autoRecycle: false, cron: { enabled: true, threshold: 0, rotate: false },
+    autoRecycle: false, crates: [], autoOpen: false, cron: { enabled: true, threshold: 0, rotate: false },
   };
 }
 
@@ -253,6 +257,7 @@ export function deserialize(json: string): GameState {
     cron: { ...base.market.cron, ...raw.market?.cron },
     modules: Array.isArray(raw.market?.modules) ? raw.market.modules.map((m: KModule) => ({ ...m, effects: m.effects.map(e => ({ ...e })) })) : [],
     loaded: [...(raw.market?.loaded ?? [])],
+    crates: Array.isArray(raw.market?.crates) ? raw.market.crates.map((m: KModule) => ({ ...m, effects: m.effects.map(e => ({ ...e })) })) : [],
   };
   // v0.2.2–0.2.4 first-run objectives became the first tiers of the achievement chains
   if (!raw.achClaimed) {
@@ -347,6 +352,11 @@ function migrate(s: GameState, from: number) {
     // v0.5.16 → v0.6.0: Market (chapter 1). Empty; it opens on its own if the four flavors are done
     s.market = newMarket();
     s.stats.modulesFound = 0;
+  }
+  if (from < 15) {
+    // v0.6.3 → v0.6.4: crates (loot roulette); nothing waiting yet
+    s.market.crates = [];
+    s.market.autoOpen = false;
   }
   if (from < 14) {
     // v0.6.1 → v0.6.2: switch of the Distro talent `mtx` (Test matrix), on by default
