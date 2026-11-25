@@ -53,6 +53,7 @@ export type GameEvent =
   | { t: "pr_merged"; pr: PullRequest; credits?: Decimal }
   | { t: "market_open" }
   | { t: "module"; mod: KModule; recycled?: number }
+  | { t: "crate"; mod: KModule; auto?: boolean }
   | { t: "milestone"; id: string }
   | { t: "installs"; n: number }
 
@@ -104,7 +105,7 @@ function tallyOffline(g: OfflineGains, e: GameEvent) {
     case "achievement": g.achievements.push(e.id); break;
     case "distro": g.distros++; g.packages += e.packages; break;
     case "installs": g.installs += e.n; break;
-    case "module": g.modules++; break;
+    case "crate": g.modules++; break;
     case "milestone": g.milestones.push(e.id); break;
     case "challenge_done": g.challenges++; break;
   }
@@ -827,7 +828,7 @@ export class Engine {
       this.emit({ t: "installs", n });
       const after = marketShare(s).pct;
       for (const m of MILESTONES) if (m.pct > before && m.pct <= after) this.emit({ t: "milestone", id: m.id });
-      this.addModule(rollModule(s));
+      this.dropCrate(rollModule(s), auto);
     }
     if (s.flavor && !s.flavorsDone.includes(s.flavor)) s.flavorsDone.push(s.flavor); // finished a cycle in this flavor
     s.flavor = flavor;
@@ -868,9 +869,7 @@ export class Engine {
     const s = this.s;
     s.market.unlocked = true;
     this.emit({ t: "market_open" });
-    const first = rollModule(s, 1);
-    this.addModule(first);
-    this.loadModule(first.uid);
+    this.dropCrate(rollModule(s, 1), true); // the first module (rare) waits in a crate in the Market tab
   }
 
   /** Flavor of the next distro published by crontab: same one, or the next in order (rotation). */
@@ -880,10 +879,31 @@ export class Engine {
     return FLAVOR_ORDER[(FLAVOR_ORDER.indexOf(cur) + 1) % FLAVOR_ORDER.length];
   }
 
-  /** A new module goes to the inventory (recycled at once if auto-recycle takes it, or if the inventory is full). */
-  private addModule(mod: KModule) {
+  /** v0.6.4 (Arthur: "une roulette de loot, exactement comme sur CS quand on ouvre une caisse"): a new module
+   *  comes in a crate. It is already rolled (the roulette only shows it), and waits until it is opened,
+   *  unless the "open on their own" switch is on. `auto`: distro published by crontab (no roulette pops up). */
+  private dropCrate(mod: KModule, auto = false) {
     const m = this.s.market;
     this.s.stats.modulesFound++;
+    if (m.autoOpen) { this.emit({ t: "crate", mod, auto: true }); this.addModule(mod); return; }
+    m.crates.push(mod);
+    this.emit({ t: "crate", mod, auto });
+  }
+
+  /** Opens the first crate (or the one with this uid): its module goes to the inventory. */
+  openCrate(uid?: number): KModule | null {
+    const m = this.s.market;
+    const i = uid === undefined ? 0 : m.crates.findIndex(c => c.uid === uid);
+    if (i < 0 || i >= m.crates.length) return null;
+    const [mod] = m.crates.splice(i, 1);
+    this.addModule(mod);
+    this.checkAchievements();
+    return mod;
+  }
+
+  /** A module out of its crate goes to the inventory (recycled at once if auto-recycle takes it, or if the inventory is full). */
+  private addModule(mod: KModule) {
+    const m = this.s.market;
     if (m.autoRecycle && mod.rarity === 0) {
       const p = recycleValue(mod);
       this.s.packages += p;

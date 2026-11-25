@@ -502,6 +502,18 @@ export function createCommands(c: GameCtx) {
         if (!reached(s, "fuse")) return void say(INFO, " " + t("mk.fuse.locked"));
         return void say(en.fuseModules(num(a), num(b)) ? t("mk.fused") : t("mk.fuse.no"));
       }
+      if (sub === "open") {
+        // Opening from the terminal: no roulette, the module is shown at once
+        const n = a === "all" ? s.market.crates.length : 1;
+        if (!s.market.crates.length) return void say(t("mk.crate.none"));
+        for (let i = 0; i < n; i++) en.openCrate();
+        return;
+      }
+      if (sub === "autoopen") {
+        s.market.autoOpen = !s.market.autoOpen;
+        if (s.market.autoOpen) while (s.market.crates.length) en.openCrate();
+        return void say(OK, " " + t("mk.crate.auto.state", { s: s.market.autoOpen ? t("perk.enabled") : t("perk.disabled") }));
+      }
       if (sub === "autorecycle") {
         s.market.autoRecycle = !s.market.autoRecycle;
         return void say(OK, " " + t("mk.autorecycle.state", { s: s.market.autoRecycle ? t("perk.enabled") : t("perk.disabled") }));
@@ -509,7 +521,8 @@ export function createCommands(c: GameCtx) {
       if (sub) return void say(t("mk.usage"));
       say(["[MODULES]", "c-bold"], `  ${t("mk.inv", { n: s.market.modules.length, m: MARKET.inventory })}`);
       for (const m of s.market.modules) sayModule(m, s.market.loaded.includes(m.uid));
-      say(["  modprobe <#> · rmmod <#> · modules recycle <#> · modules fuse <#> <#> · modules autorecycle", "c-dim"]);
+      if (s.market.crates.length) say("  " + t("mk.crate.n", { n: s.market.crates.length }));
+      say(["  modprobe <#> · rmmod <#> · modules recycle <#> · modules fuse <#> <#> · modules open [all] · modules autorecycle · modules autoopen", "c-dim"]);
     },
     modprobe(args) {
       const en = e();

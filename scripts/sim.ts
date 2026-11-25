@@ -52,6 +52,8 @@ const marketLog: string[] = [];
 function tendModules() {
   if (!s.market.unlocked) return;
   if (marketAt < 0) marketAt = t;
+  s.market.autoOpen = true; // the sim opens crates at once
+  while (s.market.crates.length) e.openCrate();
   for (;;) {
     const mods = [...s.market.modules].sort((a, b) => moduleScore(b) - moduleScore(a));
     let fused = false;

@@ -2,6 +2,7 @@ import "./style.css";
 import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
 import { initPwa, installMode, promptInstall } from "./ui/pwa";
 import { initWakeLock, setWakeLock, wakeLockEnabled, wakeLockSupported } from "./ui/wakelock";
+import { openRoulette } from "./ui/roulette";
 import Decimal from "break_eternity.js";
 import { Engine, type GameEvent, MATRIX_HANDS, MATRIX_TIMEOUT, type OfflineGains } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
@@ -14,7 +15,7 @@ import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./core/challenges";
 import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { GEN_KEYS, type GameState, type GenKey, HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import {
-  type EffectKey, type KModule, type MilestoneId, EFFECT_KEYS, MARKET, MILESTONES, MILESTONE_BY_ID, RARITIES, canFuse, levelMult, loadedModules,
+  type EffectKey, type KModule, type MilestoneId, EFFECT_KEYS, MARKET, MILESTONES, MILESTONE_BY_ID, MODULE_NAMES, RARITIES, RARITY_CHANCE, canFuse, levelMult, loadedModules,
   marketShare, moduleBonus, moduleScore, moduleSlots, nextMilestone, reached, recycleValue, sliceCost,
 } from "./core/market";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
@@ -38,7 +39,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.3";
+const GAME_VERSION = "0.6.4";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -355,6 +356,14 @@ function buildLayout() {
         </div>
         <h3>${t("mk.milestones")}</h3>
         <div class="mk-miles" data-r="mkMiles"></div>
+        <div class="mk-crates" data-r="mkCrates">
+          <div class="mk-crates-row" data-r="mkCrateRow" hidden>
+            <span class="mk-crate-n" data-r="mkCrateN"></span>
+            <button class="btn small mk-open" data-r="mkOpen">${t("mk.crate.open")}</button>
+            <button class="btn small" data-r="mkOpenAll">${t("mk.crate.openall")}</button>
+          </div>
+          <label class="switch small"><input type="checkbox" data-r="mkAutoOpen"><span>${t("mk.crate.auto")}</span></label>
+        </div>
         <h3 data-r="mkLoadedH"></h3>
         <p class="muted small">${t("mk.loaded.desc")}</p>
         <div class="mk-bonus small" data-r="mkBonus"></div>
@@ -600,6 +609,9 @@ function bindLayout() {
     cmd.run(`crontab ${v === 0 ? "advisor" : v}`, true);
   });
   $("[data-r=mkBest]").addEventListener("click", () => cmd.run("modprobe --best", true));
+  $("[data-r=mkOpen]").addEventListener("click", () => openCrateRoulette());
+  $("[data-r=mkOpenAll]").addEventListener("click", () => cmd.run("modules open all", true));
+  $<HTMLInputElement>("[data-r=mkAutoOpen]").addEventListener("change", () => cmd.run("modules autoopen", true));
   $<HTMLInputElement>("[data-r=mkAutoRec]").addEventListener("change", () => cmd.run("modules autorecycle", true));
   $("[data-a=settings]").addEventListener("click", () => openSettings());
   $<HTMLInputElement>("[data-r=botOn]").addEventListener("change", () => cmd.run("toggle release_bot", true));
@@ -723,6 +735,7 @@ function render() {
   if (sideTab === "fork") renderForkTab();
   if (sideTab === "distro") renderDistroTab();
   if (sideTab === "market") renderMarketTab();
+  { const b = $("[data-r=mkBadge]"); const show = s.market.crates.length > 0; if (b.hidden === show) b.hidden = !show; }
   setText($("[data-r=contrib]"), fmtInt(s.contributors));
   setText($("[data-r=pkg]"), fmtInt(s.packages));
   if (s.market.unlocked) setText($("[data-r=mkPct]"), `${marketShare(s).pct.toFixed(2)} %`);
@@ -1414,8 +1427,62 @@ function moduleCard(s: GameState, m: KModule, loaded: boolean): HTMLElement {
     h("div", { class: "mod-btns" }, ...btns));
 }
 
+/* ---- Crates and loot roulette (v0.6.4) ---- */
+let rouletteOpen = false;
+function randomRarity(): number {
+  let r = Math.random();
+  for (let i = 3; i >= 1; i--) { if (r < RARITY_CHANCE[i]) return i; r -= RARITY_CHANCE[i]; }
+  return 0;
+}
+const rItem = (name: string, rarity: number) => ({ name, rarity, tag: t(`mk.r.${RARITIES[rarity]}`) });
+
+/** Opens the next crate with the CS-style roulette. The module is already rolled: the roulette only shows it. */
+function openCrateRoulette() {
+  const s = engine.s;
+  const mod = s.market.crates[0];
+  if (!mod || rouletteOpen) return;
+  rouletteOpen = true;
+  let closeRl = () => {};
+  closeRl = openRoulette({
+    title: t("mk.crate.title", { n: s.market.crates.length }),
+    winner: rItem(mod.name, mod.rarity),
+    filler: () => rItem(MODULE_NAMES[Math.floor(Math.random() * MODULE_NAMES.length)], randomRarity()),
+    skipLabel: t("mk.crate.skip"),
+    soundLabel: on => t(on ? "mk.crate.sound.on" : "mk.crate.sound.off"),
+    onStop: () => {
+      engine.openCrate(mod.uid);
+      const where = engine.s.market.loaded.includes(mod.uid) ? t("mk.crate.loaded")
+        : engine.s.market.modules.some(m => m.uid === mod.uid) ? t("mk.crate.inv") : t("mk.crate.recycled", { n: recycleValue(mod) });
+      return h("div", { class: `rl-won r${mod.rarity}` },
+        h("div", { class: "rl-won-h" }, `${mod.name} `, h("span", { class: "mod-rar" }, `[${t(`mk.r.${RARITIES[mod.rarity]}`)}]`)),
+        h("div", { class: "mod-fx" }, mod.effects.map(e => effectText(e.k, e.v)).join(" · ")),
+        h("div", { class: "muted small" }, where));
+    },
+    actions: () => {
+      const out: HTMLElement[] = [];
+      const left = engine.s.market.crates.length;
+      if (left > 0) {
+        const next = h("button", { class: "btn mk-open" }, t("mk.crate.next", { n: left }));
+        next.addEventListener("click", () => { closeRl(); openCrateRoulette(); });
+        out.push(next);
+      }
+      const done = h("button", { class: "btn" }, t("close"));
+      done.addEventListener("click", () => closeRl());
+      out.push(done);
+      return out;
+    },
+    onClose: () => { rouletteOpen = false; marketTabKey = ""; },
+  });
+}
+
 function renderMarketTab() {
   const s = engine.s;
+  const nCrates = s.market.crates.length;
+  const row = $("[data-r=mkCrateRow]");
+  if (row.hidden === nCrates > 0) row.hidden = nCrates === 0;
+  setText($("[data-r=mkCrateN]"), t("mk.crate.n", { n: nCrates }));
+  const ao = $<HTMLInputElement>("[data-r=mkAutoOpen]");
+  if (ao.checked !== s.market.autoOpen) ao.checked = s.market.autoOpen;
   const sh = marketShare(s);
   setText($("[data-r=mkBig]"), `${sh.pct.toFixed(2)} %`);
   $("[data-r=mkFill]").style.width = `${sh.pct}%`;
@@ -1872,7 +1939,7 @@ const OFFLINE_LINES: ((g: OfflineGains) => string | null)[] = [
   g => g.prs > 0 ? t("off.prs", { n: fmtInt(g.prs) }) : null,
   g => g.distros > 0 ? t("off.distros", { n: fmtInt(g.distros), p: fmtInt(g.packages) }) : null,
   g => g.installs > 0 ? t("off.installs", { n: fmtInt(Math.round(g.installs)), p: marketShare(engine.s).pct.toFixed(2) }) : null,
-  g => g.modules > 0 ? t("off.modules", { n: fmtInt(g.modules) }) : null,
+  g => g.modules > 0 ? t(engine.s.market.crates.length ? "off.crates" : "off.modules", { n: fmtInt(g.modules), c: fmtInt(engine.s.market.crates.length) }) : null,
   g => g.challenges > 0 ? t("off.challenges", { n: fmtInt(g.challenges) }) : null,
   g => g.milestones.length > 0 ? t("off.milestones", { m: g.milestones.map(id => `${MILESTONE_BY_ID[id as MilestoneId].pct} % ${t(`mk.m.${id}`)}`).join(", ") }) : null,
 ];
@@ -2050,13 +2117,20 @@ engine.on((e: GameEvent) => {
       toast(`◕ ${MILESTONE_BY_ID[e.id as MilestoneId].pct} %`, t(`mk.m.${e.id}`));
       marketTabKey = "";
       break;
+    case "crate":
+      if (engine.s.market.autoOpen) break; // the "module" line follows at once
+      term.println(["[ MOD ]", "c-orange"], " " + t("mk.crate.log", { n: engine.s.market.crates.length }));
+      // A distro published by hand: the roulette pops up right away (crontab ones wait in the Market tab)
+      if (!e.auto && document.visibilityState === "visible") setTimeout(() => openCrateRoulette(), 700);
+      marketTabKey = "";
+      break;
     case "module": {
       const r = t(`mk.r.${RARITIES[e.mod.rarity]}`);
       const fx = e.mod.effects.map(x => effectText(x.k, x.v)).join(" · ");
       term.println(["[ MOD ]", "c-orange"], " " + (e.recycled
         ? t("mk.mod.recycled", { n: e.mod.name, r, p: e.recycled })
         : t("mk.mod.log", { n: e.mod.name, r, fx })));
-      if (!e.recycled && e.mod.rarity >= 2) toast(`◕ ${e.mod.name} [${r}]`, fx);
+      if (!e.recycled && e.mod.rarity >= 2 && !rouletteOpen) toast(`◕ ${e.mod.name} [${r}]`, fx);
       marketTabKey = "";
       break;
     }
