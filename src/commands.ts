@@ -16,6 +16,9 @@ import { UPGRADES, UPGRADE_BY_ID, level, offlineCapHours, upgradeMaxed, upgradeP
 import { GEN_KEYS, type GenKey, type HwKey, HW_KEYS, PERK_KEYS, type PerkKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import {
+  type KModule, MARKET, MILESTONES, RARITIES, levelMult, loadedModules, marketShare, moduleSlots, nextMilestone, reached,
+} from "./core/market";
+import {
   DISTRO_TALENTS, FLAVORS, type FlavorId, distroRevealed, distroTalentVisibility, forkTreeComplete, hasDistro, nextPackageAt, packagesOnDistro,
 } from "./core/distro";
 import { fmt, fmtInt, fmtTime, setNotation } from "./format";
@@ -140,6 +143,8 @@ export function achVisible(e: Engine, a: Achievement): boolean {
   if (a.reveal === "stars") return starsRevealed(e.s);
   if (a.reveal === "challenges") return e.challengesUnlocked;
   if (a.reveal === "fork") return forkRevealed(e.s);
+  if (a.reveal === "distro") return distroRevealed(e.s);
+  if (a.reveal === "market") return e.s.market.unlocked;
   return true;
 }
 
@@ -211,6 +216,12 @@ export function createCommands(c: GameCtx) {
   const e = () => c.engine;
   const term = c.term;
   const say = (...segs: Seg[]) => term.println(...segs);
+  const RAR_COLOR = ["c-dim", "c-blue", "c-violet", "c-amber"];
+  function sayModule(m: KModule, loaded = true) {
+    const fx = m.effects.map(x => t(`mk.fx.${x.k}`, { v: x.k === "offline" ? `+${Math.round(x.v * levelMult(m) * 100)}` : `+${(x.v * levelMult(m) * 100).toFixed(1)} %` })).join(" · ");
+    say("  ", [pad(`#${m.uid}`, 5), loaded ? "c-orange" : "c-dim"], pad(m.name, 14), [pad(`[${t(`mk.r.${RARITIES[m.rarity]}`)}]`, 13), RAR_COLOR[m.rarity]],
+      pad(m.level > 1 ? `L${m.level}` : "", 4), [fx, "c-dim"]);
+  }
 
   const commands: Record<string, (args: string[]) => void> = {
     help() {
@@ -223,6 +234,8 @@ export function createCommands(c: GameCtx) {
         ["talent", t("help.talent")], ["optimize", t("help.optimize")], ["gen", t("help.gen")], ...(forkRevealed(e().s) ? [["fork", t("help.fork")] as [string, string]] : []),
         ...(distroRevealed(e().s) ? [["distro", t("help.distro")] as [string, string]] : []),
         ...(hasDistro(e().s, "d_forkbot") ? [["forkbot", t("help.forkbot")] as [string, string]] : []),
+        ...(e().s.market.unlocked ? [["market", t("help.market")], ["lsmod", t("help.lsmod")], ["modules", t("help.modules")], ["modprobe", t("help.modprobe")], ["rmmod", t("help.rmmod")]] as [string, string][] : []),
+        ...(reached(e().s, "crontab") ? [["crontab", t("help.crontab")] as [string, string]] : []),
     ...(e().s.forks > 0 ? [["gh pr", t("help.gh")] as [string, string]] : []), ...(on(e().s, "as_jobs") ? [["autoscale", t("help.autoscale")] as [string, string]] : []), ["events", t("help.events")], ["challenge", t("help.challenge")], ["achievements", t("help.achievements")], ["stats", t("help.stats")],
         ["save", t("help.save")], ["export", t("help.export")], ["lang", t("help.lang")],
         ["guide", t("help.guide")], ["clear", t("help.clear")], ["exit", t("help.exit")],
@@ -455,6 +468,73 @@ export function createCommands(c: GameCtx) {
       say("  " + (n >= 1 ? t("ds.status", { n: fmtInt(n) }) : t("ds.need_contrib", { c: fmtInt(nextPackageAt(s)) })));
       for (const f of FLAVORS) say("  ", [pad(f.id, 9), "c-violet"], pad(`[${f.tag}]`, 10), [t(`fl.${f.id}.desc`), "c-dim"], s.flavorsDone.includes(f.id) ? [" ✓", "c-green"] : "");
       if (n >= 1) say(["  distro <rolling|stable|source|desktop> --yes", "c-green"]);
+    },
+    market() {
+      const s = e().s;
+      const sh = marketShare(s);
+      say(["[MARKET]", "c-bold"], `  ${t("mk.title")}: `, [`${sh.pct.toFixed(2)} %`, "c-orange"]);
+      say("  " + (sh.slice >= 10 ? t("mk.full100")
+        : t("mk.slice", { i: sh.slice + 1, a: fmtInt(Math.floor(sh.inSlice)), b: fmtInt(Math.ceil(sh.sliceCost)), n: fmtInt(Math.floor(s.market.installs)) })));
+      const next = nextMilestone(s);
+      for (const m of MILESTONES) {
+        if (reached(s, m.id)) say("  ", ["[✓]", "c-green"], ` ${pad(`${m.pct} %`, 6)}`, [t(`mk.m.${m.id}`), "c-orange"]);
+        else if (m === next) say("  ", "[ ]", ` ${pad(`${m.pct} %`, 6)}`, t(`mk.m.${m.id}`), [` · ${t(`mk.m.${m.id}.desc`)}`, "c-dim"]);
+      }
+      say(["  lsmod · modules · modprobe <#> · rmmod <#>", "c-dim"]);
+    },
+    lsmod() {
+      const s = e().s;
+      const mods = loadedModules(s);
+      say(["[LSMOD]", "c-bold"], `  ${t("mk.loaded", { n: mods.length, m: moduleSlots(s) })}`);
+      if (!mods.length) say("  " + t("mk.none"));
+      for (const m of mods) sayModule(m);
+    },
+    modules(args) {
+      const en = e();
+      const s = en.s;
+      const [sub, a, b] = args;
+      const num = (x?: string) => Number((x ?? "").replace("#", ""));
+      if (sub === "recycle") {
+        const p = en.recycleModule(num(a));
+        return void say(p === null ? t("mk.usage") : t("mk.recycled", { p }));
+      }
+      if (sub === "fuse") {
+        if (!reached(s, "fuse")) return void say(INFO, " " + t("mk.fuse.locked"));
+        return void say(en.fuseModules(num(a), num(b)) ? t("mk.fused") : t("mk.fuse.no"));
+      }
+      if (sub === "autorecycle") {
+        s.market.autoRecycle = !s.market.autoRecycle;
+        return void say(OK, " " + t("mk.autorecycle.state", { s: s.market.autoRecycle ? t("perk.enabled") : t("perk.disabled") }));
+      }
+      if (sub) return void say(t("mk.usage"));
+      say(["[MODULES]", "c-bold"], `  ${t("mk.inv", { n: s.market.modules.length, m: MARKET.inventory })}`);
+      for (const m of s.market.modules) sayModule(m, s.market.loaded.includes(m.uid));
+      say(["  modprobe <#> · rmmod <#> · modules recycle <#> · modules fuse <#> <#> · modules autorecycle", "c-dim"]);
+    },
+    modprobe(args) {
+      const en = e();
+      if (args[0] === "--best") { en.loadBestModules(); return void say(OK, " " + t("mk.best.done")); }
+      const uid = Number((args[0] ?? "").replace("#", ""));
+      if (!en.s.market.modules.some(m => m.uid === uid)) return void say(t("mk.usage"));
+      say(en.loadModule(uid) ? t("mk.loaded.ok") : t("mk.full"));
+    },
+    rmmod(args) {
+      const uid = Number((args[0] ?? "").replace("#", ""));
+      say(e().unloadModule(uid) ? t("mk.unloaded") : t("mk.usage"));
+    },
+    crontab(args) {
+      const c = e().s.market.cron;
+      const a = (args[0] ?? "").toLowerCase();
+      if (a === "on" || a === "off") c.enabled = a === "on";
+      else if (a === "advisor") c.threshold = 0;
+      else if (a === "rotate" || a === "same") c.rotate = a === "rotate";
+      else if (/^\d+$/.test(a)) c.threshold = Number(a);
+      else if (a) return void say(t("mk.cron.usage"));
+      say(OK, " " + t("mk.cron.state", {
+        s: c.enabled ? t("perk.enabled") : t("perk.disabled"),
+        w: c.threshold > 0 ? t("mk.cron.at", { n: fmtInt(c.threshold) }) : t("mk.cron.adv"),
+        r: c.rotate ? t("mk.cron.rot") : t("mk.cron.same"),
+      }));
     },
     forkbot(args) {
       const s = e().s;
@@ -729,6 +809,8 @@ export function createCommands(c: GameCtx) {
     if (name === "gh") return en.s.forks > 0;
     if (name === "distro") return distroRevealed(en.s);
     if (name === "forkbot") return hasDistro(en.s, "d_forkbot");
+    if (["market", "lsmod", "modules", "modprobe", "rmmod"].includes(name)) return en.s.market.unlocked;
+    if (name === "crontab") return reached(en.s, "crontab");
     if (name === "autoscale") return on(en.s, "as_jobs");
     if (name === "challenge") return en.challengesUnlocked;
     return true;

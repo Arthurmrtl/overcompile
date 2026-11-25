@@ -18,7 +18,11 @@ import { UPGRADES, UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } fr
 import {
   DISTRO_TALENT_BY_ID, type FlavorId, FLAVOR_BY_ID, canDistro, flavorOf, forkTalentsKept, hasDistro, packagesOnDistro,
 } from "./distro";
-import { ForkAdvisor } from "./advisor";
+import { DistroAdvisor, ForkAdvisor } from "./advisor";
+import {
+  type KModule, FLAVOR_ORDER, canFuse, installsFor, loadedModules, marketOpen, marketReady, marketShare, MILESTONES, moduleScore,
+  moduleSlots, reached, recycleValue, rollModule, MARKET,
+} from "./market";
 import {
   type BuyAmount, type GameState, type GenKey, type HwKey, type PerkKey, SAVE_KEY, GEN_KEYS, deserialize, newState, serialize,
 } from "./state";
@@ -41,12 +45,16 @@ export type GameEvent =
   | { t: "event_missed"; id: string }
   | { t: "buff_end"; id: string }
   | { t: "fork"; contributors: number; auto?: boolean }
-  | { t: "distro"; packages: number; flavor: FlavorId }
+  | { t: "distro"; packages: number; flavor: FlavorId; auto?: boolean }
   | { t: "distro_talent"; id: string }
   | { t: "fork_talent"; id: string }
   | { t: "fork_upgrade"; id: string; level: number }
   | { t: "pr_open"; pr: PullRequest }
   | { t: "pr_merged"; pr: PullRequest; credits?: Decimal }
+  | { t: "market_open" }
+  | { t: "module"; mod: KModule; recycled?: number }
+  | { t: "milestone"; id: string }
+  | { t: "installs"; n: number }
 
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" | "contributors" | "packages" };
@@ -64,11 +72,16 @@ export interface OfflineGains {
   contributors: number;
   forkBuys: number;        // Fork talents and upgrade levels bought by the Distro auto-buy
   prs: number;             // pull requests merged
+  distros: number;         // published by crontab (v0.6)
+  packages: number;
+  installs: number;
+  modules: number;         // kernel modules compiled
+  milestones: string[];
   achievements: string[];
 }
 export const newOfflineGains = (): OfflineGains => ({
   credits: new Decimal(0), hardware: 0, generations: 0, releases: 0, stars: new Decimal(0), talents: 0, optimizations: 0,
-  forks: 0, contributors: 0, forkBuys: 0, prs: 0, achievements: [],
+  forks: 0, contributors: 0, forkBuys: 0, prs: 0, distros: 0, packages: 0, installs: 0, modules: 0, milestones: [], achievements: [],
 });
 function tallyOffline(g: OfflineGains, e: GameEvent) {
   switch (e.t) {
@@ -81,6 +94,10 @@ function tallyOffline(g: OfflineGains, e: GameEvent) {
     case "fork": g.forks++; g.contributors += e.contributors; break;
     case "fork_talent": case "fork_upgrade": g.forkBuys++; break;
     case "achievement": g.achievements.push(e.id); break;
+    case "distro": g.distros++; g.packages += e.packages; break;
+    case "installs": g.installs += e.n; break;
+    case "module": g.modules++; break;
+    case "milestone": g.milestones.push(e.id); break;
   }
 }
 
@@ -216,11 +233,22 @@ export class Engine {
       if (ready) this.fork(true);
     }
 
+    // Market (v0.6): opens once the four flavors are done (also for saves that already had them)
+    if (!s.market.unlocked && marketReady(s)) this.openMarket();
+    // Milestone 5 % "crontab": distros publish themselves, at a package threshold or when the advisor says
+    if (reached(s, "crontab") && s.market.cron.enabled && !s.challenge) {
+      const advice = this.distroAdvisor.update(s);
+      const c = s.market.cron;
+      const ready = c.threshold > 0 ? advice.pending >= c.threshold : advice.advised;
+      if (ready) this.distro(this.cronFlavor(), true);
+    }
+
     this.checkAchievements();
   }
 
   /** Same advisor the UI shows, owned by the engine for the Fork bot. */
   private forkAdvisor = new ForkAdvisor();
+  private distroAdvisor = new DistroAdvisor();
 
   /** Unlocked achievements whose reward is waiting to be claimed. */
   pendingAchievements() {
@@ -725,13 +753,24 @@ export class Engine {
 
   /* ---------------- Distro (v0.5, prestige layer 3) ---------------- */
   /** Publishes a distro: everything the Fork layer holds resets, packages are paid, the next cycle runs on `flavor`. */
-  distro(flavor: FlavorId): number | null {
+  distro(flavor: FlavorId, auto = false): number | null {
     const s = this.s;
     if (!canDistro(s) || !FLAVOR_BY_ID[flavor]) return null;
     const gain = packagesOnDistro(s).toNumber();
     s.packages += gain;
     s.lifetimePackages += gain;
     s.distros++;
+    // Market (v0.6): the distro adds installs (with this cycle's modules) and compiles a module
+    const marketWasOpen = s.market.unlocked;
+    if (marketWasOpen) {
+      const before = marketShare(s).pct;
+      const n = installsFor(s, gain);
+      s.market.installs += n;
+      this.emit({ t: "installs", n });
+      const after = marketShare(s).pct;
+      for (const m of MILESTONES) if (m.pct > before && m.pct <= after) this.emit({ t: "milestone", id: m.id });
+      this.addModule(rollModule(s));
+    }
     if (s.flavor && !s.flavorsDone.includes(s.flavor)) s.flavorsDone.push(s.flavor); // finished a cycle in this flavor
     s.flavor = flavor;
     if (s.stats.fastestDistro === null || s.stats.distroTime < s.stats.fastestDistro) s.stats.fastestDistro = s.stats.distroTime;
@@ -759,10 +798,98 @@ export class Engine {
     s.prBoost = { speed: 1, gains: 1, stars: 1 };
     this.activeEvent = null;
     this.resetRun();
-    this.emit({ t: "distro", packages: gain, flavor });
+    this.emit({ t: "distro", packages: gain, flavor, auto });
+    if (!marketWasOpen && marketReady(s)) this.openMarket();
     this.checkAchievements();
     return gain;
   }
+
+  /* ---------------- Market (v0.6, chapter 1) ---------------- */
+  /** Opens the Market: the gauge starts at 0 % and the first module is given (a rare one). */
+  private openMarket() {
+    const s = this.s;
+    s.market.unlocked = true;
+    this.emit({ t: "market_open" });
+    const first = rollModule(s, 1);
+    this.addModule(first);
+    this.loadModule(first.uid);
+  }
+
+  /** Flavor of the next distro published by crontab: same one, or the next in order (rotation). */
+  private cronFlavor(): FlavorId {
+    const cur = this.s.flavor ?? "stable";
+    if (!this.s.market.cron.rotate) return cur;
+    return FLAVOR_ORDER[(FLAVOR_ORDER.indexOf(cur) + 1) % FLAVOR_ORDER.length];
+  }
+
+  /** A new module goes to the inventory (recycled at once if auto-recycle takes it, or if the inventory is full). */
+  private addModule(mod: KModule) {
+    const m = this.s.market;
+    this.s.stats.modulesFound++;
+    if (m.autoRecycle && mod.rarity === 0) {
+      const p = recycleValue(mod);
+      this.s.packages += p;
+      this.emit({ t: "module", mod, recycled: p });
+      return;
+    }
+    m.modules.push(mod);
+    this.emit({ t: "module", mod });
+    if (m.modules.length > MARKET.inventory) {
+      // Full: the worst unloaded module goes back as packages
+      const worst = m.modules.filter(x => !m.loaded.includes(x.uid)).sort((a, b) => moduleScore(a) - moduleScore(b))[0];
+      if (worst) this.recycleModule(worst.uid);
+    }
+    // A free slot takes the new module
+    if (m.loaded.length < moduleSlots(this.s)) this.loadModule(mod.uid);
+  }
+
+  loadModule(uid: number): boolean {
+    const m = this.s.market;
+    if (m.loaded.includes(uid) || !m.modules.some(x => x.uid === uid) || m.loaded.length >= moduleSlots(this.s)) return false;
+    m.loaded.push(uid);
+    return true;
+  }
+
+  unloadModule(uid: number): boolean {
+    const m = this.s.market;
+    if (!m.loaded.includes(uid)) return false;
+    m.loaded = m.loaded.filter(x => x !== uid);
+    return true;
+  }
+
+  /** Recycles a module for packages. Returns the packages, or null. */
+  recycleModule(uid: number): number | null {
+    const m = this.s.market;
+    const mod = m.modules.find(x => x.uid === uid);
+    if (!mod) return null;
+    m.modules = m.modules.filter(x => x.uid !== uid);
+    m.loaded = m.loaded.filter(x => x !== uid);
+    const p = recycleValue(mod);
+    this.s.packages += p;
+    return p;
+  }
+
+  /** Milestone 20 %: absorbs `from` into `into` (same first effect): +1 level. */
+  fuseModules(into: number, from: number): boolean {
+    const m = this.s.market;
+    const a = m.modules.find(x => x.uid === into), b = m.modules.find(x => x.uid === from);
+    if (!a || !b || !canFuse(this.s, a, b)) return false;
+    a.level++;
+    m.modules = m.modules.filter(x => x.uid !== from);
+    m.loaded = m.loaded.filter(x => x !== from);
+    this.checkAchievements();
+    return true;
+  }
+
+  /** Loads the best modules in the slots (used by `modprobe --best` and the sim). */
+  loadBestModules() {
+    const m = this.s.market;
+    m.loaded = [...m.modules].sort((a, b) => moduleScore(b) - moduleScore(a)).slice(0, moduleSlots(this.s)).map(x => x.uid);
+  }
+
+  /** Loaded modules (in slot order). */
+  get loaded() { return loadedModules(this.s); }
+  get marketOpen() { return marketOpen(this.s); }
 
   canBuyDistroTalent(id: string): BuyResult {
     const t = DISTRO_TALENT_BY_ID[id];

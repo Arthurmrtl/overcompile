@@ -185,7 +185,7 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .term-row { display: flex; white-space: pre; }
 .term-input { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; border-radius: 0; outline: none; caret-color: var(--green); }
 .c-green { color: var(--green); } .c-red { color: var(--red); } .c-blue { color: var(--blue); }
-.c-amber { color: var(--amber); } .c-violet { color: var(--violet); } .c-dim { color: var(--dim); }
+.c-amber { color: var(--amber); } .c-violet { color: var(--violet); } .c-dim { color: var(--dim); } .c-cyan { color: var(--cyan); } .c-orange { color: var(--orange); }
 .c-bold { font-weight: 700; }
 .sel { user-select: all; word-break: break-all; }
 .ascii { display: inline-block; white-space: pre; font-size: min(13px, 2.9vw); line-height: 1.2; }
@@ -320,7 +320,7 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
   .actions { flex: none; }
   .top .hud-cur { order: 3; flex: 1 0 100%; justify-content: center; gap: 22px; }
   .top .hud-cur:not(:has(> :not([hidden]))) { display: none; }
-  .top .hud-stars, .top .hud-contrib, .top .hud-pkg { font-size: 15px; gap: 4px; white-space: nowrap; }
+  .top .hud-stars, .top .hud-contrib, .top .hud-pkg, .top .hud-mk { font-size: 15px; gap: 4px; white-space: nowrap; }
   .layout { grid-template-columns: minmax(0, 1fr); padding: 8px 8px calc(68px + env(safe-area-inset-bottom)); }
   .layout .col, .layout .col-handle { display: none; }
   .layout[data-mobile=shop] .col-shop,
@@ -606,3 +606,39 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
   .logo { font-size: 15px; }
   .top { column-gap: 8px; }
 }
+
+/* ---------- Market (v0.6, chapter 1): orange ---------- */
+:root { --orange: #fb923c; }
+.hud-mk { display: flex; align-items: center; gap: 6px; font-size: 22px; font-weight: 700; color: var(--orange); white-space: nowrap; }
+.hud-mk[hidden] { display: none; }
+.mk-glyph { color: var(--orange); }
+.tabs button[data-tab=market].on, .tabs button[data-tab=market][aria-selected=true] { color: var(--orange); }
+.mk-card { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--orange); border-radius: 8px; background: var(--panel-2); }
+.mk-title { font-weight: 700; margin-bottom: 4px; }
+.mk-pct { font-size: 28px; font-weight: 700; color: var(--orange); margin: 6px 0 4px; }
+.mk-bar { position: relative; height: 10px; border-radius: 5px; background: var(--border); overflow: hidden; margin-bottom: 6px; }
+.mk-fill { height: 100%; background: var(--orange); width: 0; transition: width .4s; }
+.mk-ticks i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--panel); opacity: .9; }
+.mk-ticks i.on { background: #7c2d12; }
+.mk-next { color: var(--orange); margin-top: 2px; }
+.mk-miles { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.mk-mile { display: flex; gap: 8px; align-items: baseline; }
+.mk-mile.on .mk-mile-tag { color: var(--orange); }
+.mk-mile-tag { flex: 0 0 64px; white-space: nowrap; color: var(--dim); }
+.mk-bonus { color: var(--orange); margin-bottom: 6px; }
+.mk-tools .switch span { color: var(--orange); }
+.mk-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+.bot.cron { border-color: var(--orange); }
+.bot.cron .switch span { color: var(--orange); }
+.fu.mod { display: flex; flex-direction: column; gap: 4px; }
+.fu.mod.on { border-color: var(--orange); }
+.mod-tags { font-size: 11px; white-space: nowrap; }
+.mod-fx { color: var(--fg); }
+.mod-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.mod-btns .btn { padding: 2px 8px; font-size: 11px; }
+.mod.r0 .mod-rar { color: var(--dim); }
+.mod.r1 .mod-rar { color: var(--blue); }
+.mod.r2 .mod-rar { color: var(--violet); }
+.mod.r3 .mod-rar { color: var(--amber); }
+.mod.r3 { border-color: var(--amber); }
+.mod-lvl { color: var(--orange); font-weight: 700; }

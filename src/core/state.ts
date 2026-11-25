@@ -1,6 +1,7 @@
 import Decimal from "break_eternity.js";
 import type { FlavorId } from "./distro";
 import type { PullRequest } from "./fork";
+import type { KModule } from "./market";
 
 export type HwKey = "cpu" | "ram" | "disk" | "jobs";
 export const HW_KEYS: HwKey[] = ["cpu", "ram", "disk", "jobs"];
@@ -79,6 +80,7 @@ export interface GameState {
     distroTime: number;        // time since the last distro (or since the start)
     fastestDistro: number | null;
     allContributors: number;   // contributors earned over every distro (stats only)
+    modulesFound: number;      // kernel modules ever compiled (v0.6, never reset)
   };
   settings: { lang: Lang; notation: Notation; logLevel: "full" | "reduced" | "minimal"; buyAmount: BuyAmount };
   /* ---------- Fork (v0.4, prestige layer 2) ---------- */
@@ -110,11 +112,27 @@ export interface GameState {
   autoStars: boolean;
   /** Distro talent `abuy` (Maintainers): switch for the contributors' automatic purchases (v0.5.11). */
   autoContrib: boolean;
+  /* ---------- Market (v0.6, chapter 1) — never reset ---------- */
+  market: {
+    unlocked: boolean;
+    /** Installs ever earned: they only fill the market share gauge. */
+    installs: number;
+    /** Seed of the module rolls (kept in the save so a reload cannot re-roll). */
+    seed: number;
+    nextUid: number;
+    modules: KModule[];
+    /** Uids of the loaded modules (as many as the slots). */
+    loaded: number[];
+    /** Recycle new common modules at once (switch next to the inventory). */
+    autoRecycle: boolean;
+    /** Milestone 5 %: distros publish themselves at a package threshold (0: when the advisor says). */
+    cron: { enabled: boolean; threshold: number; rotate: boolean };
+  };
   lastSeen: number;
   createdAt: number;
 }
 
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -123,6 +141,13 @@ function browserLang(): Lang {
   } catch {
     return "en";
   }
+}
+
+export function newMarket(): GameState["market"] {
+  return {
+    unlocked: false, installs: 0, seed: (Math.random() * 2 ** 32) >>> 0, nextUid: 1, modules: [], loaded: [],
+    autoRecycle: false, cron: { enabled: true, threshold: 0, rotate: false },
+  };
 }
 
 export function newState(): GameState {
@@ -153,7 +178,7 @@ export function newState(): GameState {
     seen: [],
     achClaimed: [],
     achievements: [],
-    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0, forkTime: 0, fastestFork: null, prsMerged: 0, allStars: 0, gensTotal: 0, bestRunGens: 0, distroTime: 0, fastestDistro: null, allContributors: 0 },
+    stats: { builds: 0, fails: 0, interrupts: 0, playTime: 0, runTime: 0, streak: 0, bestStreak: 0, fastestRelease: null, events: 0, forkTime: 0, fastestFork: null, prsMerged: 0, allStars: 0, gensTotal: 0, bestRunGens: 0, distroTime: 0, fastestDistro: null, allContributors: 0, modulesFound: 0 },
     settings: { lang: browserLang(), notation: "standard", logLevel: "reduced", buyAmount: 1 },
     forks: 0,
     contributors: 0,
@@ -173,6 +198,7 @@ export function newState(): GameState {
     autoFork: { enabled: true, threshold: 0 },
     autoStars: true,
     autoContrib: true,
+    market: newMarket(),
     lastSeen: now,
     createdAt: now,
   };
@@ -219,6 +245,12 @@ export function deserialize(json: string): GameState {
   s.prBoost = { ...base.prBoost, ...raw.prBoost };
   s.distroTalents = [...(raw.distroTalents ?? [])];
   s.flavorsDone = [...(raw.flavorsDone ?? [])];
+  s.market = {
+    ...base.market, ...raw.market,
+    cron: { ...base.market.cron, ...raw.market?.cron },
+    modules: Array.isArray(raw.market?.modules) ? raw.market.modules.map((m: KModule) => ({ ...m, effects: m.effects.map(e => ({ ...e })) })) : [],
+    loaded: [...(raw.market?.loaded ?? [])],
+  };
   // v0.2.2–0.2.4 first-run objectives became the first tiers of the achievement chains
   if (!raw.achClaimed) {
     const map: Record<string, string> = {
@@ -307,6 +339,11 @@ function migrate(s: GameState, from: number) {
   if (from < 12) {
     // v0.5.10 → v0.5.11: switch of the Distro talent `abuy`, on by default (it always ran before)
     s.autoContrib = true;
+  }
+  if (from < 13) {
+    // v0.5.16 → v0.6.0: Market (chapter 1). Empty; it opens on its own if the four flavors are done
+    s.market = newMarket();
+    s.stats.modulesFound = 0;
   }
   s.version = SAVE_VERSION;
 }

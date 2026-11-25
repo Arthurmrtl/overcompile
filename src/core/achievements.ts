@@ -2,6 +2,7 @@ import Decimal from "break_eternity.js";
 import type { GameState } from "./state";
 import { CHALLENGES } from "./challenges";
 import { TALENTS } from "./talents";
+import { marketShare } from "./market";
 
 // Achievements double as the game's objectives: chains of tiers, never reset.
 // Each one pays a reward the player claims whenever they want:
@@ -12,7 +13,10 @@ export type BonusStat = "gains" | "speed" | "fail" | "stars";
 export type Reward = { credits: number } | { stat: BonusStat; pct: number };
 
 export type Metric = "builds" | "fails" | "earned" | "perk_ci" | "perk_as" | "cpu" | "ram" | "disk" | "jobs"
-  | "streak" | "releases" | "stars" | "tree" | "opt" | "challenges" | "gens" | "events" | "forks" | "contributors" | "prs";
+  | "streak" | "releases" | "stars" | "tree" | "opt" | "challenges" | "gens" | "events" | "forks" | "contributors" | "prs"
+  | "distros" | "flavors" | "market" | "modules";
+
+export type Reveal = "stars" | "challenges" | "fork" | "distro" | "market";
 
 export interface Achievement {
   id: string;
@@ -23,7 +27,7 @@ export interface Achievement {
   chain: string;
   reward: Reward;
   /** Hidden (shown as ???) until the feature is discovered. */
-  reveal?: "stars" | "challenges" | "fork";
+  reveal?: Reveal;
   secret?: boolean;
   check: (s: GameState) => boolean;
 }
@@ -48,6 +52,10 @@ export function metricValue(s: GameState, m: Metric): Decimal {
     case "contributors": return new Decimal(s.lifetimeContributors ?? 0);
     case "prs": return new Decimal(s.stats.prsMerged ?? 0);
     case "gens": return new Decimal(s.stats.gensTotal ?? 0);
+    case "distros": return new Decimal(s.distros);
+    case "flavors": return new Decimal(s.flavorsDone.length);
+    case "market": return new Decimal(s.market.unlocked ? marketShare(s).pct : 0);
+    case "modules": return new Decimal(s.stats.modulesFound ?? 0);
   }
 }
 export const PER_RUN_METRICS: Metric[] = ["cpu", "ram", "disk", "jobs"];
@@ -62,7 +70,7 @@ export function achProgress(s: GameState, a: Achievement): number {
 }
 
 /** Builds a tier: reaching `target` on `metric`. */
-function tier(id: string, chain: string, metric: Metric, target: number, reward: Reward, reveal?: "stars" | "challenges" | "fork"): Achievement {
+function tier(id: string, chain: string, metric: Metric, target: number, reward: Reward, reveal?: Reveal): Achievement {
   return { id, chain, metric, target, reward, reveal, check: s => metricValue(s, metric).gte(target) };
 }
 const cr = (credits: number): Reward => ({ credits });
@@ -137,6 +145,18 @@ export const ACHIEVEMENTS: Achievement[] = [
   tier("contrib_100", "contributors", "contributors", 100, stars(3), "fork"),
   tier("prs_10", "prs", "prs", 10, gains(2), "fork"),
   tier("prs_100", "prs", "prs", 100, speed(3), "fork"),
+  // Distro (v0.6)
+  tier("distro_1", "distros", "distros", 1, gains(5), "distro"),
+  tier("distro_10", "distros", "distros", 10, stars(5), "distro"),
+  tier("distro_50", "distros", "distros", 50, gains(5), "distro"),
+  tier("flavors_4", "flavors", "flavors", 4, stars(5), "distro"),
+  // Market, chapter 1 (v0.6)
+  tier("market_10", "market", "market", 10, gains(3), "market"),
+  tier("market_50", "market", "market", 50, stars(5), "market"),
+  tier("market_100", "market", "market", 100, gains(10), "market"),
+  tier("modules_10", "modules", "modules", 10, gains(3), "market"),
+  tier("modules_100", "modules", "modules", 100, stars(3), "market"),
+  { id: "legendary", chain: "legendary", reward: stars(3), reveal: "market", check: s => s.market.modules.some(m => m.rarity === 3) },
   // Build events
   tier("events_10", "events", "events", 10, gains(2)),
   tier("events_100", "events", "events", 100, gains(3)),
