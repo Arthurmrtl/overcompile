@@ -3,7 +3,7 @@ import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
 import { initPwa, installMode, promptInstall } from "./ui/pwa";
 import { initWakeLock, setWakeLock, wakeLockEnabled, wakeLockSupported } from "./ui/wakelock";
 import Decimal from "break_eternity.js";
-import { Engine, type GameEvent, MATRIX_TIMEOUT, type OfflineGains } from "./core/engine";
+import { Engine, type GameEvent, MATRIX_HANDS, MATRIX_TIMEOUT, type OfflineGains } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
 import {
   HW, JOBS_PRIO_STEPS, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
@@ -38,7 +38,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.2";
+const GAME_VERSION = "0.6.3";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -283,6 +283,7 @@ function buildLayout() {
       <div class="card tab-body" data-body="challenges">
         <p class="muted small">${t("ch.desc")}</p>
         <label class="switch small" data-r="mtxAuto" hidden><input type="checkbox"><span>${t("ch.mtx")}</span></label>
+        <div class="small mtx-state" data-r="mtxState" hidden></div>
         <div class="ch-list" data-r="chList"></div>
       </div>
       <div class="card tab-body" data-body="fork">
@@ -1044,6 +1045,21 @@ function renderChallenges() {
   const showMtx = hasDistro(s, "d_matrix");
   if (mtx.hidden === showMtx) mtx.hidden = !showMtx;
   if (showMtx) { const box = $<HTMLInputElement>("input", mtx); if (box.checked !== s.autoChal) box.checked = s.autoChal; }
+  // What the matrix is doing (v0.6.3): done count, current or next challenge, given up, manual ones
+  const st = $("[data-r=mtxState]");
+  const showSt = showMtx && engine.challengesUnlocked;
+  if (st.hidden === showSt) st.hidden = !showSt;
+  if (showSt) {
+    const m = engine.matrixState;
+    const parts = [t("ch.mtx.done", { n: s.challengesDone.length, m: CHALLENGES.length })];
+    if (!s.autoChal) parts.push(t("ch.mtx.off"));
+    else if (m.running) parts.push(t("ch.mtx.running", { c: challengeName(m.running) }));
+    else if (m.next) parts.push(t("ch.mtx.next", { c: challengeName(m.next) }));
+    else if (s.challengesDone.length >= CHALLENGES.length) parts.push(t("ch.mtx.alldone"));
+    if (m.tried.length) parts.push(t("ch.mtx.tried", { c: m.tried.map(challengeName).join(", ") }));
+    if (m.running === MATRIX_HANDS) parts.push(t("ch.mtx.hands"));
+    setText(st, parts.join(" · "));
+  }
   const key = `${s.challenge}|${s.challengesDone.join(",")}|${engine.challengesUnlocked}|${s.settings.lang}`;
   if (key === lastChKey) return;
   lastChKey = key;

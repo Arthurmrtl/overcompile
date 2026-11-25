@@ -43,6 +43,10 @@ for (const [k, v] of Object.entries(process.env)) if (k.startsWith("MARKET_")) (
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("EFFECT_")) (EFFECT_BASE as any)[k.slice(7)] = Number(v);
 const distroAdvisor = new DistroAdvisor();
 let marketAt = -1;
+e.on(ev => {
+  if (ev.t === "challenge_done") milestones.push(`${fmt(t)} challenge done ${ev.id} (run ${fmt(s.stats.runTime)})`);
+  if (ev.t === "challenge_exit" && ev.auto) milestones.push(`${fmt(t)} matrix gave up ${ev.id}`);
+});
 const marketLog: string[] = [];
 /** Market (v0.6): the sim publishes distros itself (crontab off), loads the best modules and fuses duplicates. */
 function tendModules() {

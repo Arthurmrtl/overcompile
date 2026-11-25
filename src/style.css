@@ -658,3 +658,5 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .mod.r3 .mod-rar { color: var(--amber); }
 .mod.r3 { border-color: var(--amber); }
 .mod-lvl { color: var(--orange); font-weight: 700; }
+
+.mtx-state { color: var(--violet); margin: 2px 0 8px; }

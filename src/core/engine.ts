@@ -59,6 +59,10 @@ export type GameEvent =
 
 /** Test matrix: a challenge it started is given up after this many seconds (the sim gives up after 20 min). */
 export const MATRIX_TIMEOUT = 15 * 60;
+/** No cache turns the whole release tree off (no CI/CD, no Auto-Scaling): the run only moves if someone compiles
+ *  and buys. In a No cache the matrix started, it plays those hands itself (v0.6.3, Arthur: "il faut quand même
+ *  qu'il se fasse en auto quand on est au niveau distro"). */
+export const MATRIX_HANDS = "no_cache";
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" | "contributors" | "packages" };
 
@@ -232,6 +236,17 @@ export class Engine {
       this.exitChallenge(true);
     }
     if (!s.challenge) this.matrixRunning = null;
+    // …and in a No cache it started, it compiles, buys CI/CD, then the cheapest hardware, once a second
+    if (this.matrixRunning === MATRIX_HANDS && s.challenge === MATRIX_HANDS) {
+      if (!s.pipeline) this.compile();
+      this.matrixHandsTimer -= dt;
+      if (this.matrixHandsTimer <= 0) {
+        this.matrixHandsTimer = 1;
+        if (!s.perks.ci_cd.unlocked) this.buyPerk("ci_cd");
+        if (!s.perks.auto_scaling.unlocked) this.buyPerk("auto_scaling");
+        this.autoScale();
+      }
+    }
 
     // Release bot
     if (on(s, "release_bot") && s.autoRelease.enabled && !s.challenge && starsOnRelease(s).gte(Math.max(1, s.autoRelease.threshold))) {
@@ -579,16 +594,28 @@ export class Engine {
   }
 
   /* ---------------- Test matrix (Distro talent mtx, v0.6.2) ---------------- */
-  /** Challenges the matrix gave up on in this fork cycle (too long): not retried until the next fork. */
+  /** Challenges the matrix gave up on (too long): not retried until the next distro (v0.6.3; was the next fork,
+   *  and with the Fork bot a challenge too hard was retried again and again, 15 min lost each time). */
   private matrixTried = new Set<string>();
   /** The challenge the matrix started (null: none, or one the player started). */
   private matrixRunning: string | null = null;
+  private matrixHandsTimer = 0;
+
+  /** Next challenge the matrix will start after a release (null: nothing left for it). */
+  matrixNext() {
+    const s = this.s;
+    return CHALLENGES.find(c => !s.challengesDone.includes(c.id) && !this.matrixTried.has(c.id)) ?? null;
+  }
+  /** What the Challenges tab shows under the matrix switch. */
+  get matrixState() {
+    return { running: this.matrixRunning, next: this.matrixNext()?.id ?? null, tried: [...this.matrixTried] };
+  }
 
   /** Right after a release, starts the first challenge not done yet (switch `autoChal`). */
   private matrixStart() {
     const s = this.s;
     if (!hasDistro(s, "d_matrix") || !s.autoChal || s.challenge || !this.challengesUnlocked) return;
-    const next = CHALLENGES.find(c => !s.challengesDone.includes(c.id) && !this.matrixTried.has(c.id));
+    const next = this.matrixNext();
     if (!next) return;
     if (this.startChallenge(next.id, true) === "ok") this.matrixRunning = next.id;
   }
@@ -723,7 +750,6 @@ export class Engine {
   fork(auto = false): number | null {
     const s = this.s;
     if (!canFork(s)) return null;
-    this.matrixTried.clear();
     const gain = contributorsOnFork(s).toNumber();
     s.contributors += gain;
     s.lifetimeContributors += gain;
