@@ -38,7 +38,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.0";
+const GAME_VERSION = "0.6.1";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -558,6 +558,9 @@ function bindLayout() {
       engine.s.settings.buyAmount = v === "max" ? "max" : (Number(v) as 1 | 10);
       render();
     }));
+  const tabs = $(".tabs");
+  tabs.addEventListener("scroll", updateTabFades, { passive: true });
+  window.addEventListener("resize", updateTabFades);
   app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b =>
     b.addEventListener("click", () => {
       sideTab = b.dataset.tab as typeof sideTab;
@@ -686,6 +689,8 @@ function render() {
     const show = revealed[el.dataset.reveal as keyof typeof revealed];
     if (el.hidden === show) el.hidden = !show;
   });
+  const revKey = JSON.stringify(revealed);
+  if (revKey !== lastRevealKey) { lastRevealKey = revKey; updateTabFades(); } // a new tab can overflow the strip
   const chNew = $("[data-r=chNew]");
   const showNew = engine.challengesUnlocked && !s.seen.includes("challenges");
   if (chNew.hidden === showNew) chNew.hidden = !showNew;
@@ -696,6 +701,12 @@ function render() {
 
   // Side tabs
   app.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b => toggleClass(b, "on", b.dataset.tab === sideTab));
+  if (sideTab !== lastSideTab) {
+    lastSideTab = sideTab;
+    // Keep the active tab visible in the scrollable strip (a tip or the tutorial can switch tabs too)
+    app.querySelector<HTMLElement>(`[data-tab=${sideTab}]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    updateTabFades();
+  }
   app.querySelectorAll<HTMLElement>("[data-body]").forEach(b => toggleClass(b, "on", b.dataset.body === sideTab));
   app.querySelectorAll<HTMLButtonElement>("[data-m]").forEach(b => toggleClass(b, "on", b.dataset.m === mobilePanel));
 
@@ -1331,6 +1342,16 @@ function renderForkTree() {
     ft.req.length ? h("div", { class: "muted small" }, t("fk.req", { r: ft.req.map(r => FORK_TALENT_BY_ID[r].tag).join(" + ") })) : "",
     btn,
   );
+}
+
+/** Side tabs (v0.6.1): one scrollable row; fade the edges that hide more tabs. */
+let lastSideTab = "";
+let lastRevealKey = "";
+function updateTabFades() {
+  const el = app.querySelector<HTMLElement>(".tabs");
+  if (!el) return;
+  toggleClass(el, "fade-l", el.scrollLeft > 2);
+  toggleClass(el, "fade-r", el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
 }
 
 /* ================= Market (v0.6, chapter 1) ================= */

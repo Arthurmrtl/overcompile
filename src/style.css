@@ -191,12 +191,29 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .ascii { display: inline-block; white-space: pre; font-size: min(13px, 2.9vw); line-height: 1.2; }
 
 /* ---------- Side tabs ---------- */
-.tabs { display: flex; gap: 4px; flex: none; }
-.tabs button {
-  flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 7px 4px;
-  font-size: 12px; color: var(--dim);
+/* v0.6.1 (Arthur: "serré et pas très UI/UX"): one scrollable row of underlined tabs instead of 7 boxes.
+   Each tab keeps one line (badge inline), the active one is underlined in its layer's colour,
+   and a fade on the edges shows there is more to scroll. */
+.tabs {
+  display: flex; gap: 2px; flex: none; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  border-bottom: 1px solid var(--border); scroll-padding: 0 24px;
 }
-.tabs button.on { color: var(--fg); border-color: var(--border-2); background: var(--panel-2); }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs.fade-r { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.tabs.fade-l { mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+.tabs.fade-l.fade-r { mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+.tabs button {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  padding: 8px 10px 7px; margin-bottom: -1px; font-size: 13px; color: var(--dim);
+}
+.tabs button:hover { color: var(--fg); }
+.tabs button.on { color: var(--fg); border-bottom-color: var(--green); background: none; }
+.tabs button[data-tab=release].on { border-bottom-color: var(--amber); }
+.tabs button[data-tab=fork].on { border-bottom-color: var(--violet); }
+.tabs button[data-tab=distro].on { border-bottom-color: var(--cyan); }
+.tabs button[data-tab=market].on { border-bottom-color: var(--orange); }
+.tabs button .badge { font-size: 10px; line-height: 1; }
 .badge { font-size: 10px; color: var(--amber); }
 .tab-body { display: none; }
 .tab-body.on { display: block; }
@@ -612,7 +629,6 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .hud-mk { display: flex; align-items: center; gap: 6px; font-size: 22px; font-weight: 700; color: var(--orange); white-space: nowrap; }
 .hud-mk[hidden] { display: none; }
 .mk-glyph { color: var(--orange); }
-.tabs button[data-tab=market].on, .tabs button[data-tab=market][aria-selected=true] { color: var(--orange); }
 .mk-card { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--orange); border-radius: 8px; background: var(--panel-2); }
 .mk-title { font-weight: 700; margin-bottom: 4px; }
 .mk-pct { font-size: 28px; font-weight: 700; color: var(--orange); margin: 6px 0 4px; }
