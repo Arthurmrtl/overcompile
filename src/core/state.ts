@@ -112,6 +112,8 @@ export interface GameState {
   autoStars: boolean;
   /** Distro talent `abuy` (Maintainers): switch for the contributors' automatic purchases (v0.5.11). */
   autoContrib: boolean;
+  /** Distro talent `mtx` (Test matrix, v0.6.2): switch for the challenges started on their own. */
+  autoChal: boolean;
   /* ---------- Market (v0.6, chapter 1) — never reset ---------- */
   market: {
     unlocked: boolean;
@@ -132,7 +134,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -198,6 +200,7 @@ export function newState(): GameState {
     autoFork: { enabled: true, threshold: 0 },
     autoStars: true,
     autoContrib: true,
+    autoChal: true,
     market: newMarket(),
     lastSeen: now,
     createdAt: now,
@@ -344,6 +347,10 @@ function migrate(s: GameState, from: number) {
     // v0.5.16 → v0.6.0: Market (chapter 1). Empty; it opens on its own if the four flavors are done
     s.market = newMarket();
     s.stats.modulesFound = 0;
+  }
+  if (from < 14) {
+    // v0.6.1 → v0.6.2: switch of the Distro talent `mtx` (Test matrix), on by default
+    s.autoChal = true;
   }
   s.version = SAVE_VERSION;
 }

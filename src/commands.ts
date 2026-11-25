@@ -615,12 +615,16 @@ export function createCommands(c: GameCtx) {
           say(["      " + t("ch.rule") + " : " + t(`ch.${ch.id}.rule`), "c-dim"]);
           say(["      " + t("ch.reward") + " : " + t(`ch.${ch.id}.reward`), "c-dim"]);
         }
-        say(["challenge <id>  ·  challenge exit", "c-dim"]);
+        say([`challenge <id>  ·  challenge exit${hasDistro(en.s, "d_matrix") ? "  ·  challenge auto" : ""}`, "c-dim"]);
         return;
       }
       if (arg === "exit") {
         if (!en.exitChallenge()) say(t("term.ch_none"));
         return;
+      }
+      if (arg === "auto" && hasDistro(en.s, "d_matrix")) {
+        en.s.autoChal = !en.s.autoChal;
+        return void say(OK, " " + t("ch.mtx.state", { s: en.s.autoChal ? t("perk.enabled") : t("perk.disabled") }));
       }
       const r = en.startChallenge(arg);
       if (r === "unknown") say(t("term.ch_unknown"));
