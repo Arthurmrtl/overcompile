@@ -13,6 +13,7 @@ import { ADV, ReleaseAdvisor } from "../src/core/advisor";
 import { GEN_KEYS } from "../src/core/state";
 import { DISTRO, DISTRO_TALENTS, FLAVORS, type FlavorId } from "../src/core/distro";
 import { DISTRO_ADV, DistroAdvisor } from "../src/core/advisor";
+import { EFFECT_BASE, MARKET, MILESTONES, canFuse, marketShare, moduleScore, moduleSlots } from "../src/core/market";
 
 import { BAL } from "../src/core/formulas";
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("BAL_")) (BAL as any)[k.slice(4)] = Number(v);
@@ -38,7 +39,26 @@ for (const [k, v] of Object.entries(process.env)) if (k.startsWith("FORK_")) (FO
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("FADV_")) (FORK_ADV as any)[k.slice(5)] = Number(v);
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("DISTRO_")) (DISTRO as any)[k.slice(7)] = Number(v);
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("DADV_")) (DISTRO_ADV as any)[k.slice(5)] = Number(v);
+for (const [k, v] of Object.entries(process.env)) if (k.startsWith("MARKET_")) (MARKET as any)[k.slice(7)] = Number(v);
+for (const [k, v] of Object.entries(process.env)) if (k.startsWith("EFFECT_")) (EFFECT_BASE as any)[k.slice(7)] = Number(v);
 const distroAdvisor = new DistroAdvisor();
+let marketAt = -1;
+const marketLog: string[] = [];
+/** Market (v0.6): the sim publishes distros itself (crontab off), loads the best modules and fuses duplicates. */
+function tendModules() {
+  if (!s.market.unlocked) return;
+  if (marketAt < 0) marketAt = t;
+  for (;;) {
+    const mods = [...s.market.modules].sort((a, b) => moduleScore(b) - moduleScore(a));
+    let fused = false;
+    for (const a of mods) {
+      const b = [...mods].reverse().find(x => canFuse(s, a, x) && moduleScore(x) < moduleScore(a));
+      if (b && e.fuseModules(a.uid, b.uid)) { fused = true; break; }
+    }
+    if (!fused) break;
+  }
+  e.loadBestModules();
+}
 let distroStart = 0;
 let forkTreeLogged = -1;
 /** The player tries every flavor once (to get each permanent bonus), then picks FLAVOR (default stable). */
@@ -180,10 +200,19 @@ while (t < H * 3600) {
       const contribs = s.lifetimeContributors;
       const from = s.flavor ?? "none";
       const flavor = pickFlavor();
+      const pctBefore = s.market.unlocked ? marketShare(s).pct : 0;
       const gain = e.distro(flavor);
       if (gain !== null) {
         distroStart = t; cycleStart = t; forkAt = t; lastForksSeen = s.forks;
+        s.market.cron.enabled = false;
+        tendModules();
         spendPackages(); spendContributors(); spendStars();
+        if (s.market.unlocked) {
+          const pct = marketShare(s).pct;
+          for (const m of MILESTONES) if (m.pct > pctBefore && m.pct <= pct)
+            marketLog.push(`  ${m.pct}% ${m.id} at ${fmt(t)} (${fmt(t - marketAt)} after the Market opened, distro #${s.distros})`);
+          console.log(`${fmt(t)}  MARKET ${pct.toFixed(2)}%  installs ${Math.round(s.market.installs)}  slots ${moduleSlots(s)}  modules ${s.market.modules.length} loaded [${e.loaded.map(m => `${m.name}:${m.rarity}L${m.level}`).join(" ")}]`);
+        }
         const line = `${fmt(t)}  DISTRO #${s.distros}  +${gain} packages after ${fmt(cycle)} on ${from} (cycle contributors ${contribs}, lifetime packages ${s.lifetimePackages}, distro talents ${s.distroTalents.length}/${DISTRO_TALENTS.length}, kept fork talents ${s.forkTalents.length}) → ${flavor}`;
         console.log(line);
         milestones.push(line.trim());
@@ -194,4 +223,5 @@ while (t < H * 3600) {
 for (const c of s.challengesDone) milestones.push(`challenge done: ${c}`);
 milestones.push(`Auto-Scaling bought after fork (min): ${asAfterFork.join(" ")}`);
 console.log(milestones.join("\n"));
+if (marketAt >= 0) console.log(`market opened at ${fmt(marketAt)}, now ${marketShare(s).pct.toFixed(2)}%, modules found ${s.stats.modulesFound}\n${marketLog.join("\n")}`);
 console.log("forks", s.forks, "contributors", s.lifetimeContributors, "PRs merged", s.stats.prsMerged, "events caught", s.stats.events, "optimizations", JSON.stringify(s.upgrades), "achievements", s.achievements.length, "rate", expectedRate(s).toExponential(2));

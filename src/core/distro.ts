@@ -1,6 +1,7 @@
 import Decimal from "break_eternity.js";
 import type { GameState } from "./state";
 import { FORK_TALENTS } from "./fork";
+import { moduleBonus, moduleMult } from "./market";
 
 /**
  * Distro (v0.5): third prestige layer, above forks.
@@ -127,7 +128,7 @@ export function packagesExact(s: GameState): Decimal {
   if (s.challenge || !forkTreeComplete(s)) return new Decimal(0);
   const base = curve(new Decimal(s.lifetimeContributors).div(DISTRO.contribBase));
   if (base.lt(1)) return new Decimal(0);
-  return base.mul(hasDistro(s, "d_pkg") ? 1 + DISTRO_PCT.pkg : 1).add(hasDistro(s, "d_upstream") ? UPSTREAM_PACKAGES : 0);
+  return base.mul(hasDistro(s, "d_pkg") ? 1 + DISTRO_PCT.pkg : 1).mul(moduleMult(s, "packages")).add(hasDistro(s, "d_upstream") ? UPSTREAM_PACKAGES : 0);
 }
 export const packagesOnDistro = (s: GameState) => packagesExact(s).floor();
 export const canDistro = (s: GameState) => packagesOnDistro(s).gte(1);
@@ -135,18 +136,19 @@ export const canDistro = (s: GameState) => packagesOnDistro(s).gte(1);
 /** Contributors of the cycle needed for one more package. */
 export function nextPackageAt(s: GameState): number {
   const total = packagesOnDistro(s).toNumber();
-  const need = Math.max(1, (total + 1 - (hasDistro(s, "d_upstream") ? UPSTREAM_PACKAGES : 0)) / (hasDistro(s, "d_pkg") ? 1 + DISTRO_PCT.pkg : 1));
+  const need = Math.max(1, (total + 1 - (hasDistro(s, "d_upstream") ? UPSTREAM_PACKAGES : 0)) / (hasDistro(s, "d_pkg") ? 1 + DISTRO_PCT.pkg : 1) / moduleMult(s, "packages"));
   const early = Math.pow(2, (need - 1) / DISTRO.earlyK);
   const late = Math.pow(need, 1 / DISTRO.lateExp);
   return Math.ceil(Math.min(early, late) * DISTRO.contribBase);
 }
 
 /* ---------------- Passive and flavor multipliers (used by formulas / fork) ---------------- */
-export const packagesGainsMult = (s: GameState) => 1 + DISTRO.gainsLog * Math.log2(1 + s.lifetimePackages);
+/** Packages passive bonus on gains, and the kernel modules' gains (v0.6). */
+export const packagesGainsMult = (s: GameState) => (1 + DISTRO.gainsLog * Math.log2(1 + s.lifetimePackages)) * moduleMult(s, "gains");
 export function distroContribMult(s: GameState): number {
-  return (1 + DISTRO.contribLog * Math.log2(1 + s.lifetimePackages)) * (hasDistro(s, "d_contrib") ? 1 + DISTRO_PCT.contrib : 1) * flavorOf(s).contributors;
+  return (1 + DISTRO.contribLog * Math.log2(1 + s.lifetimePackages)) * (hasDistro(s, "d_contrib") ? 1 + DISTRO_PCT.contrib : 1) * flavorOf(s).contributors * moduleMult(s, "contributors");
 }
-export const distroStarsMult = (s: GameState) => flavorOf(s).stars * (flavorDone(s, "stable") ? 1 + FLAVOR_DONE.stable : 1);
+export const distroStarsMult = (s: GameState) => flavorOf(s).stars * (flavorDone(s, "stable") ? 1 + FLAVOR_DONE.stable : 1) * moduleMult(s, "stars");
 export const distroGrowthDelta = (s: GameState) => flavorOf(s).growthDelta - (flavorDone(s, "rolling") ? FLAVOR_DONE.rolling : 0);
 export const distroGenReqMult = (s: GameState) => (flavorDone(s, "source") ? FLAVOR_DONE.source : 1);
-export const distroOfflineEff = (s: GameState) => flavorOf(s).offlineEff + (flavorDone(s, "desktop") ? FLAVOR_DONE.desktop : 0);
+export const distroOfflineEff = (s: GameState) => flavorOf(s).offlineEff + (flavorDone(s, "desktop") ? FLAVOR_DONE.desktop : 0) + moduleBonus(s, "offline");

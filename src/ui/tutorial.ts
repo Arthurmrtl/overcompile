@@ -18,7 +18,7 @@ import { fmt } from "../format";
 import type Decimal from "break_eternity.js";
 
 type Panel = "shop" | "center" | "side";
-type SideTab = "release" | "challenges" | "fork" | "distro" | "achievements" | "stats";
+type SideTab = "release" | "challenges" | "fork" | "distro" | "market" | "achievements" | "stats";
 
 interface Deps {
   engine: () => Engine;
@@ -80,6 +80,7 @@ const TIPS: Tip[] = [
   { id: "forked", anchor: () => "[data-tab=fork]", panel: "side", when: () => S().forks >= 1 },
   { id: "distro", anchor: () => "[data-tab=distro]", panel: "side", when: () => distroRevealed(S()) },
   { id: "distroed", anchor: () => "[data-r=dtree]", panel: "side", tab: "distro", when: () => S().distros >= 1 },
+  { id: "market", anchor: () => "[data-tab=market]", panel: "side", when: () => S().market.unlocked },
 ];
 
 let bubble: HTMLElement | null = null;
