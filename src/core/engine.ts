@@ -36,9 +36,9 @@ export type GameEvent =
   | { t: "autobuy"; key: HwKey; n: number }
   | { t: "autostars"; talents: string[]; opts: number }
   | { t: "release"; stars: Decimal; auto: boolean }
-  | { t: "challenge_start"; id: string }
+  | { t: "challenge_start"; id: string; auto?: boolean }
   | { t: "challenge_done"; id: string }
-  | { t: "challenge_exit"; id: string }
+  | { t: "challenge_exit"; id: string; auto?: boolean }
   | { t: "generation"; key: GenKey; gen: number; auto?: boolean }
   | { t: "event_spawn"; id: string; window: number }
   | { t: "event_caught"; id: string; credits?: Decimal; builds?: number }
@@ -56,6 +56,9 @@ export type GameEvent =
   | { t: "milestone"; id: string }
   | { t: "installs"; n: number }
 
+
+/** Test matrix: a challenge it started is given up after this many seconds (the sim gives up after 20 min). */
+export const MATRIX_TIMEOUT = 15 * 60;
 
 export type BuyResult = { ok: true; n: number } | { ok: false; reason: "credits" | "max" | "locked" | "owned" | "stars" | "req" | "contributors" | "packages" };
 
@@ -77,11 +80,12 @@ export interface OfflineGains {
   installs: number;
   modules: number;         // kernel modules compiled
   milestones: string[];
+  challenges: number;      // challenges completed (started by the Test matrix)
   achievements: string[];
 }
 export const newOfflineGains = (): OfflineGains => ({
   credits: new Decimal(0), hardware: 0, generations: 0, releases: 0, stars: new Decimal(0), talents: 0, optimizations: 0,
-  forks: 0, contributors: 0, forkBuys: 0, prs: 0, distros: 0, packages: 0, installs: 0, modules: 0, milestones: [], achievements: [],
+  forks: 0, contributors: 0, forkBuys: 0, prs: 0, distros: 0, packages: 0, installs: 0, modules: 0, milestones: [], challenges: 0, achievements: [],
 });
 function tallyOffline(g: OfflineGains, e: GameEvent) {
   switch (e.t) {
@@ -98,6 +102,7 @@ function tallyOffline(g: OfflineGains, e: GameEvent) {
     case "installs": g.installs += e.n; break;
     case "module": g.modules++; break;
     case "milestone": g.milestones.push(e.id); break;
+    case "challenge_done": g.challenges++; break;
   }
 }
 
@@ -220,6 +225,13 @@ export class Engine {
       this.afterChallenge(id); // v0.5.12: completing gave nothing back, only quitting did
       this.emit({ t: "challenge_done", id });
     }
+
+    // Test matrix: a challenge it started that drags on is given up (and not retried until the next fork)
+    if (this.matrixRunning && s.challenge === this.matrixRunning && s.stats.runTime > MATRIX_TIMEOUT) {
+      this.matrixTried.add(this.matrixRunning);
+      this.exitChallenge(true);
+    }
+    if (!s.challenge) this.matrixRunning = null;
 
     // Release bot
     if (on(s, "release_bot") && s.autoRelease.enabled && !s.challenge && starsOnRelease(s).gte(Math.max(1, s.autoRelease.threshold))) {
@@ -562,7 +574,23 @@ export class Engine {
     this.resetRun();
     this.emit({ t: "release", stars: gain, auto });
     this.checkAchievements();
+    this.matrixStart();
     return gain;
+  }
+
+  /* ---------------- Test matrix (Distro talent mtx, v0.6.2) ---------------- */
+  /** Challenges the matrix gave up on in this fork cycle (too long): not retried until the next fork. */
+  private matrixTried = new Set<string>();
+  /** The challenge the matrix started (null: none, or one the player started). */
+  private matrixRunning: string | null = null;
+
+  /** Right after a release, starts the first challenge not done yet (switch `autoChal`). */
+  private matrixStart() {
+    const s = this.s;
+    if (!hasDistro(s, "d_matrix") || !s.autoChal || s.challenge || !this.challengesUnlocked) return;
+    const next = CHALLENGES.find(c => !s.challengesDone.includes(c.id) && !this.matrixTried.has(c.id));
+    if (!next) return;
+    if (this.startChallenge(next.id, true) === "ok") this.matrixRunning = next.id;
   }
 
   private resetRun() {
@@ -651,7 +679,7 @@ export class Engine {
     return this.s.releases >= CHALLENGES_UNLOCK_AT || this.s.forks > 0;
   }
 
-  startChallenge(id: string): "ok" | "locked" | "unknown" | "done" | "active" {
+  startChallenge(id: string, auto = false): "ok" | "locked" | "unknown" | "done" | "active" {
     if (!CHALLENGES.some(c => c.id === id)) return "unknown";
     if (!this.challengesUnlocked) return "locked";
     if (this.s.challengesDone.includes(id)) return "done";
@@ -660,16 +688,18 @@ export class Engine {
     this.s.buffs = []; // events stay out of challenges
     this.activeEvent = null;
     this.resetRun();
-    this.emit({ t: "challenge_start", id });
+    if (!auto) this.matrixRunning = null;
+    this.emit({ t: "challenge_start", id, auto });
     return "ok";
   }
 
-  exitChallenge(): boolean {
+  exitChallenge(auto = false): boolean {
     const id = this.s.challenge;
     if (!id) return false;
     this.s.challenge = null;
+    this.matrixRunning = null;
     this.afterChallenge(id);
-    this.emit({ t: "challenge_exit", id });
+    this.emit({ t: "challenge_exit", id, auto });
     return true;
   }
 
@@ -693,6 +723,7 @@ export class Engine {
   fork(auto = false): number | null {
     const s = this.s;
     if (!canFork(s)) return null;
+    this.matrixTried.clear();
     const gain = contributorsOnFork(s).toNumber();
     s.contributors += gain;
     s.lifetimeContributors += gain;
@@ -756,6 +787,7 @@ export class Engine {
   distro(flavor: FlavorId, auto = false): number | null {
     const s = this.s;
     if (!canDistro(s) || !FLAVOR_BY_ID[flavor]) return null;
+    this.matrixTried.clear();
     const gain = packagesOnDistro(s).toNumber();
     s.packages += gain;
     s.lifetimePackages += gain;

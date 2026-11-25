@@ -3,7 +3,7 @@ import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
 import { initPwa, installMode, promptInstall } from "./ui/pwa";
 import { initWakeLock, setWakeLock, wakeLockEnabled, wakeLockSupported } from "./ui/wakelock";
 import Decimal from "break_eternity.js";
-import { Engine, type GameEvent, type OfflineGains } from "./core/engine";
+import { Engine, type GameEvent, MATRIX_TIMEOUT, type OfflineGains } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
 import {
   HW, JOBS_PRIO_STEPS, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
@@ -38,7 +38,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.1";
+const GAME_VERSION = "0.6.2";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -282,6 +282,7 @@ function buildLayout() {
       </div>
       <div class="card tab-body" data-body="challenges">
         <p class="muted small">${t("ch.desc")}</p>
+        <label class="switch small" data-r="mtxAuto" hidden><input type="checkbox"><span>${t("ch.mtx")}</span></label>
         <div class="ch-list" data-r="chList"></div>
       </div>
       <div class="card tab-body" data-body="fork">
@@ -603,6 +604,7 @@ function bindLayout() {
   $<HTMLInputElement>("[data-r=botOn]").addEventListener("change", () => cmd.run("toggle release_bot", true));
   $<HTMLInputElement>("[data-r=ansAuto] input").addEventListener("change", () => cmd.run("tree auto", true));
   $<HTMLInputElement>("[data-r=abuyAuto] input").addEventListener("change", () => cmd.run("fork auto", true));
+  $<HTMLInputElement>("[data-r=mtxAuto] input").addEventListener("change", () => cmd.run("challenge auto", true));
   $<HTMLInputElement>("[data-r=botThr]").addEventListener("change", ev => {
     const v = Math.max(1, Math.floor(Number((ev.target as HTMLInputElement).value) || 1));
     engine.s.autoRelease.threshold = v;
@@ -1037,6 +1039,11 @@ function renderChallengeBanner() {
 
 function renderChallenges() {
   const s = engine.s;
+  // Distro talent `mtx` (Test matrix): switch for the challenges started on their own
+  const mtx = $("[data-r=mtxAuto]");
+  const showMtx = hasDistro(s, "d_matrix");
+  if (mtx.hidden === showMtx) mtx.hidden = !showMtx;
+  if (showMtx) { const box = $<HTMLInputElement>("input", mtx); if (box.checked !== s.autoChal) box.checked = s.autoChal; }
   const key = `${s.challenge}|${s.challengesDone.join(",")}|${engine.challengesUnlocked}|${s.settings.lang}`;
   if (key === lastChKey) return;
   lastChKey = key;
@@ -1850,6 +1857,7 @@ const OFFLINE_LINES: ((g: OfflineGains) => string | null)[] = [
   g => g.distros > 0 ? t("off.distros", { n: fmtInt(g.distros), p: fmtInt(g.packages) }) : null,
   g => g.installs > 0 ? t("off.installs", { n: fmtInt(Math.round(g.installs)), p: marketShare(engine.s).pct.toFixed(2) }) : null,
   g => g.modules > 0 ? t("off.modules", { n: fmtInt(g.modules) }) : null,
+  g => g.challenges > 0 ? t("off.challenges", { n: fmtInt(g.challenges) }) : null,
   g => g.milestones.length > 0 ? t("off.milestones", { m: g.milestones.map(id => `${MILESTONE_BY_ID[id as MilestoneId].pct} % ${t(`mk.m.${id}`)}`).join(", ") }) : null,
 ];
 
@@ -1953,8 +1961,8 @@ engine.on((e: GameEvent) => {
     case "challenge_start":
       flushMinute(true);
       runCount = { ok: 0, fail: 0 };
-      term.println(["[ CH ]", "c-amber"], " " + t("term.ch_started", { c: challengeName(e.id), x: fmt(challengeGoal(engine.s)) }));
-      toast("Challenge", challengeName(e.id));
+      term.println(["[ CH ]", "c-amber"], " " + t(e.auto ? "ch.mtx.started" : "term.ch_started", { c: challengeName(e.id), x: fmt(challengeGoal(engine.s)) }));
+      if (!e.auto) toast("Challenge", challengeName(e.id));
       break;
     case "challenge_done":
       term.banner(`✓ ${t("ch.done")} · ${challengeName(e.id)}`, "c-green");
@@ -1963,7 +1971,7 @@ engine.on((e: GameEvent) => {
       engine.save();
       break;
     case "challenge_exit":
-      term.println(["[ CH ]", "c-dim"], " " + t("term.ch_exit", { c: challengeName(e.id) }));
+      term.println(["[ CH ]", "c-dim"], " " + t(e.auto ? "ch.mtx.gaveup" : "term.ch_exit", { c: challengeName(e.id), m: Math.round(MATRIX_TIMEOUT / 60) }));
       break;
     case "event_spawn": {
       const ev = EVENT_BY_ID[e.id];

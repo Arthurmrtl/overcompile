@@ -81,6 +81,7 @@ export const DISTRO_TALENTS: DistroTalent[] = [
   { id: "d_chal", tag: "chk", cost: 4, req: ["d_autokeep", "d_contrib"], row: 3, col: 3 },  // challenges stay done across forks (until the next distro)
   { id: "d_keepall", tag: "all", cost: 6, req: ["d_autobuy", "d_chal"], row: 4, col: 2 },   // a distro keeps the whole Fork tree
   { id: "d_upstream", tag: "ups", cost: 10, req: ["d_keepall"], row: 5, col: 2 },           // +1 package on every distro
+  { id: "d_matrix", tag: "mtx", cost: 5, req: ["d_chal"], row: 4, col: 4 },                 // v0.6.2: starts the challenges not done yet on its own
 ];
 export const DISTRO_TALENT_BY_ID = Object.fromEntries(DISTRO_TALENTS.map(t => [t.id, t]));
 export const hasDistro = (s: GameState, id: string) => s.distroTalents.includes(id);
