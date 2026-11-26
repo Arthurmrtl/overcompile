@@ -39,7 +39,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.6";
+const GAME_VERSION = "0.6.7";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -94,13 +94,10 @@ let sideTab: "release" | "challenges" | "fork" | "distro" | "market" | "achievem
 let mobilePanel: "center" | "shop" | "side" = "center";
 const advisor = new ReleaseAdvisor();
 let advice: Advice = advisor.update(engine.s);
-let advisedLogged = false; // one journal line per run when the advice turns on
 const forkAdvisor = new ForkAdvisor();
 let forkAdvice: ForkAdvice = forkAdvisor.update(engine.s);
 const distroAdvisor = new DistroAdvisor();
 let distroAdvice: DistroAdvice = distroAdvisor.update(engine.s);
-let distroAdvisedLogged = false;
-let forkAdvisedLogged = false;
 let lastAchCount = "";
 let lastSlotCount = -1;
 let lastTalentKey = "";
@@ -246,10 +243,10 @@ function buildLayout() {
     <div class="col-handle" data-handle="side" role="separator" aria-orientation="vertical" title="${t("layout.resize")}"></div>
     <section class="col col-side">
       <div class="tabs" role="tablist">
-        <button data-tab="release">${t("tab.release")} <span class="badge new" data-r="relBadge" hidden>!</span></button>
+        <button data-tab="release">${t("tab.release")}</button>
         <button data-tab="challenges" data-reveal="challenges">${t("tab.challenges")} <span class="badge new" data-r="chNew">${t("rev.new")}</span></button>
         <button data-tab="fork" data-reveal="fork">${t("tab.fork")} <span class="badge new" data-r="forkBadge" hidden></span></button>
-        <button data-tab="distro" data-reveal="distro">${t("tab.distro")} <span class="badge new" data-r="distroBadge" hidden>!</span></button>
+        <button data-tab="distro" data-reveal="distro">${t("tab.distro")}</button>
         <button data-tab="market" data-reveal="market">${t("tab.market")} <span class="badge new" data-r="mkBadge" hidden>!</span></button>
         <button data-tab="achievements">${t("tab.achievements")} <span class="badge" data-r="achBadge"></span></button>
         <button data-tab="stats">${t("tab.stats")}</button>
@@ -298,8 +295,7 @@ function buildLayout() {
         <!-- Fork bot (Distro talent fbot): set here, next to the fork button, like the Release bot in the Release tab -->
         <div class="bot" data-r="fbot" hidden>
           <label class="switch"><input type="checkbox" data-r="fbotOn"><span>${t("ds.fbot")}</span></label>
-          <label class="small">${t("ds.fbot.threshold")} <input type="number" min="0" step="1" data-r="fbotThr"> ⑂</label>
-          <div class="muted small">${t("ds.fbot.hint")}</div>
+          <label class="small">${t("ds.fbot.threshold")} <input type="number" min="1" step="1" data-r="fbotThr"> ⑂</label>
         </div>
         <div class="fork-sum" data-r="forkSum" data-reveal="forked"></div>
         <p class="teaser small" data-r="distroTeaser" hidden>${t("ds.teaser")}</p>
@@ -330,7 +326,7 @@ function buildLayout() {
         <!-- crontab (Market milestone 5 %): set here, next to the distro button, like the Fork bot in the Fork tab -->
         <div class="bot cron" data-r="cron" hidden>
           <label class="switch"><input type="checkbox" data-r="cronOn"><span>${t("mk.cron")}</span></label>
-          <label class="small">${t("mk.cron.threshold")} <input type="number" min="0" step="1" data-r="cronThr"> ▣</label>
+          <label class="small">${t("mk.cron.threshold")} <input type="number" min="1" step="1" data-r="cronThr"> ▣</label>
           <label class="switch small"><input type="checkbox" data-r="cronRot"><span>${t("mk.cron.rotate")}</span></label>
           <div class="muted small">${t("mk.cron.hint")}</div>
         </div>
@@ -599,15 +595,15 @@ function bindLayout() {
   $("[data-r=dsBtn]").addEventListener("click", confirmDistro);
   $<HTMLInputElement>("[data-r=fbotOn]").addEventListener("change", () => cmd.run(`forkbot ${engine.s.autoFork.enabled ? "off" : "on"}`, true));
   $<HTMLInputElement>("[data-r=fbotThr]").addEventListener("change", ev => {
-    const v = Math.max(0, Math.floor(Number((ev.target as HTMLInputElement).value) || 0));
-    cmd.run(`forkbot ${v === 0 ? "advisor" : v}`, true);
+    const v = Math.max(1, Math.floor(Number((ev.target as HTMLInputElement).value) || 0));
+    cmd.run(`forkbot ${v}`, true);
   });
   $("[data-r=chExit]").addEventListener("click", () => cmd.run("challenge exit", true));
   $<HTMLInputElement>("[data-r=cronOn]").addEventListener("change", () => cmd.run(`crontab ${engine.s.market.cron.enabled ? "off" : "on"}`, true));
   $<HTMLInputElement>("[data-r=cronRot]").addEventListener("change", () => cmd.run(`crontab ${engine.s.market.cron.rotate ? "same" : "rotate"}`, true));
   $<HTMLInputElement>("[data-r=cronThr]").addEventListener("change", ev => {
-    const v = Math.max(0, Math.floor(Number((ev.target as HTMLInputElement).value) || 0));
-    cmd.run(`crontab ${v === 0 ? "advisor" : v}`, true);
+    const v = Math.max(1, Math.floor(Number((ev.target as HTMLInputElement).value) || 0));
+    cmd.run(`crontab ${v}`, true);
   });
   $("[data-r=mkBest]").addEventListener("click", () => cmd.run("modprobe --best", true));
   $("[data-r=mkOpen]").addEventListener("click", () => openCrateRoulette());
@@ -741,15 +737,13 @@ function render() {
   setText($("[data-r=contrib]"), fmtInt(s.contributors));
   setText($("[data-r=pkg]"), fmtInt(s.packages));
   if (s.market.unlocked) setText($("[data-r=mkPct]"), `${marketShare(s).pct.toFixed(2)} %`);
-  const db = $("[data-r=distroBadge]");
-  if (db.hidden === !distroAdvice.advised) db.hidden = !distroAdvice.advised;
   const dt = $("[data-r=distroTeaser]");
   const showDt = !distroRevealed(s) && s.forks > 0 && s.forkTalents.length >= 10;
   if (dt.hidden === showDt) dt.hidden = !showDt;
   const fb = $("[data-r=forkBadge]");
-  const fbOn = s.prs.length > 0 || (forkAdvice.advised && treeComplete(s) && !s.challenge);
+  const fbOn = s.prs.length > 0;
   if (fb.hidden === fbOn) fb.hidden = !fbOn;
-  if (fbOn) setText(fb, s.prs.length ? `${s.prs.length}` : "!");
+  if (fbOn) setText(fb, `${s.prs.length}`);
   // Release tab: only the teaser before the first fork; the fork itself lives in the Fork tab
   const ft = $("[data-r=forkTeaser]");
   const showFt = forkRevealed(s) && s.forks === 0 && !treeComplete(s) && !s.challenge;
@@ -897,19 +891,14 @@ function renderRelease() {
     : can ? (firstRelease ? t("rev.button") : t("rel.button", { v: version(engine), n: fmt(gain) }))
     : `🔒 ${t("rel.title")}`);
   toggleClass(btn, "ready", can);
-  const advised = advice.advised && starsRevealed(s);
-  toggleClass(btn, "advised", advised);
-  const relBadge = $("[data-r=relBadge]");
-  if (relBadge.hidden === advised) relBadge.hidden = !advised;
 
   // Stars per minute, once stars are known
   const rateEl = $("[data-r=relRate]");
   const showRate = starsRevealed(s) && can && !s.challenge;
   if (rateEl.hidden === showRate) rateEl.hidden = !showRate;
   if (showRate) {
-    // Only the current pace: the button, the badge and the highlight already say when to ship
+    // Only the current pace (v0.6.7: no more advice, the player decides)
     setText(rateEl, t("adv.rate", { r: fmtRate(advice.rate) }));
-    toggleClass(rateEl, "on", advised);
   }
 
   let prog: number;
@@ -1125,7 +1114,7 @@ function renderAchievements() {
   setText($("[data-r=achBadge]"), pendingCount ? `${pendingCount}!` : `${n}/${ACHIEVEMENTS.length}`);
   toggleClass($("[data-r=achBadge]"), "new", pendingCount > 0);
   const dot = $("[data-r=mDot]");
-  const dotOn = pendingCount > 0 || (advice.advised && starsRevealed(s));
+  const dotOn = pendingCount > 0;
   if (dot.hidden === dotOn) dot.hidden = !dotOn;
   const achKey = `${n}|${s.achClaimed.length}|${starsRevealed(s)}|${engine.challengesUnlocked}|${s.settings.lang}`;
   if (achKey === lastAchCount) {
@@ -1230,11 +1219,9 @@ function renderForkCard() {
   if (btn.hidden) btn.hidden = false;
   setText(btn, pending >= 1 ? t("fk.btn", { n: fmtInt(pending) }) : t("fk.btn0"));
   btn.disabled = pending < 1;
-  toggleClass(btn, "advised", forkAdvice.advised);
   const showRate = pending >= 1;
   if (rate.hidden === showRate) rate.hidden = !showRate;
   if (showRate) setText(rate, t("fk.rate", { r: forkAdvice.rate.toFixed(forkAdvice.rate < 10 ? 1 : 0) }));
-  toggleClass(rate, "on", forkAdvice.advised);
 }
 
 let forkTabKey = "";
@@ -1572,7 +1559,6 @@ function renderDistroTab() {
   const btn = $<HTMLButtonElement>("[data-r=dsBtn]");
   setText(btn, pending >= 1 ? t("ds.btn", { n: fmtInt(pending) }) : t("ds.btn0"));
   btn.disabled = pending < 1 || !!s.challenge;
-  toggleClass(btn, "advised", distroAdvice.advised);
   // How the packages are computed
   const calc = $("[data-r=dsCalc]");
   const rows: [string, string, string?][] = [
@@ -1593,7 +1579,6 @@ function renderDistroTab() {
   const showRate = pending >= 1;
   if (rate.hidden === showRate) rate.hidden = !showRate;
   if (showRate) setText(rate, t("ds.rate", { r: distroAdvice.rate.toFixed(1) }));
-  toggleClass(rate, "on", distroAdvice.advised);
   // crontab (Market milestone 5 %), next to the distro button
   const cron = $("[data-r=cron]");
   const showCron = reached(s, "crontab");
@@ -2261,22 +2246,6 @@ function loop() {
   advice = advisor.update(engine.s);
   forkAdvice = forkAdvisor.update(engine.s);
   distroAdvice = distroAdvisor.update(engine.s);
-  if (!distroAdvice.advised) distroAdvisedLogged = false;
-  else if (!distroAdvisedLogged) {
-    distroAdvisedLogged = true;
-    term.println(["[ DISTRO ]", "c-violet"], " " + t("ds.adv.log", { n: fmtInt(distroAdvice.pending) }));
-  }
-  const forkBotOn = hasDistro(engine.s, "d_forkbot") && engine.s.autoFork.enabled;
-  if (!forkAdvice.advised || forkBotOn) forkAdvisedLogged = forkBotOn && forkAdvice.advised;
-  else if (!forkAdvisedLogged) {
-    forkAdvisedLogged = true;
-    term.println(["[ FORK ]", "c-violet"], " " + t("fk.adv.log", { n: fmtInt(forkAdvice.pending) }));
-  }
-  if (!advice.advised) advisedLogged = false;
-  else if (!advisedLogged && starsRevealed(engine.s) && !has(engine.s, "release_bot")) {
-    advisedLogged = true;
-    term.println(STAR, " " + t("adv.log", { n: fmt(advice.pending) }));
-  }
 
   const summaryEvery = logLevel() === "minimal" ? 300 : 60;
   if (minute.time >= summaryEvery) flushMinute();

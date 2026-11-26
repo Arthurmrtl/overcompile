@@ -106,7 +106,7 @@ export interface GameState {
   /** The base of the current Distro cycle (null before the first distro), and the ones finished at least once. */
   flavor: FlavorId | null;
   flavorsDone: FlavorId[];
-  /** Distro talent "Fork bot": fork on its own once the fork pays this many contributors (0: when the advisor says). */
+  /** Distro talent "Fork bot": fork on its own once the fork pays this many contributors (≥ 1). */
   autoFork: { enabled: boolean; threshold: number };
   /** Fork talent `ans` (Ansible, v0.5.5): stars buy release talents, then optimizations, on their own. */
   autoStars: boolean;
@@ -133,12 +133,16 @@ export interface GameState {
     autoOpen: boolean;
     /** v0.6.6: crates bought with packages (their price grows with it). */
     cratesBought: number;
-    /** Milestone 5 %: distros publish themselves at a package threshold (0: when the advisor says). */
+    /** Milestone 5 %: distros publish themselves at a package threshold (≥ 1). */
     cron: { enabled: boolean; threshold: number; rotate: boolean };
   };
   lastSeen: number;
   createdAt: number;
 }
+
+/** Default thresholds of the Fork bot (contributors) and crontab (packages), since v0.6.7. */
+export const FORK_BOT_DEFAULT = 50;
+export const CRON_DEFAULT = 30;
 
 export const SAVE_VERSION = 16;
 export const SAVE_KEY = "overcompile-save";
@@ -154,7 +158,7 @@ function browserLang(): Lang {
 export function newMarket(): GameState["market"] {
   return {
     unlocked: false, installs: 0, seed: (Math.random() * 2 ** 32) >>> 0, nextUid: 1, modules: [], loaded: [],
-    autoRecycle: false, crates: [], autoOpen: false, cratesBought: 0, cron: { enabled: true, threshold: 0, rotate: false },
+    autoRecycle: false, crates: [], autoOpen: false, cratesBought: 0, cron: { enabled: true, threshold: CRON_DEFAULT, rotate: false },
   };
 }
 
@@ -203,7 +207,7 @@ export function newState(): GameState {
     distroTalents: [],
     flavor: null,
     flavorsDone: [],
-    autoFork: { enabled: true, threshold: 0 },
+    autoFork: { enabled: true, threshold: FORK_BOT_DEFAULT },
     autoStars: true,
     autoContrib: true,
     autoChal: true,
@@ -261,6 +265,9 @@ export function deserialize(json: string): GameState {
     loaded: [...(raw.market?.loaded ?? [])],
     crates: Array.isArray(raw.market?.crates) ? raw.market.crates.map((m: KModule) => ({ ...m, effects: m.effects.map(e => ({ ...e })) })) : [],
   };
+  // v0.6.7: no more "when the advisor says" mode (threshold 0): bots only work at a threshold
+  if (!(s.autoFork.threshold >= 1)) s.autoFork.threshold = FORK_BOT_DEFAULT;
+  if (!(s.market.cron.threshold >= 1)) s.market.cron.threshold = CRON_DEFAULT;
   // v0.2.2–0.2.4 first-run objectives became the first tiers of the achievement chains
   if (!raw.achClaimed) {
     const map: Record<string, string> = {
