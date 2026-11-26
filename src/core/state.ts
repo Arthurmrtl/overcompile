@@ -131,6 +131,8 @@ export interface GameState {
     crates: KModule[];
     /** Open crates as they come, without the roulette (switch next to the crates). */
     autoOpen: boolean;
+    /** v0.6.6: crates bought with packages (their price grows with it). */
+    cratesBought: number;
     /** Milestone 5 %: distros publish themselves at a package threshold (0: when the advisor says). */
     cron: { enabled: boolean; threshold: number; rotate: boolean };
   };
@@ -138,7 +140,7 @@ export interface GameState {
   createdAt: number;
 }
 
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -152,7 +154,7 @@ function browserLang(): Lang {
 export function newMarket(): GameState["market"] {
   return {
     unlocked: false, installs: 0, seed: (Math.random() * 2 ** 32) >>> 0, nextUid: 1, modules: [], loaded: [],
-    autoRecycle: false, crates: [], autoOpen: false, cron: { enabled: true, threshold: 0, rotate: false },
+    autoRecycle: false, crates: [], autoOpen: false, cratesBought: 0, cron: { enabled: true, threshold: 0, rotate: false },
   };
 }
 
@@ -352,6 +354,10 @@ function migrate(s: GameState, from: number) {
     // v0.5.16 → v0.6.0: Market (chapter 1). Empty; it opens on its own if the four flavors are done
     s.market = newMarket();
     s.stats.modulesFound = 0;
+  }
+  if (from < 16) {
+    // v0.6.5 → v0.6.6: crates bought with packages
+    s.market.cratesBought = 0;
   }
   if (from < 15) {
     // v0.6.3 → v0.6.4: crates (loot roulette); nothing waiting yet

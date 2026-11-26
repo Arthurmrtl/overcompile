@@ -696,3 +696,4 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .mk-crates-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--orange); border-radius: 8px; background: #2a160b; }
 .mk-crate-n { font-weight: 700; color: var(--orange); margin-right: auto; }
 .mk-crates .switch span { color: var(--orange); }
+.mk-shop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
