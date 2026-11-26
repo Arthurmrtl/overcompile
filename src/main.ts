@@ -15,7 +15,7 @@ import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./core/challenges";
 import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { GEN_KEYS, type GameState, type GenKey, HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import {
-  type EffectKey, type KModule, type MilestoneId, EFFECT_KEYS, MARKET, MILESTONES, MILESTONE_BY_ID, MODULE_NAMES, RARITIES, RARITY_CHANCE, canFuse, levelMult, loadedModules,
+  type EffectKey, type KModule, type MilestoneId, EFFECT_KEYS, MARKET, MILESTONES, MILESTONE_BY_ID, MODULE_NAMES, RARITIES, RARITY_CHANCE, canFuse, cratePrice, levelMult, loadedModules, recompileCost,
   marketShare, moduleBonus, moduleScore, moduleSlots, nextMilestone, reached, recycleValue, sliceCost,
 } from "./core/market";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
@@ -39,7 +39,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.5";
+const GAME_VERSION = "0.6.6";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -362,6 +362,7 @@ function buildLayout() {
             <button class="btn small mk-open" data-r="mkOpen">${t("mk.crate.open")}</button>
             <button class="btn small" data-r="mkOpenAll">${t("mk.crate.openall")}</button>
           </div>
+          <div class="mk-shop"><button class="btn small mk-open" data-r="mkBuy"></button><span class="muted small">${t("mk.shop.desc")}</span></div>
           <label class="switch small"><input type="checkbox" data-r="mkAutoOpen"><span>${t("mk.crate.auto")}</span></label>
         </div>
         <h3 data-r="mkLoadedH"></h3>
@@ -610,6 +611,7 @@ function bindLayout() {
   });
   $("[data-r=mkBest]").addEventListener("click", () => cmd.run("modprobe --best", true));
   $("[data-r=mkOpen]").addEventListener("click", () => openCrateRoulette());
+  $("[data-r=mkBuy]").addEventListener("click", () => cmd.run("modules buy", true));
   $("[data-r=mkOpenAll]").addEventListener("click", () => cmd.run("modules open all", true));
   $<HTMLInputElement>("[data-r=mkAutoOpen]").addEventListener("change", () => cmd.run("modules autoopen", true));
   $<HTMLInputElement>("[data-r=mkAutoRec]").addEventListener("change", () => cmd.run("modules autorecycle", true));
@@ -1413,6 +1415,7 @@ function moduleCard(s: GameState, m: KModule, loaded: boolean): HTMLElement {
     btn(t("mk.load"), `modprobe ${m.uid}`, full, full ? t("mk.full") : "");
     btn(t("mk.recycle", { n: recycleValue(m) }), `modules recycle ${m.uid}`);
   }
+  btn(t("mk.recompile", { n: recompileCost(m) }), `modules recompile ${m.uid}`, s.packages < recompileCost(m), t("mk.recompile.hint"));
   if (reached(s, "fuse")) {
     const dup = s.market.modules.filter(x => !s.market.loaded.includes(x.uid) && canFuse(s, m, x) && moduleScore(x) <= moduleScore(m))
       .sort((a, b) => moduleScore(a) - moduleScore(b))[0];
@@ -1481,6 +1484,11 @@ function renderMarketTab() {
   const row = $("[data-r=mkCrateRow]");
   if (row.hidden === nCrates > 0) row.hidden = nCrates === 0;
   setText($("[data-r=mkCrateN]"), t("mk.crate.n", { n: nCrates }));
+  const buy = $<HTMLButtonElement>("[data-r=mkBuy]");
+  const price = cratePrice(s);
+  setText(buy, t("mk.shop.buy", { n: fmtInt(price) }));
+  const canBuy = s.packages >= price;
+  if (buy.disabled === canBuy) { buy.disabled = !canBuy; toggleClass(buy, "off", !canBuy); }
   const ao = $<HTMLInputElement>("[data-r=mkAutoOpen]");
   if (ao.checked !== s.market.autoOpen) ao.checked = s.market.autoOpen;
   const sh = marketShare(s);
@@ -1503,7 +1511,7 @@ function renderMarketTab() {
   setText($("[data-r=mkBonus]"), bonus.length ? t("mk.bonus", { b: bonus.map(([k, v]) => effectText(k, v)).join(" · ") }) : "");
   const box = $<HTMLInputElement>("[data-r=mkAutoRec]");
   if (box.checked !== s.market.autoRecycle) box.checked = s.market.autoRecycle;
-  const key = `${Math.floor(sh.pct)}|${JSON.stringify(s.market.modules.map(m => [m.uid, m.level]))}|${s.market.loaded.join(",")}|${s.settings.lang}`;
+  const key = `${Math.floor(sh.pct)}|${JSON.stringify(s.market.modules.map(m => [m.uid, m.level, m.effects]))}|${s.market.loaded.join(",")}|${s.settings.lang}|${Math.floor(s.packages)}`;
   if (key === marketTabKey) return;
   marketTabKey = key;
   $("[data-r=mkTicks]").replaceChildren(...MILESTONES.filter(m => m.pct > 0 && m.pct < 100).map(m =>

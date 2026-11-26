@@ -8,7 +8,7 @@ import type { GameState } from "./state";
  * - **market share**: a gauge from 0 to 100 % that never goes down. Every distro published once
  *   the Market is open adds **installs** (packages of that distro × module bonuses); the gauge is
  *   cut into 10 slices of 10 %, each one costs more installs than the one before. At 100 %, the
- *   chapter ends (end screen in v0.6.7) and the game goes on.
+ *   chapter ends (end screen in v0.6.8) and the game goes on.
  * - **milestones** on the gauge unlock things (module slots, crontab, fusion, Dual boot…), with
  *   the same fog as the trees: only the next one is shown.
  * - **kernel modules**: loot. Every distro compiles a random module (rarity, 1–3 effects); only
@@ -53,7 +53,7 @@ export function marketShare(s: GameState): { pct: number; slice: number; inSlice
 /* ---------------- Milestones ---------------- */
 export type MilestoneId = "modules" | "crontab" | "slot2" | "fuse" | "slot3" | "dualboot" | "luck" | "slot4" | "nixos" | "slot5" | "press" | "end";
 export interface Milestone { id: MilestoneId; pct: number; ready: boolean }
-/** `ready: false` = announced on the gauge, delivered in a later version (Dual boot v0.6.6, NixOS and the end screen v0.6.7). */
+/** `ready: false` = announced on the gauge, delivered in a later version (Dual boot v0.6.7, NixOS and the end screen v0.6.8). */
 export const MILESTONES: Milestone[] = [
   { id: "modules", pct: 0, ready: true },
   { id: "crontab", pct: 5, ready: true },
@@ -153,6 +153,23 @@ export function moduleScore(m: KModule): number {
   return m.effects.reduce((a, e) => a + (e.v / EFFECT_BASE[e.k]) * EFFECT_BASE.installs * w[e.k], 0) * levelMult(m);
 }
 export const recycleValue = (m: KModule) => RECYCLE_PACKAGES[m.rarity] * m.level;
+
+/* ---------------- Package shop (v0.6.6) ----------------
+ * Arthur: "quand on est au stade du Marché, la monnaie des distro ne sert plus à rien ?". Once the Distro tree
+ * is done, packages in hand had nothing left to buy. They now buy extra crates (price ×1.15 per crate bought,
+ * never reset: a sink that keeps the chapter length) and re-roll a module's effects ("recompile"). */
+export const CRATE_SHOP = { base: 10, growth: 1.15 };
+export const cratePrice = (s: GameState) => Math.round(CRATE_SHOP.base * Math.pow(CRATE_SHOP.growth, s.market.cratesBought));
+/** Re-rolling a module's effects (rarity and level kept), by rarity. */
+export const RECOMPILE_COST = [3, 6, 15, 40];
+export const recompileCost = (m: KModule) => RECOMPILE_COST[m.rarity];
+
+/** New effects for a module, same rarity and level (seeded, like any roll). */
+export function rerollEffects(s: GameState, m: KModule) {
+  const fresh = rollModule(s, m.rarity);
+  s.market.nextUid--; // the fresh module was only used for its effects
+  m.effects = fresh.effects;
+}
 
 /** Installs paid by a distro that paid `packages`. */
 export const installsFor = (s: GameState, packages: number) =>

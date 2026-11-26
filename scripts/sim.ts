@@ -79,6 +79,9 @@ function spendPackages() {
     if (!dt) break;
     e.buyDistroTalent(dt.id);
   }
+  // v0.6.6: once the Distro tree is done, packages buy crates (NOSHOP=1 to keep them)
+  if (!process.env.NOSHOP && s.market.unlocked && DISTRO_TALENTS.every(x => s.distroTalents.includes(x.id)))
+    while (e.buyCrate()) e.openCrate();
 }
 
 function spendContributors() {

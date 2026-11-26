@@ -16,7 +16,7 @@ import { UPGRADES, UPGRADE_BY_ID, level, offlineCapHours, upgradeMaxed, upgradeP
 import { GEN_KEYS, type GenKey, type HwKey, HW_KEYS, PERK_KEYS, type PerkKey, exportSave, importSave } from "./core/state";
 import { TALENTS, TALENT_BY_ID } from "./core/talents";
 import {
-  type KModule, MARKET, MILESTONES, RARITIES, levelMult, loadedModules, marketShare, moduleSlots, nextMilestone, reached,
+  type KModule, MARKET, cratePrice, recompileCost, MILESTONES, RARITIES, levelMult, loadedModules, marketShare, moduleSlots, nextMilestone, reached,
 } from "./core/market";
 import {
   DISTRO_TALENTS, FLAVORS, type FlavorId, distroRevealed, distroTalentVisibility, forkTreeComplete, hasDistro, nextPackageAt, packagesOnDistro,
@@ -509,6 +509,17 @@ export function createCommands(c: GameCtx) {
         for (let i = 0; i < n; i++) en.openCrate();
         return;
       }
+      if (sub === "buy") {
+        const price = cratePrice(s);
+        if (!en.buyCrate()) return void say(t("mk.shop.poor", { n: fmtInt(price) }));
+        return void say(OK, " " + t("mk.shop.bought", { n: fmtInt(price) }));
+      }
+      if (sub === "recompile") {
+        const mod = s.market.modules.find(m => m.uid === num(a));
+        if (!mod) return void say(t("mk.usage"));
+        if (!en.recompileModule(mod.uid)) return void say(t("mk.shop.poor", { n: fmtInt(recompileCost(mod)) }));
+        return void sayModule(mod, s.market.loaded.includes(mod.uid));
+      }
       if (sub === "autoopen") {
         s.market.autoOpen = !s.market.autoOpen;
         if (s.market.autoOpen) while (s.market.crates.length) en.openCrate();
@@ -522,7 +533,7 @@ export function createCommands(c: GameCtx) {
       say(["[MODULES]", "c-bold"], `  ${t("mk.inv", { n: s.market.modules.length, m: MARKET.inventory })}`);
       for (const m of s.market.modules) sayModule(m, s.market.loaded.includes(m.uid));
       if (s.market.crates.length) say("  " + t("mk.crate.n", { n: s.market.crates.length }));
-      say(["  modprobe <#> · rmmod <#> · modules recycle <#> · modules fuse <#> <#> · modules open [all] · modules autorecycle · modules autoopen", "c-dim"]);
+      say(["  modprobe <#> · rmmod <#> · modules recycle <#> · modules fuse <#> <#> · modules open [all] · modules buy · modules recompile <#> · modules autorecycle · modules autoopen", "c-dim"]);
     },
     modprobe(args) {
       const en = e();

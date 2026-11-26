@@ -20,7 +20,7 @@ import {
 } from "./distro";
 import { DistroAdvisor, ForkAdvisor } from "./advisor";
 import {
-  type KModule, FLAVOR_ORDER, canFuse, installsFor, loadedModules, marketOpen, marketReady, marketShare, MILESTONES, moduleScore,
+  type KModule, FLAVOR_ORDER, canFuse, cratePrice, recompileCost, rerollEffects, installsFor, loadedModules, marketOpen, marketReady, marketShare, MILESTONES, moduleScore,
   moduleSlots, reached, recycleValue, rollModule, MARKET,
 } from "./market";
 import {
@@ -896,6 +896,30 @@ export class Engine {
     if (m.autoOpen) { this.emit({ t: "crate", mod, auto: true }); this.addModule(mod); return; }
     m.crates.push(mod);
     this.emit({ t: "crate", mod, auto });
+  }
+
+  /** v0.6.6: buys a crate with packages; it is opened like any other (the roulette pops up in the UI). */
+  buyCrate(): boolean {
+    const s = this.s;
+    if (!s.market.unlocked) return false;
+    const price = cratePrice(s);
+    if (s.packages < price) return false;
+    s.packages -= price;
+    s.market.cratesBought++;
+    this.dropCrate(rollModule(s), false);
+    return true;
+  }
+
+  /** v0.6.6: re-rolls a module's effects (rarity and level kept) for packages. */
+  recompileModule(uid: number): boolean {
+    const s = this.s;
+    const mod = s.market.modules.find(m => m.uid === uid);
+    if (!mod) return false;
+    const cost = recompileCost(mod);
+    if (s.packages < cost) return false;
+    s.packages -= cost;
+    rerollEffects(s, mod);
+    return true;
   }
 
   /** Opens the first crate (or the one with this uid): its module goes to the inventory. */
