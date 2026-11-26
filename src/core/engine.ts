@@ -877,7 +877,7 @@ export class Engine {
 
   /** v0.6.4 (Arthur: "une roulette de loot, exactement comme sur CS quand on ouvre une caisse"): a new module
    *  comes in a crate. It is already rolled (the roulette only shows it), and waits until it is opened,
-   *  unless the "open on their own" switch is on. `auto`: distro published by crontab (no roulette pops up). */
+   *  unless the "open on their own" switch is on. Since v0.6.9 no crate pops the roulette on its own (`auto` is informative). */
   private dropCrate(mod: KModule, auto = false) {
     const m = this.s.market;
     this.s.stats.modulesFound++;

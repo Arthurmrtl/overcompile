@@ -39,7 +39,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.8";
+const GAME_VERSION = "0.6.9";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -2113,8 +2113,7 @@ engine.on((e: GameEvent) => {
     case "crate":
       if (engine.s.market.autoOpen) break; // the "module" line follows at once
       term.println(["[ MOD ]", "c-orange"], " " + t("mk.crate.log", { n: engine.s.market.crates.length }));
-      // A distro published by hand: the roulette pops up right away (crontab ones wait in the Market tab)
-      if (!e.auto && document.visibilityState === "visible") setTimeout(() => openCrateRoulette(), 700);
+      // v0.6.9 (Arthur): every crate waits in the Market tab, even after a distro published by hand
       marketTabKey = "";
       break;
     case "module": {
