@@ -39,7 +39,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.8";
+const GAME_VERSION = "0.6.9";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -359,7 +359,6 @@ function buildLayout() {
             <button class="btn small" data-r="mkOpenAll">${t("mk.crate.openall")}</button>
           </div>
           <div class="mk-shop"><button class="btn small mk-open" data-r="mkBuy"></button><span class="muted small">${t("mk.shop.desc")}</span></div>
-          <label class="switch small"><input type="checkbox" data-r="mkAutoOpen"><span>${t("mk.crate.auto")}</span></label>
         </div>
         <h3 data-r="mkLoadedH"></h3>
         <p class="muted small">${t("mk.loaded.desc")}</p>
@@ -609,7 +608,6 @@ function bindLayout() {
   $("[data-r=mkOpen]").addEventListener("click", () => openCrateRoulette());
   $("[data-r=mkBuy]").addEventListener("click", () => cmd.run("modules buy", true));
   $("[data-r=mkOpenAll]").addEventListener("click", () => cmd.run("modules open all", true));
-  $<HTMLInputElement>("[data-r=mkAutoOpen]").addEventListener("change", () => cmd.run("modules autoopen", true));
   $<HTMLInputElement>("[data-r=mkAutoRec]").addEventListener("change", () => cmd.run("modules autorecycle", true));
   $("[data-a=settings]").addEventListener("click", () => openSettings());
   $<HTMLInputElement>("[data-r=botOn]").addEventListener("change", () => cmd.run("toggle release_bot", true));
@@ -1476,8 +1474,6 @@ function renderMarketTab() {
   setText(buy, t("mk.shop.buy", { n: fmtInt(price) }));
   const canBuy = s.packages >= price;
   if (buy.disabled === canBuy) { buy.disabled = !canBuy; toggleClass(buy, "off", !canBuy); }
-  const ao = $<HTMLInputElement>("[data-r=mkAutoOpen]");
-  if (ao.checked !== s.market.autoOpen) ao.checked = s.market.autoOpen;
   const sh = marketShare(s);
   setText($("[data-r=mkBig]"), `${sh.pct.toFixed(2)} %`);
   $("[data-r=mkFill]").style.width = `${sh.pct}%`;
@@ -2111,10 +2107,8 @@ engine.on((e: GameEvent) => {
       marketTabKey = "";
       break;
     case "crate":
-      if (engine.s.market.autoOpen) break; // the "module" line follows at once
       term.println(["[ MOD ]", "c-orange"], " " + t("mk.crate.log", { n: engine.s.market.crates.length }));
-      // A distro published by hand: the roulette pops up right away (crontab ones wait in the Market tab)
-      if (!e.auto && document.visibilityState === "visible") setTimeout(() => openCrateRoulette(), 700);
+      // v0.6.9 (Arthur): every crate waits in the Market tab, even after a distro published by hand
       marketTabKey = "";
       break;
     case "module": {
