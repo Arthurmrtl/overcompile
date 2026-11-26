@@ -129,8 +129,6 @@ export interface GameState {
     autoRecycle: boolean;
     /** v0.6.4: modules already rolled, waiting in their crate (opened with the roulette). */
     crates: KModule[];
-    /** Open crates as they come, without the roulette (switch next to the crates). */
-    autoOpen: boolean;
     /** v0.6.6: crates bought with packages (their price grows with it). */
     cratesBought: number;
     /** Milestone 5 %: distros publish themselves at a package threshold (≥ 1). */
@@ -144,7 +142,7 @@ export interface GameState {
 export const FORK_BOT_DEFAULT = 50;
 export const CRON_DEFAULT = 30;
 
-export const SAVE_VERSION = 16;
+export const SAVE_VERSION = 17;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -158,7 +156,7 @@ function browserLang(): Lang {
 export function newMarket(): GameState["market"] {
   return {
     unlocked: false, installs: 0, seed: (Math.random() * 2 ** 32) >>> 0, nextUid: 1, modules: [], loaded: [],
-    autoRecycle: false, crates: [], autoOpen: false, cratesBought: 0, cron: { enabled: true, threshold: CRON_DEFAULT, rotate: false },
+    autoRecycle: false, crates: [], cratesBought: 0, cron: { enabled: true, threshold: CRON_DEFAULT, rotate: false },
   };
 }
 
@@ -362,6 +360,10 @@ function migrate(s: GameState, from: number) {
     s.market = newMarket();
     s.stats.modulesFound = 0;
   }
+  if (from < 17) {
+    // v0.6.8 → v0.6.9: the "open crates as they come" switch is gone (Arthur); every crate waits
+    delete (s.market as { autoOpen?: boolean }).autoOpen;
+  }
   if (from < 16) {
     // v0.6.5 → v0.6.6: crates bought with packages
     s.market.cratesBought = 0;
@@ -369,7 +371,6 @@ function migrate(s: GameState, from: number) {
   if (from < 15) {
     // v0.6.3 → v0.6.4: crates (loot roulette); nothing waiting yet
     s.market.crates = [];
-    s.market.autoOpen = false;
   }
   if (from < 14) {
     // v0.6.1 → v0.6.2: switch of the Distro talent `mtx` (Test matrix), on by default

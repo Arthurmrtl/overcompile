@@ -881,7 +881,6 @@ export class Engine {
   private dropCrate(mod: KModule, auto = false) {
     const m = this.s.market;
     this.s.stats.modulesFound++;
-    if (m.autoOpen) { this.emit({ t: "crate", mod, auto: true }); this.addModule(mod); return; }
     m.crates.push(mod);
     this.emit({ t: "crate", mod, auto });
   }

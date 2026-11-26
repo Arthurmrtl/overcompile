@@ -520,11 +520,6 @@ export function createCommands(c: GameCtx) {
         if (!en.recompileModule(mod.uid)) return void say(t("mk.shop.poor", { n: fmtInt(recompileCost(mod)) }));
         return void sayModule(mod, s.market.loaded.includes(mod.uid));
       }
-      if (sub === "autoopen") {
-        s.market.autoOpen = !s.market.autoOpen;
-        if (s.market.autoOpen) while (s.market.crates.length) en.openCrate();
-        return void say(OK, " " + t("mk.crate.auto.state", { s: s.market.autoOpen ? t("perk.enabled") : t("perk.disabled") }));
-      }
       if (sub === "autorecycle") {
         s.market.autoRecycle = !s.market.autoRecycle;
         return void say(OK, " " + t("mk.autorecycle.state", { s: s.market.autoRecycle ? t("perk.enabled") : t("perk.disabled") }));
@@ -533,7 +528,7 @@ export function createCommands(c: GameCtx) {
       say(["[MODULES]", "c-bold"], `  ${t("mk.inv", { n: s.market.modules.length, m: MARKET.inventory })}`);
       for (const m of s.market.modules) sayModule(m, s.market.loaded.includes(m.uid));
       if (s.market.crates.length) say("  " + t("mk.crate.n", { n: s.market.crates.length }));
-      say(["  modprobe <#> · rmmod <#> · modules recycle <#> · modules fuse <#> <#> · modules open [all] · modules buy · modules recompile <#> · modules autorecycle · modules autoopen", "c-dim"]);
+      say(["  modprobe <#> · rmmod <#> · modules recycle <#> · modules fuse <#> <#> · modules open [all] · modules buy · modules recompile <#> · modules autorecycle", "c-dim"]);
     },
     modprobe(args) {
       const en = e();
