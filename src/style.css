@@ -26,6 +26,7 @@ body {
 }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:disabled { cursor: not-allowed; }
+.btn:disabled { opacity: .45; }
 input, select, textarea { font: inherit; color: var(--fg); background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 6px; padding: 6px 8px; }
 textarea { width: 100%; resize: vertical; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
@@ -689,6 +690,7 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 @keyframes rl-pop { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .rl-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .btn.mk-open { border-color: var(--orange); color: var(--orange); }
+.btn.mk-open:disabled { border-color: var(--border); color: var(--dim); }
 .mk-crates { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .mk-crates-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--orange); border-radius: 8px; background: #2a160b; }
 .mk-crate-n { font-weight: 700; color: var(--orange); margin-right: auto; }
