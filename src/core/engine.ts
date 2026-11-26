@@ -886,7 +886,8 @@ export class Engine {
     this.emit({ t: "crate", mod, auto });
   }
 
-  /** v0.6.6: buys a crate with packages; it is opened like any other (the roulette pops up in the UI). */
+  /** v0.6.6: buys a crate with packages. v0.6.8 (Arthur): it waits with the other crates in the Market tab
+   *  instead of popping the roulette, so several can be bought then opened. */
   buyCrate(): boolean {
     const s = this.s;
     if (!s.market.unlocked) return false;
@@ -894,7 +895,7 @@ export class Engine {
     if (s.packages < price) return false;
     s.packages -= price;
     s.market.cratesBought++;
-    this.dropCrate(rollModule(s), false);
+    this.dropCrate(rollModule(s), true);
     return true;
   }
 
