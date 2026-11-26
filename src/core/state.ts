@@ -134,15 +134,38 @@ export interface GameState {
     /** Milestone 5 %: distros publish themselves at a package threshold (≥ 1). */
     cron: { enabled: boolean; threshold: number; rotate: boolean };
   };
+  /** v0.6.11: what the absences brought — the last one, and the total since v0.6.11 (Stats tab). */
+  offlineLast: OfflineRecord | null;
+  offlineTotal: OfflineRecord;
   lastSeen: number;
   createdAt: number;
 }
+
+/** One absence (or the sum of them). Credits and stars as strings: they can outgrow a number. */
+export interface OfflineRecord {
+  at: number;        // when it was counted (ms)
+  away: number;      // real time away (s)
+  counted: number;   // time actually simulated (s): grace + capped time × efficiency
+  eff: number;       // efficiency beyond the grace period (last absence only)
+  credits: string;
+  releases: number;
+  stars: string;
+  forks: number;
+  contributors: number;
+  distros: number;
+  packages: number;
+  installs: number;
+  modules: number;
+}
+export const newOfflineRecord = (): OfflineRecord => ({
+  at: 0, away: 0, counted: 0, eff: 0, credits: "0", releases: 0, stars: "0", forks: 0, contributors: 0, distros: 0, packages: 0, installs: 0, modules: 0,
+});
 
 /** Default thresholds of the Fork bot (contributors) and crontab (packages), since v0.6.7. */
 export const FORK_BOT_DEFAULT = 50;
 export const CRON_DEFAULT = 30;
 
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -210,6 +233,8 @@ export function newState(): GameState {
     autoContrib: true,
     autoChal: true,
     market: newMarket(),
+    offlineLast: null,
+    offlineTotal: newOfflineRecord(),
     lastSeen: now,
     createdAt: now,
   };
@@ -240,6 +265,8 @@ export function deserialize(json: string): GameState {
     autoRelease: { ...base.autoRelease, ...raw.autoRelease },
     autoFork: { ...base.autoFork, ...raw.autoFork },
     stats: { ...base.stats, ...raw.stats },
+    offlineLast: raw.offlineLast ? { ...newOfflineRecord(), ...raw.offlineLast } : null,
+    offlineTotal: { ...newOfflineRecord(), ...raw.offlineTotal },
     settings: { ...base.settings, ...raw.settings },
   };
   for (const f of DECIMAL_FIELDS) s[f] = new Decimal(raw[f] ?? 0);
@@ -359,6 +386,11 @@ function migrate(s: GameState, from: number) {
     // v0.5.16 → v0.6.0: Market (chapter 1). Empty; it opens on its own if the four flavors are done
     s.market = newMarket();
     s.stats.modulesFound = 0;
+  }
+  if (from < 18) {
+    // v0.6.10 → v0.6.11: offline stats (nothing recorded before)
+    s.offlineLast = null;
+    s.offlineTotal = newOfflineRecord();
   }
   if (from < 17) {
     // v0.6.8 → v0.6.9: the "open crates as they come" switch is gone (Arthur); every crate waits

@@ -23,7 +23,7 @@ import {
   moduleSlots, reached, recycleValue, rollModule, MARKET,
 } from "./market";
 import {
-  type BuyAmount, type GameState, type GenKey, type HwKey, type PerkKey, SAVE_KEY, GEN_KEYS, deserialize, newState, serialize,
+  type BuyAmount, type GameState, type GenKey, type HwKey, type OfflineRecord, type PerkKey, SAVE_KEY, GEN_KEYS, deserialize, newState, serialize,
 } from "./state";
 
 export type GameEvent =
@@ -1134,6 +1134,7 @@ export class Engine {
     this.tap = null;
     // Play time counts real time, not simulated time
     s.stats.playTime += seconds - simulated;
+    if (seconds >= 60) this.recordOffline(seconds, simulated, eff, got);
     return {
       away: seconds,
       grace,
@@ -1145,6 +1146,23 @@ export class Engine {
       builds: s.stats.builds - before.builds,
       fails: s.stats.fails - before.fails,
       gains: got,
+    };
+  }
+
+  /** v0.6.11: keeps the last absence and the running total for the Stats tab. */
+  private recordOffline(away: number, counted: number, eff: number, g: OfflineGains) {
+    const s = this.s;
+    const rec: OfflineRecord = {
+      at: Date.now(), away, counted, eff, credits: g.credits.toString(), releases: g.releases, stars: g.stars.toString(),
+      forks: g.forks, contributors: g.contributors, distros: g.distros, packages: g.packages, installs: g.installs, modules: g.modules,
+    };
+    s.offlineLast = rec;
+    const tot = s.offlineTotal;
+    s.offlineTotal = {
+      at: rec.at, away: tot.away + away, counted: tot.counted + counted, eff: 0,
+      credits: new Decimal(tot.credits).add(g.credits).toString(), releases: tot.releases + g.releases,
+      stars: new Decimal(tot.stars).add(g.stars).toString(), forks: tot.forks + g.forks, contributors: tot.contributors + g.contributors,
+      distros: tot.distros + g.distros, packages: tot.packages + g.packages, installs: tot.installs + g.installs, modules: tot.modules + g.modules,
     };
   }
 

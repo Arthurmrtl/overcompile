@@ -8,11 +8,11 @@ import { Engine, type GameEvent, MATRIX_HANDS, MATRIX_TIMEOUT, type OfflineGains
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
 import {
   HW, JOBS_PRIO_STEPS, autoScaleInterval, perkLocked, perkPrice, bulkPrice, buildTime, challengeGoal, earnedForStars, expectedRate,
-  failProbability, diskCacheMult, genRequired, gensRevealed, has, maxAffordable, totalGens, nextStarAt, offlineEfficiency, offlineUnlocked, on, releaseBase,
+  failProbability, diskCacheMult, genRequired, gensRevealed, has, maxAffordable, totalGens, nextStarAt, offlineCapSeconds, offlineEfficiency, offlineUnlocked, on, releaseBase,
   reward, rewardMultiplier, starMultiplier, starsOnRelease, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./core/challenges";
-import { UPGRADES, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
+import { UPGRADES, level, offlineCapHours, offlineEff, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { GEN_KEYS, type GameState, type GenKey, HW_KEYS, PERK_KEYS, type HwKey, exportSave, importSave } from "./core/state";
 import {
   type EffectKey, type KModule, type MilestoneId, EFFECT_KEYS, MARKET, MILESTONES, MILESTONE_BY_ID, MODULE_NAMES, RARITIES, RARITY_CHANCE, canFuse, cratePrice, levelMult, loadedModules, recompileCost,
@@ -29,7 +29,7 @@ import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 import { type Advice, type DistroAdvice, DistroAdvisor, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
 import {
-  DISTRO_PCT, DISTRO_TALENTS, DISTRO_TALENT_BY_ID, FLAVORS, type Flavor, distroRevealed, distroTalentVisibility,
+  DISTRO_PCT, DISTRO_TALENTS, DISTRO_TALENT_BY_ID, FLAVORS, FLAVOR_DONE, type Flavor, distroRevealed, flavorDone, flavorOf, distroTalentVisibility,
   forkTreeComplete, hasDistro, NEXT_DISTRO_TALENTS, NEXT_FORK_DISTRO_TALENTS, nextPackageAt, packagesExact, packagesGainsMult, packagesOnDistro, UPSTREAM_PACKAGES,
 } from "./core/distro";
 import {
@@ -39,7 +39,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.10";
+const GAME_VERSION = "0.6.11";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -1715,58 +1715,120 @@ function confirmDistro() {
   );
 }
 
+/** One stats row: [label key, value], or a section title ["#", key]. */
+type StatRow = [string, string];
+const sec = (k: string): StatRow => ["#", k];
+
+/** v0.6.11: offline efficiency split by source, so module choices can be judged. */
+function offlineParts(s: GameState) {
+  const parts: [string, number][] = [];
+  if (!offlineUnlocked(s)) return { parts, raw: 0, eff: 0 };
+  parts.push([t("so.src.opt"), offlineEff(s)]);
+  if (flavorOf(s).offlineEff) parts.push([t("so.src.flavor"), flavorOf(s).offlineEff]);
+  if (flavorDone(s, "desktop")) parts.push([t("so.src.done"), FLAVOR_DONE.desktop]);
+  const mod = moduleBonus(s, "offline");
+  if (mod) parts.push([t("so.src.modules"), mod]);
+  const raw = parts.reduce((a, [, v]) => a + v, 0);
+  return { parts, raw, eff: offlineEfficiency(s) };
+}
+const pts = (v: number) => `${Math.round(v * 100)} %`;
+const perHour = (n: number, sec: number) => sec > 0 ? n / (sec / 3600) : 0;
+
+function offlineRows(s: GameState): StatRow[] {
+  if (!offlineUnlocked(s)) return [sec("so.title"), ["so.eff", t("st.offline.locked")]];
+  const { parts, raw, eff } = offlineParts(s);
+  const rows: StatRow[] = [sec("so.title")];
+  rows.push(["so.eff", pts(eff)]);
+  for (const [label, v] of parts) rows.push([`  ${label}`, `+${pts(v)}`]);
+  if (raw > 1.0001) rows.push(["so.wasted", pts(raw - 1)]);
+  const capH = offlineCapSeconds(s) / 3600;
+  rows.push(["so.cap", flavorOf(s).offlineHours > 1 ? `${capH} h (${offlineCapHours(s)} h ×${flavorOf(s).offlineHours})` : `${capH} h`]);
+  rows.push(["so.rate", `${fmt(expectedRate(s).mul(eff))}/s`]);
+  const last = s.offlineLast;
+  if (last) {
+    rows.push(sec("so.last"));
+    rows.push(["so.last.when", t("so.ago", { t: fmtTime((Date.now() - last.at) / 1000) })]);
+    rows.push(["so.last.away", `${fmtTime(last.away)} · ${pts(last.eff)}`]);
+    rows.push(["st.earned_short", fmt(new Decimal(last.credits))]);
+    if (last.releases) rows.push(["so.releases", `${fmtInt(last.releases)} · +${fmt(new Decimal(last.stars))} ⭐`]);
+    if (last.forks) rows.push(["so.forks", `${fmtInt(last.forks)} · +${fmtInt(last.contributors)} ⑂`]);
+    if (last.distros) rows.push(["so.distros", `${fmtInt(last.distros)} · +${fmtInt(last.packages)} ▣`]);
+    if (last.installs) rows.push(["so.installs", t("so.perh", { n: fmtInt(Math.round(last.installs)), r: fmtInt(Math.round(perHour(last.installs, last.away))) })]);
+    if (last.modules) rows.push(["so.modules", fmtInt(last.modules)]);
+  }
+  const tot = s.offlineTotal;
+  if (tot.away > 0) {
+    rows.push(sec("so.total"));
+    rows.push(["so.total.away", fmtTime(tot.away)]);
+    rows.push(["st.earned_short", fmt(new Decimal(tot.credits))]);
+    if (tot.distros) rows.push(["so.distros", `${fmtInt(tot.distros)} · +${fmtInt(tot.packages)} ▣`]);
+    if (tot.installs) rows.push(["so.installs", t("so.perh", { n: fmtInt(Math.round(tot.installs)), r: fmtInt(Math.round(perHour(tot.installs, tot.away))) })]);
+    if (tot.modules) rows.push(["so.modules", fmtInt(tot.modules)]);
+  }
+  return rows;
+}
+
 function renderStats() {
   const s = engine.s;
-  const rows: [string, string][] = [
+  const rows: StatRow[] = [
+    sec("ss.general"),
+    ["st.playtime", fmtTime(s.stats.playTime)],
     ["st.builds", fmtInt(s.stats.builds)],
-    ["st.fails", fmtInt(s.stats.fails)],
-    ["st.success", s.stats.builds ? `${((1 - s.stats.fails / s.stats.builds) * 100).toFixed(1)}%` : "—"],
+    ["st.success", s.stats.builds ? `${((1 - s.stats.fails / s.stats.builds) * 100).toFixed(1)} %` : "—"],
     ["st.earned", fmt(s.totalEarned)],
-    ["st.run_earned", fmt(s.runEarned)],
     ["st.mult", `×${fmt(rewardMultiplier(s))}`],
     ["st.ach_bonus", bonusSummary(engine) || "—"],
-    ["st.playtime", fmtTime(s.stats.playTime)],
+    ["st.events", fmtInt(s.stats.events)],
+    ["st.streak", fmtInt(s.stats.bestStreak)],
+    sec("ss.release"),
     ["st.runtime", fmtTime(s.stats.runTime)],
+    ["st.run_earned", fmt(s.runEarned)],
+    ...(gensRevealed(s) ? [["st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`] as StatRow] : []),
     ["st.releases", fmtInt(s.releases)],
     ["st.lifetime_stars", fmt(s.lifetimeStars)],
-    ["st.events", fmtInt(s.stats.events)],
+    ["st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease)],
+    ["opt.title", `${Object.values(s.upgrades).reduce((a, b) => a + b, 0)}`],
+    ["tab.challenges", `${s.challengesDone.length} / ${CHALLENGES.length}`],
     ...(s.forks > 0 ? [
-      ["st.forks", fmtInt(s.forks)],
-      ["st.contributors", fmtInt(s.lifetimeContributors)],
-      ["st.fastest_fork", s.stats.fastestFork === null ? "—" : fmtTime(s.stats.fastestFork)],
+      sec("ss.fork"),
       ["st.fork_time", fmtTime(s.stats.forkTime)],
-      ["st.prs", fmtInt(s.stats.prsMerged)],
+      ["st.forks", fmtInt(s.forks)],
+      ["st.fastest_fork", s.stats.fastestFork === null ? "—" : fmtTime(s.stats.fastestFork)],
+      ["st.contributors", fmtInt(s.lifetimeContributors)],
+      ["st.all_contributors", fmtInt(s.stats.allContributors)],
       ["st.all_stars", fmt(new Decimal(s.stats.allStars))],
-    ] as [string, string][] : []),
+      ["st.prs", fmtInt(s.stats.prsMerged)],
+    ] as StatRow[] : []),
     ...(s.distros > 0 ? [
-      ["st.distros", fmtInt(s.distros)],
-      ["st.packages", fmtInt(s.lifetimePackages)],
-      ["st.fastest_distro", s.stats.fastestDistro === null ? "—" : fmtTime(s.stats.fastestDistro)],
+      sec("ss.distro"),
       ["st.distro_time", fmtTime(s.stats.distroTime)],
-    ] as [string, string][] : []),
+      ["st.distros", fmtInt(s.distros)],
+      ["st.fastest_distro", s.stats.fastestDistro === null ? "—" : fmtTime(s.stats.fastestDistro)],
+      ["st.packages", fmtInt(s.lifetimePackages)],
+    ] as StatRow[] : []),
     ...(s.market.unlocked ? [
+      sec("ss.market"),
       ["st.market", `${marketShare(s).pct.toFixed(2)} %`],
       ["st.installs", fmtInt(Math.floor(s.market.installs))],
       ["st.modules", fmtInt(s.stats.modulesFound)],
-    ] as [string, string][] : []),
-    ...(gensRevealed(s) ? [
-      ["st.gens", `${totalGens(s)} (CPU ${s.gens.cpu} · RAM ${s.gens.ram} · ${t("hw.disk")} ${s.gens.disk})`] as [string, string],
-      ["st.gens_total", fmtInt(s.stats.gensTotal)] as [string, string],
-    ] : []),
-    ["st.fastest", s.stats.fastestRelease === null ? "—" : fmtTime(s.stats.fastestRelease)],
-    ["st.streak", fmtInt(s.stats.bestStreak)],
-    ["st.interrupts", fmtInt(s.stats.interrupts)],
-    ["st.offline", offlineUnlocked(s) ? t("st.offline.val", { p: Math.round(offlineEfficiency(s) * 100), h: offlineCapHours(s) }) : t("st.offline.locked")],
-    ["opt.title", `${Object.values(s.upgrades).reduce((a, b) => a + b, 0)}`],
-    ["tab.challenges", `${s.challengesDone.length} / ${CHALLENGES.length}`],
+      ["st.crates_bought", fmtInt(s.market.cratesBought)],
+    ] as StatRow[] : []),
+    ...offlineRows(s),
   ];
   const table = $("[data-r=stats]");
-  if (table.childElementCount !== rows.length) {
-    table.replaceChildren(...rows.map(() => h("tr", {}, h("th"), h("td"))));
+  const shape = rows.map(([k]) => (k === "#" ? "#" : ".")).join("");
+  if (table.dataset.shape !== shape) {
+    table.dataset.shape = shape;
+    table.replaceChildren(...rows.map(([k]) => k === "#"
+      ? h("tr", { class: "st-h" }, h("th", { colspan: "2" }))
+      : h("tr", {}, h("th"), h("td"))));
   }
   rows.forEach(([k, v], i) => {
     const tr = table.children[i];
-    setText(tr.children[0], t(k));
+    if (k === "#") { setText(tr.children[0], t(v)); return; }
+    const sub = k.startsWith("  ");
+    setText(tr.children[0], sub ? `· ${k.trim()}` : t(k));
+    toggleClass(tr as HTMLElement, "st-sub", sub);
     setText(tr.children[1], v);
   });
 }
@@ -1948,7 +2010,7 @@ function showOffline(rep: NonNullable<ReturnType<Engine["simulateOffline"]>>) {
     rep.unlocked
       ? h("p", { class: "muted small" }, t("off.eff", { p: Math.round(rep.eff * 100) }))
       : h("p", { class: "muted small" }, t("off.locked")),
-    rep.capped ? h("p", { class: "muted small" }, t("off.capped", { h: offlineCapHours(engine.s) })) : "",
+    rep.capped ? h("p", { class: "muted small" }, t("off.capped", { h: offlineCapSeconds(engine.s) / 3600 })) : "",
     h("ul", { class: "off-list" }, ...items),
   );
   const extra = [
