@@ -210,11 +210,12 @@ export class Engine {
       this.autoScale();
     }
 
-    // Fork talent `ans` (Ansible): stars buy release talents, then optimizations (once a second)
+    // Fork talent `ans` (Ansible): stars buy release talents, then optimizations (4 times a second, v0.6.5;
+    // it also runs right after a release). Challenges no longer stop it, except No cache (tree off).
     this.autoStarsTimer += dt;
-    if (hasFork(s, "f_ansible") && s.autoStars && !s.challenge && this.autoStarsTimer >= 1) {
+    if (this.autoStarsTimer >= 0.25) {
       this.autoStarsTimer = 0;
-      this.autoBuyStars();
+      this.ansibleNow();
     }
 
     // Fork talent `rnv` (Renovate): generations happen on their own, per-hardware switch
@@ -590,6 +591,7 @@ export class Engine {
     this.resetRun();
     this.emit({ t: "release", stars: gain, auto });
     this.checkAchievements();
+    this.ansibleNow(); // the new stars buy the tree at once, before the matrix starts a challenge
     this.matrixStart();
     return gain;
   }
@@ -781,6 +783,12 @@ export class Engine {
   }
 
   /** Fork talent "ans" (Ansible): stars buy release talents (cheapest first), then optimizations (cheapest first). */
+  /** Ansible, if owned and switched on (not during No cache, where the release tree is off). */
+  private ansibleNow() {
+    const s = this.s;
+    if (hasFork(s, "f_ansible") && s.autoStars && s.challenge !== "no_cache") this.autoBuyStars();
+  }
+
   autoBuyStars() {
     const talents: string[] = [];
     let opts = 0;
