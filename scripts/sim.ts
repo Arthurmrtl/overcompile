@@ -168,7 +168,10 @@ while (t < H * 3600) {
   // Fork when the fork advisor says so
   if (!process.env.NOFORK) {
     const fa = forkAdvisor.update(s);
-    if (fa.advised) {
+    // FORK_AT=<n>: fork at a fixed contributor threshold, like the Fork bot (instead of the advisor)
+    const forkAt_ = Number(process.env.FORK_AT ?? 0);
+    const forkNow = forkAt_ > 0 ? s.distros > 0 && fa.pending >= forkAt_ || (s.distros === 0 && fa.advised) : fa.advised;
+    if (forkNow) {
       const cycle = t - cycleStart;
       const stars = s.lifetimeStars.toNumber();
       const gain = e.fork();
@@ -198,7 +201,9 @@ while (t < H * 3600) {
   // Distro when the distro advisor says so
   if (!process.env.NODISTRO) {
     const da = distroAdvisor.update(s);
-    if (da.advised) {
+    // DISTRO_AT=<n>: publish at a fixed package threshold once the Market is open, like crontab (instead of the advisor)
+    const distroAt = Number(process.env.DISTRO_AT ?? 0);
+    if (distroAt > 0 && s.market.unlocked ? da.pending >= distroAt : da.advised) {
       // SAVE_DISTRO=<file>: write the save right before the first distro, then stop
       if (process.env.SAVE_DISTRO && s.distros === 0) {
         writeFileSync(process.env.SAVE_DISTRO, exportSave(s));

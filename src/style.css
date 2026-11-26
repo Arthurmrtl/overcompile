@@ -232,9 +232,7 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
   box-shadow: 0 0 18px #f59e0b22;
 }
 /* Pulses only when the advisor says it is a good time to ship */
-.release-btn.advised { animation: pulse 1.6s ease-in-out infinite; }
 .rel-rate { margin-top: 4px; color: var(--dim); font-variant-numeric: tabular-nums; }
-.rel-rate.on { color: var(--amber); }
 @keyframes pulse { 50% { box-shadow: 0 0 36px #f59e0b55; } }
 .progress { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin: 10px 0 4px; }
 .progress .fill { height: 100%; background: var(--amber); width: 0; transition: width .2s; }
@@ -503,7 +501,6 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 }
 .fork-btn[hidden] { display: none; }
 .fork-btn:disabled { opacity: .4; cursor: default; }
-.fork-btn.advised { animation: pulse 1.6s ease-in-out infinite; }
 .fork-sum { font-size: 12px; color: var(--dim); }
 .pr { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 8px; padding: 6px 0; border-bottom: 1px dotted var(--border); font-size: 12px; }
 .pr-n { color: var(--violet); font-variant-numeric: tabular-nums; }

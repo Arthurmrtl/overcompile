@@ -550,13 +550,12 @@ export function createCommands(c: GameCtx) {
       const c = e().s.market.cron;
       const a = (args[0] ?? "").toLowerCase();
       if (a === "on" || a === "off") c.enabled = a === "on";
-      else if (a === "advisor") c.threshold = 0;
       else if (a === "rotate" || a === "same") c.rotate = a === "rotate";
-      else if (/^\d+$/.test(a)) c.threshold = Number(a);
+      else if (/^\d+$/.test(a) && Number(a) >= 1) c.threshold = Number(a);
       else if (a) return void say(t("mk.cron.usage"));
       say(OK, " " + t("mk.cron.state", {
         s: c.enabled ? t("perk.enabled") : t("perk.disabled"),
-        w: c.threshold > 0 ? t("mk.cron.at", { n: fmtInt(c.threshold) }) : t("mk.cron.adv"),
+        w: t("mk.cron.at", { n: fmtInt(c.threshold) }),
         r: c.rotate ? t("mk.cron.rot") : t("mk.cron.same"),
       }));
     },
@@ -564,12 +563,11 @@ export function createCommands(c: GameCtx) {
       const s = e().s;
       const a = (args[0] ?? "").toLowerCase();
       if (a === "on" || a === "off") s.autoFork.enabled = a === "on";
-      else if (a === "advisor") s.autoFork.threshold = 0;
-      else if (/^\d+$/.test(a)) s.autoFork.threshold = Number(a);
+      else if (/^\d+$/.test(a) && Number(a) >= 1) s.autoFork.threshold = Number(a);
       else if (a) return void say(t("ds.fbot.usage"));
       say(OK, " " + t("ds.fbot.state", {
         s: s.autoFork.enabled ? t("perk.enabled") : t("perk.disabled"),
-        w: s.autoFork.threshold > 0 ? t("ds.fbot.at", { n: fmtInt(s.autoFork.threshold) }) : t("ds.fbot.adv"),
+        w: t("ds.fbot.at", { n: fmtInt(s.autoFork.threshold) }),
       }));
     },
     gh(args) {
@@ -863,7 +861,7 @@ export function createCommands(c: GameCtx) {
     buy: HW_KEYS, perk: PERK_KEYS as string[], toggle: [...PERK_KEYS, "auto_cpu", "auto_ram", "auto_disk", "auto_jobs", "release_bot"],
     optimize: UPGRADES.map(u => u.id), gen: GEN_KEYS, challenge: [...CHALLENGES.map(c => c.id), "exit"],
     talent: TALENTS.map(x => x.id), lang: ["en", "fr"], notation: ["standard", "scientific"],
-    cargo: ["update"], git: ["merge"], autoscale: ["jobs"], fork: ["tree", "buy", "upgrade", "--yes"], distro: ["tree", "buy", ...FLAVORS.map(f => f.id)], forkbot: ["on", "off", "advisor"], gh: ["pr"],
+    cargo: ["update"], git: ["merge"], autoscale: ["jobs"], fork: ["tree", "buy", "upgrade", "--yes"], distro: ["tree", "buy", ...FLAVORS.map(f => f.id)], forkbot: ["on", "off"], gh: ["pr"],
   };
   const PUBLIC = ["help", "guide", "status", "compile", "stop", "buy", "shop", "perk", "toggle", "release", "goals", "claim", "tree", "talent", "optimize", "gen", "autoscale", "fork", "distro", "forkbot", "gh", "challenge", "events", "achievements", "stats", "save", "export", "import", "lang", "notation", "settings", "clear", "exit",
     ...new Set(BUILD_EVENTS.map(ev => ev.cmd.split(" ")[0]))];

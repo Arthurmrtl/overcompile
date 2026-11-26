@@ -18,7 +18,6 @@ import { UPGRADES, UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } fr
 import {
   DISTRO_TALENT_BY_ID, type FlavorId, FLAVOR_BY_ID, canDistro, flavorOf, forkTalentsKept, hasDistro, packagesOnDistro,
 } from "./distro";
-import { DistroAdvisor, ForkAdvisor } from "./advisor";
 import {
   type KModule, FLAVOR_ORDER, canFuse, cratePrice, recompileCost, rerollEffects, installsFor, loadedModules, marketOpen, marketReady, marketShare, MILESTONES, moduleScore,
   moduleSlots, reached, recycleValue, rollModule, MARKET,
@@ -255,29 +254,18 @@ export class Engine {
       this.release(true);
     }
 
-    // Distro talent "Fork bot" (v0.5): forks on its own, at a contributor threshold or when the advisor says
-    if (hasDistro(s, "d_forkbot") && s.autoFork.enabled && !s.challenge) {
-      const advice = this.forkAdvisor.update(s);
-      const ready = s.autoFork.threshold > 0 ? advice.pending >= s.autoFork.threshold : advice.advised;
-      if (ready) this.fork(true);
-    }
+    // Distro talent "Fork bot" (v0.5): forks on its own at a contributor threshold (the advisor mode went in v0.6.7)
+    if (hasDistro(s, "d_forkbot") && s.autoFork.enabled && !s.challenge &&
+      contributorsOnFork(s).gte(Math.max(1, s.autoFork.threshold))) this.fork(true);
 
     // Market (v0.6): opens once the four flavors are done (also for saves that already had them)
     if (!s.market.unlocked && marketReady(s)) this.openMarket();
-    // Milestone 5 % "crontab": distros publish themselves, at a package threshold or when the advisor says
-    if (reached(s, "crontab") && s.market.cron.enabled && !s.challenge) {
-      const advice = this.distroAdvisor.update(s);
-      const c = s.market.cron;
-      const ready = c.threshold > 0 ? advice.pending >= c.threshold : advice.advised;
-      if (ready) this.distro(this.cronFlavor(), true);
-    }
+    // Milestone 5 % "crontab": distros publish themselves at a package threshold
+    if (reached(s, "crontab") && s.market.cron.enabled && !s.challenge &&
+      packagesOnDistro(s).gte(Math.max(1, s.market.cron.threshold))) this.distro(this.cronFlavor(), true);
 
     this.checkAchievements();
   }
-
-  /** Same advisor the UI shows, owned by the engine for the Fork bot. */
-  private forkAdvisor = new ForkAdvisor();
-  private distroAdvisor = new DistroAdvisor();
 
   /** Unlocked achievements whose reward is waiting to be claimed. */
   pendingAchievements() {
