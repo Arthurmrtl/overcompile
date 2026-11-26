@@ -696,3 +696,7 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .mk-crate-n { font-weight: 700; color: var(--orange); margin-right: auto; }
 .mk-crates .switch span { color: var(--orange); }
 .mk-shop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* v0.6.11: stats sections and sub-rows */
+.stats tr.st-h th { color: var(--fg); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; font-size: .8em; padding-top: 14px; }
+.stats tr.st-h:first-child th { padding-top: 0; }
+.stats tr.st-sub th, .stats tr.st-sub td { font-size: .85em; font-weight: 400; color: var(--dim); padding: 2px 0 2px 10px; }

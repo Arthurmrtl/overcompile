@@ -10,7 +10,7 @@ import {
 } from "./core/fork";
 import {
   BAL, HW, autoScaleInterval, perkLocked, perkPrice, genRequired, gensRevealed, totalGens, bulkPrice, buildTime, challengeGoal, expectedRate, failProbability, has,
-  maxAffordable, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
+  maxAffordable, offlineCapSeconds, offlineEfficiency, offlineUnlocked, on, releaseBase, reward, rewardMultiplier, starsRevealed, talentVisibility,
 } from "./core/formulas";
 import { UPGRADES, UPGRADE_BY_ID, level, offlineCapHours, upgradeMaxed, upgradePrice } from "./core/upgrades";
 import { GEN_KEYS, type GenKey, type HwKey, HW_KEYS, PERK_KEYS, type PerkKey, exportSave, importSave } from "./core/state";
@@ -191,7 +191,7 @@ export function printStatus(c: GameCtx) {
   p(t("pipe.fail"), `${(failProbability(s) * 100).toFixed(1)}%`);
   p(t("pipe.rate"), `${fmt(expectedRate(s))}${t("per_sec")}`);
   p(t("st.offline"), offlineUnlocked(s)
-    ? t("st.offline.val", { p: Math.round(offlineEfficiency(s) * 100), h: offlineCapHours(s) })
+    ? t("st.offline.val", { p: Math.round(offlineEfficiency(s) * 100), h: offlineCapSeconds(s) / 3600 })
     : t("st.offline.locked"));
   if (s.perks.auto_scaling.unlocked) p(t("perk.auto_scaling"), autoScaleInfo(c.engine));
   if (s.challenge) {
