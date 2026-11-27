@@ -39,7 +39,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.11";
+const GAME_VERSION = "0.6.12";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -350,8 +350,6 @@ function buildLayout() {
           <div class="small" data-r="mkSlice"></div>
           <div class="small mk-next" data-r="mkNext"></div>
         </div>
-        <h3>${t("mk.milestones")}</h3>
-        <div class="mk-miles" data-r="mkMiles"></div>
         <div class="mk-crates" data-r="mkCrates">
           <div class="mk-crates-row" data-r="mkCrateRow" hidden>
             <span class="mk-crate-n" data-r="mkCrateN"></span>
@@ -361,15 +359,16 @@ function buildLayout() {
           <div class="mk-shop"><button class="btn small mk-open" data-r="mkBuy"></button><span class="muted small">${t("mk.shop.desc")}</span></div>
         </div>
         <h3 data-r="mkLoadedH"></h3>
-        <p class="muted small">${t("mk.loaded.desc")}</p>
         <div class="mk-bonus small" data-r="mkBonus"></div>
-        <div class="fu-list" data-r="mkLoaded"></div>
+        <div class="fu-list mk-mods" data-r="mkLoaded"></div>
         <h3 data-r="mkInvH"></h3>
         <div class="mk-tools">
           <button class="btn small" data-r="mkBest">${t("mk.best")}</button>
           <label class="switch small"><input type="checkbox" data-r="mkAutoRec"><span>${t("mk.autorecycle")}</span></label>
         </div>
-        <div class="fu-list" data-r="mkInv"></div>
+        <div class="fu-list mk-mods" data-r="mkInv"></div>
+        <h3>${t("mk.milestones")}</h3>
+        <div class="mk-miles" data-r="mkMiles"></div>
       </div>
       <div class="card tab-body" data-body="achievements">
         <div class="muted small" data-r="achHead"></div>
@@ -1380,6 +1379,7 @@ function updateTabFades() {
 /* ================= Market (v0.6, chapter 1) ================= */
 let marketTabKey = "";
 let lastInstalls = 0; // installs of the last distro, for the "≈ N distros" estimate
+let recycleArmed: { uid: number; until: number } | null = null; // first click on Recycle, waiting for the second
 
 /** "+12.5 % installs" / "+20 pts offline" */
 function effectText(k: EffectKey, v: number): string {
@@ -1398,13 +1398,29 @@ function moduleCard(s: GameState, m: KModule, loaded: boolean): HTMLElement {
   else {
     const full = s.market.loaded.length >= moduleSlots(s);
     btn(t("mk.load"), `modprobe ${m.uid}`, full, full ? t("mk.full") : "");
-    btn(t("mk.recycle", { n: recycleValue(m) }), `modules recycle ${m.uid}`);
   }
   btn(t("mk.recompile", { n: recompileCost(m) }), `modules recompile ${m.uid}`, s.packages < recompileCost(m), t("mk.recompile.hint"));
   if (reached(s, "fuse")) {
     const dup = s.market.modules.filter(x => !s.market.loaded.includes(x.uid) && canFuse(s, m, x) && moduleScore(x) <= moduleScore(m))
       .sort((a, b) => moduleScore(a) - moduleScore(b))[0];
     if (dup) btn(t("mk.fuse", { n: dup.name }), `modules fuse ${m.uid} ${dup.uid}`);
+  }
+  // v0.6.12 (Arthur: no misclick on Recycle): last, in red, and a second click within 3 s confirms
+  if (!loaded) {
+    const armed = recycleArmed?.uid === m.uid && recycleArmed.until > Date.now();
+    const rec = h("button", { class: "btn small mod-rec" + (armed ? " armed" : "") },
+      t(armed ? "mk.recycle.sure" : "mk.recycle", { n: recycleValue(m) })) as HTMLButtonElement;
+    rec.addEventListener("click", () => {
+      if (recycleArmed?.uid === m.uid && recycleArmed.until > Date.now()) {
+        recycleArmed = null;
+        cmd.run(`modules recycle ${m.uid}`, true);
+      } else {
+        recycleArmed = { uid: m.uid, until: Date.now() + 3000 };
+        setTimeout(() => { if (recycleArmed?.uid === m.uid) { recycleArmed = null; marketTabKey = ""; } }, 3000);
+      }
+      marketTabKey = "";
+    });
+    btns.push(rec);
   }
   return h("div", { class: `fu mod r${m.rarity}` + (loaded ? " on" : "") },
     h("div", { class: "fu-top" },
@@ -1494,17 +1510,23 @@ function renderMarketTab() {
   setText($("[data-r=mkBonus]"), bonus.length ? t("mk.bonus", { b: bonus.map(([k, v]) => effectText(k, v)).join(" · ") }) : "");
   const box = $<HTMLInputElement>("[data-r=mkAutoRec]");
   if (box.checked !== s.market.autoRecycle) box.checked = s.market.autoRecycle;
-  const key = `${Math.floor(sh.pct)}|${JSON.stringify(s.market.modules.map(m => [m.uid, m.level, m.effects]))}|${s.market.loaded.join(",")}|${s.settings.lang}|${Math.floor(s.packages)}`;
+  const key = `${Math.floor(sh.pct)}|${JSON.stringify(s.market.modules.map(m => [m.uid, m.level, m.effects]))}|${s.market.loaded.join(",")}|${s.settings.lang}|${Math.floor(s.packages)}|${recycleArmed?.uid ?? ""}`;
   if (key === marketTabKey) return;
   marketTabKey = key;
   $("[data-r=mkTicks]").replaceChildren(...MILESTONES.filter(m => m.pct > 0 && m.pct < 100).map(m =>
     h("i", { class: reached(s, m.id) ? "on" : "", style: `left:${m.pct}%` })));
   // Milestones: the reached ones, the next one, the rest in the fog
   const rows: HTMLElement[] = [];
+  // v0.6.12: the reached milestones on one line, the next one in full, the rest in the fog
+  const got = MILESTONES.filter(m => reached(s, m.id));
+  if (got.length) rows.push(h("div", { class: "mk-mile on mk-done" },
+    h("span", { class: "mk-mile-tag" }, "[✓]"),
+    h("span", {}, got.map(m => `${m.pct} % ${t(`mk.m.${m.id}`)}`).join(" · "))));
   let fog = 0;
   for (const m of MILESTONES) {
     const got = reached(s, m.id);
-    if (got || m === next) {
+    if (got) continue;
+    if (m === next) {
       rows.push(h("div", { class: "mk-mile" + (got ? " on" : "") },
         h("span", { class: "mk-mile-tag" }, `${got ? "[✓]" : "[ ]"} ${m.pct} %`),
         h("span", {}, h("strong", {}, t(`mk.m.${m.id}`)), ` · ${t(`mk.m.${m.id}.desc`)}`, m.ready ? "" : h("span", { class: "muted" }, ` (${t("mk.soon")})`))));
