@@ -3,6 +3,7 @@ import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
 import { initPwa, installMode, promptInstall } from "./ui/pwa";
 import { initWakeLock, setWakeLock, wakeLockEnabled, wakeLockSupported } from "./ui/wakelock";
 import { openRoulette } from "./ui/roulette";
+import { initErrorLog, loggedErrors } from "./ui/errors";
 import Decimal from "break_eternity.js";
 import { Engine, type GameEvent, MATRIX_HANDS, MATRIX_TIMEOUT, type OfflineGains } from "./core/engine";
 import { ACH_BY_ID, ACHIEVEMENTS, type Achievement } from "./core/achievements";
@@ -39,7 +40,8 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.14";
+const GAME_VERSION = "0.6.15";
+initErrorLog(GAME_VERSION);
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -1963,6 +1965,19 @@ function openSettings() {
     box.addEventListener("change", () => setWakeLock(box.checked));
     wake.push(h("label", { class: "switch" }, box, t("set.wake")), h("div", { class: "small muted" }, t("set.wake.desc")));
   }
+  // v0.6.15: one report to paste in a message (version, device, progress, errors, save)
+  const fbArea = h("textarea", { rows: "4", readonly: "", hidden: "" }) as HTMLTextAreaElement;
+  const fbMsg = h("div", { class: "small muted" }, t("set.feedback.desc"));
+  const fbBtn = h("button", { class: "btn" }, t("set.feedback"));
+  fbBtn.addEventListener("click", async () => {
+    engine.save();
+    fbArea.value = feedbackReport();
+    fbArea.hidden = false;
+    fbArea.select();
+    let copied = true;
+    try { await navigator.clipboard.writeText(fbArea.value); } catch { copied = false; }
+    setText(fbMsg, t(copied ? "set.feedback.done" : "set.feedback.manual", { n: loggedErrors().length }));
+  });
   const tutBtn = h("button", { class: "btn" }, t("set.tutorial"));
   tutBtn.addEventListener("click", () => { replayTutorial(); closeModal(); render(); });
   const resetBtn = h("button", { class: "btn danger" }, t("set.reset"));
@@ -1994,9 +2009,35 @@ function openSettings() {
     msg,
     ...install,
     h("hr"),
+    fbBtn,
+    fbMsg,
+    fbArea,
+    h("hr"),
     tutBtn,
     resetBtn,
   );
+}
+
+/** v0.6.15: plain-text report for testers. Technical labels in English on purpose: it is data for the
+ *  maintainer, like the save string at its end, not a game text. */
+function feedbackReport(): string {
+  const s = engine.s;
+  const standalone = matchMedia("(display-mode: standalone)").matches;
+  const lines = [
+    `overcompile v${GAME_VERSION} · ${new Date().toISOString()} · lang ${s.settings.lang}`,
+    `device: ${innerWidth}×${innerHeight} · ${standalone ? "installed app" : "browser"} · ${navigator.userAgent}`,
+    `play time ${fmtTime(s.stats.playTime)} · run ${fmtTime(s.stats.runTime)}${s.challenge ? ` · challenge ${s.challenge}` : ""}`,
+    `releases ${s.releases} (this fork) · stars ${fmt(s.stars)} · all stars ${fmt(new Decimal(s.stats.allStars))} · talents ${s.talents.length} · challenges ${s.challengesDone.length}/${CHALLENGES.length}`,
+    `forks ${s.forks} · contributors ${fmtInt(s.contributors)} · fork talents ${s.forkTalents.length}`,
+    `distros ${s.distros} · packages ${fmtInt(s.packages)} · flavor ${s.flavor ?? "-"} · flavors done ${s.flavorsDone.join(",") || "-"} · distro talents ${s.distroTalents.length}`,
+    s.market.unlocked ? `market ${marketShare(s).pct.toFixed(2)} % · modules ${s.market.modules.length} (loaded ${s.market.loaded.length}) · crates ${s.market.crates.length}` : "market locked",
+    `offline: ${offlineUnlocked(s) ? `${Math.round(offlineEfficiency(s) * 100)} % · ${offlineCapSeconds(s) / 3600} h` : "locked"}${s.offlineLast ? ` · last ${fmtTime(s.offlineLast.away)} ago ${fmtTime((Date.now() - s.offlineLast.at) / 1000)}` : ""}`,
+  ];
+  const errs = loggedErrors();
+  lines.push(`errors: ${errs.length}`);
+  for (const e of errs) lines.push(`  [${new Date(e.at).toISOString()} v${e.v}] ${e.msg}${e.where ? ` @ ${e.where}` : ""}`);
+  lines.push("save:", exportSave(s));
+  return lines.join("\n");
 }
 
 /** Every reward the offline summary can list, in order; a line shows only when its count is above 0.
