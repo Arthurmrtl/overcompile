@@ -3,7 +3,7 @@ import { ACHIEVEMENTS, ACH_BY_ID, type Reward } from "./achievements";
 import { CHALLENGES, CHALLENGES_UNLOCK_AT } from "./challenges";
 import {
   HW, OFFLINE_GRACE_SECONDS, perkLocked, perkPrice, autoScaleInterval, bulkPrice, buildTime, challengeGoal, failProbability,
-  expectedRate, genRequired, gensRevealed, has, starsRevealed, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease,
+  expectedRate, genRequired, gensRevealed, has, starsRevealed, inChallenge, maxAffordable, offlineCapSeconds, offlineEfficiency, on, price, reward, starsOnRelease, starsWithCarry,
 } from "./formulas";
 import { TALENTS, TALENT_BY_ID } from "./talents";
 import {
@@ -569,6 +569,10 @@ export class Engine {
     if (s.challenge) return null;
     const gain = starsOnRelease(s);
     if (gain.lt(1)) return null;
+    // v0.6.21: what the floor left behind goes to the next release
+    const exact = starsWithCarry(s);
+    const frac = exact.sub(exact.floor()).toNumber();
+    s.starFrac = Number.isFinite(frac) && frac > 0 && frac < 1 ? frac : 0;
     s.stars = s.stars.add(gain);
     s.lifetimeStars = s.lifetimeStars.add(gain);
     s.releases++;
@@ -751,6 +755,7 @@ export class Engine {
     // What the next cycle starts with
     s.stars = new Decimal(hasFork(s, "f_template") ? TEMPLATE_STARS : 0);
     s.lifetimeStars = new Decimal(0);
+    s.starFrac = 0;
     s.releases = 0;
     const kept = keptReleaseTalents(s);
     s.talents = s.talents.filter(id => kept.includes(id));
@@ -842,6 +847,7 @@ export class Engine {
     // …and so does everything a fork resets
     s.stars = new Decimal(hasFork(s, "f_template") ? TEMPLATE_STARS : 0);
     s.lifetimeStars = new Decimal(0);
+    s.starFrac = 0;
     s.releases = 0;
     s.talents = keptReleaseTalents(s);
     s.upgrades = {};
