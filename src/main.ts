@@ -40,7 +40,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.15";
+const GAME_VERSION = "0.6.16";
 initErrorLog(GAME_VERSION);
 
 /* ================= Boot ================= */
@@ -2434,8 +2434,11 @@ async function halt() {
 buildLayout();
 initPwa(() => { /* the Settings read installMode() each time they open */ });
 initWakeLock();
+// A player coming back after 30 min away, with 10 min of play behind them: the install tip may show
+const returningSession = Date.now() - engine.s.lastSeen > 1_800_000 && engine.s.stats.playTime > 600;
 initTutorial({
   engine: () => engine,
+  returning: () => returningSession,
   show: (panel, tab) => {
     if (tab) { sideTab = tab; }
     if (window.matchMedia("(max-width: 900px)").matches && mobilePanel !== panel) {
