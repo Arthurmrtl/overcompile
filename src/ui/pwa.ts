@@ -27,6 +27,15 @@ export function installMode(): "prompt" | "ios" | "none" {
   return "none";
 }
 
+/** v0.6.17: which how-to the Settings show when the browser gives no install prompt. */
+export function installHelp(): "installed" | "file" | "ios" | "android" | "desktop" {
+  if (isStandalone()) return "installed";
+  if (!hosted()) return "file";
+  if (isIOS()) return "ios";
+  if (/android/i.test(navigator.userAgent)) return "android";
+  return "desktop";
+}
+
 export async function promptInstall(): Promise<boolean> {
   if (!deferred) return false;
   const ev = deferred;

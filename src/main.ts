@@ -1,6 +1,6 @@
 import "./style.css";
 import { initTutorial, replayTutorial, updateTutorial } from "./ui/tutorial";
-import { initPwa, installMode, promptInstall } from "./ui/pwa";
+import { initPwa, installHelp, installMode, promptInstall } from "./ui/pwa";
 import { initWakeLock, setWakeLock, wakeLockEnabled, wakeLockSupported } from "./ui/wakelock";
 import { openRoulette } from "./ui/roulette";
 import { initErrorLog, loggedErrors } from "./ui/errors";
@@ -40,7 +40,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.16";
+const GAME_VERSION = "0.6.17";
 initErrorLog(GAME_VERSION);
 
 /* ================= Boot ================= */
@@ -1946,16 +1946,21 @@ function openSettings() {
       setText(msg, t("set.import.fail"));
     }
   });
-  // Installable app (PWA): the browser's prompt, or the iPhone how-to
-  const mode = installMode();
-  const install: Node[] = [];
-  if (mode === "prompt") {
+  // Installable app (PWA). v0.6.17 (Arthur: "remets le bouton pour installer l'appli / tuto"): the button is
+  // always there; it opens the browser's prompt when there is one, otherwise the how-to for this device
+  const install: Node[] = [h("hr")];
+  const help = installHelp();
+  if (help === "installed") install.push(h("div", { class: "small muted" }, t("set.install.done")));
+  else {
+    const how = h("div", { class: "small set-how", hidden: "" });
     const btn = h("button", { class: "btn" }, t("set.install"));
-    btn.addEventListener("click", async () => { await promptInstall(); openSettings(); });
-    install.push(h("hr"), btn, h("div", { class: "small muted" }, t("set.install.desc")));
-  } else if (mode === "ios") {
-    install.push(h("hr"), h("div", { class: "small" }, h("strong", {}, t("set.install")), " · ", t("set.install.ios")),
-      h("div", { class: "small muted" }, t("set.install.ios_save")));
+    btn.addEventListener("click", async () => {
+      if (installMode() === "prompt") { await promptInstall(); openSettings(); return; }
+      how.replaceChildren(h("div", {}, t(`set.install.how.${help}`)),
+        ...(help === "ios" ? [h("div", { class: "muted" }, t("set.install.ios_save"))] : []));
+      how.hidden = !how.hidden;
+    });
+    install.push(btn, h("div", { class: "small muted" }, t("set.install.desc")), how);
   }
   // Keep the screen on (device preference, outside the save)
   const wake: Node[] = [];

@@ -721,3 +721,4 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .mk-tools .switch span { color: var(--fg); }
 .mk-mile.mk-done span:last-child { color: var(--dim); }
 .mod-btns .btn.mod-rec:not(.armed) { border-color: var(--border); }
+.set-how { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; gap: 4px; }
