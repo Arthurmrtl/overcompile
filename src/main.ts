@@ -39,7 +39,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.12";
+const GAME_VERSION = "0.6.13";
 
 /* ================= Boot ================= */
 const engine = Engine.load();
@@ -356,7 +356,7 @@ function buildLayout() {
             <button class="btn small mk-open" data-r="mkOpen">${t("mk.crate.open")}</button>
             <button class="btn small" data-r="mkOpenAll">${t("mk.crate.openall")}</button>
           </div>
-          <div class="mk-shop"><button class="btn small mk-open" data-r="mkBuy"></button><span class="muted small">${t("mk.shop.desc")}</span></div>
+          <div class="mk-shop"><button class="btn small" data-r="mkBuy" title="${t("mk.shop.desc")}"></button></div>
         </div>
         <h3 data-r="mkLoadedH"></h3>
         <div class="mk-bonus small" data-r="mkBonus"></div>
