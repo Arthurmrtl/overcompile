@@ -710,3 +710,13 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .mod-btns .btn.mod-rec.armed { background: #7f1d1d; color: #fff; border-color: #f87171; }
 .mk-mile.mk-done span:last-child { color: var(--orange); }
 .mk-mile.mk-done .mk-mile-tag { flex-basis: auto; }
+/* v0.6.13 (Arthur: "less AI slop, too many orange outlines"): orange only on figures, neutral frames */
+.mk-card { border: 0; background: none; padding: 0; margin-top: 4px; }
+.mk-crates { border: 0; padding: 0; margin: 12px 0; }
+.mk-crates .mk-crates-row { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.btn.mk-open { border-color: var(--border); color: var(--orange); }
+.fu.mod.on, .mod.r3 { border-color: var(--border); }
+.mk-bonus { color: var(--fg); }
+.mk-tools .switch span { color: var(--fg); }
+.mk-mile.mk-done span:last-child { color: var(--dim); }
+.mod-btns .btn.mod-rec:not(.armed) { border-color: var(--border); }
