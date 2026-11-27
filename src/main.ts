@@ -40,7 +40,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.19";
+const GAME_VERSION = "0.6.20";
 initErrorLog(GAME_VERSION);
 
 /* ================= Boot ================= */
@@ -504,6 +504,11 @@ function buildPerks() {
 }
 
 const TREE_COLS = 5;
+/**
+ * v0.6.20 (Arthur: players read "unlock a neighbouring talent" as "buy any neighbour unlocks it"):
+ * a fogged talent is revealed once ALL its prerequisites are bought, so say how many, without naming them.
+ */
+const fogDesc = (reqs: number) => reqs > 1 ? t("tree.fog.desc_n", { n: reqs }) : t("tree.fog.desc");
 let treeRows = 0;
 
 /**
@@ -966,7 +971,7 @@ function renderRelease() {
   if (vis[tal.id] === "fog") {
     detail.replaceChildren(
       h("div", { class: "td-name" }, h("span", { class: "td-tag" }, "[???]"), ` ${t("tree.fog")}`),
-      h("div", { class: "td-desc muted" }, t("tree.fog.desc")),
+      h("div", { class: "td-desc muted" }, fogDesc(tal.req.length)),
       h("div", { class: "td-req muted small" }, `${tal.cost} ★`),
     );
     return;
@@ -1354,7 +1359,8 @@ function renderForkTree() {
   });
   const ft = FORK_TALENT_BY_ID[selectedFork];
   if (vis[ft.id] === "fog") {
-    $("[data-r=ftDetail]").replaceChildren(h("div", {}, h("span", { class: "ft-tag" }, "[???]"), ` ${t("tree.fog")}`));
+    $("[data-r=ftDetail]").replaceChildren(h("div", {}, h("span", { class: "ft-tag" }, "[???]"), ` ${t("tree.fog")}`),
+      h("div", { class: "muted small" }, fogDesc(ft.req.length)));
     return;
   }
   const owned = hasFork(s, ft.id);
@@ -1700,7 +1706,8 @@ function renderDistroTree() {
   });
   const dt = DISTRO_TALENT_BY_ID[selectedDistro];
   if (vis[dt.id] === "fog") {
-    $("[data-r=dtDetail]").replaceChildren(h("div", {}, h("span", { class: "ft-tag" }, "[???]"), ` ${t("tree.fog")}`));
+    $("[data-r=dtDetail]").replaceChildren(h("div", {}, h("span", { class: "ft-tag" }, "[???]"), ` ${t("tree.fog")}`),
+      h("div", { class: "muted small" }, fogDesc(dt.req.length)));
     return;
   }
   const owned = hasDistro(s, dt.id);
