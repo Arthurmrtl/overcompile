@@ -642,8 +642,9 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .mk-bonus { color: var(--orange); margin-bottom: 6px; }
 .mk-tools .switch span { color: var(--orange); }
 .mk-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
-.bot.cron { border-color: var(--orange); }
-.bot.cron .switch span { color: var(--orange); }
+/* v0.6.14 (Arthur: "no orange on this tab"): crontab sits in the Distro tab, neutral frame */
+.bot.cron { border-color: var(--border); margin-bottom: 10px; }
+.bot.cron .switch span { color: var(--fg); }
 .fu.mod { display: flex; flex-direction: column; gap: 4px; }
 .fu.mod.on { border-color: var(--orange); }
 .mod-tags { font-size: 11px; white-space: nowrap; }
