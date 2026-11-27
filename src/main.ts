@@ -40,7 +40,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.18";
+const GAME_VERSION = "0.6.19";
 initErrorLog(GAME_VERSION);
 
 /* ================= Boot ================= */
@@ -520,7 +520,10 @@ function layoutTree(rows: number) {
 }
 
 function buildTree() {
+  // Fresh nodes have no position yet: force the next render to lay them out, even when talents and stars
+  // look unchanged (Ansible rebuys the whole tree and spends every star within the same tick as a release).
   treeRows = 0;
+  lastTalentKey = "";
   const tree = $("[data-r=tree]");
   tree.replaceChildren();
   const rows = Math.max(...TALENTS.map(x => x.row)) + 1;
