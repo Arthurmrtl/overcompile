@@ -16,6 +16,7 @@ import { PERK_PRICE, gensRevealed, price } from "../core/formulas";
 import { t } from "../i18n";
 import { fmt } from "../format";
 import type Decimal from "break_eternity.js";
+import { installMode, promptInstall } from "./pwa";
 
 type Panel = "shop" | "center" | "side";
 type SideTab = "release" | "challenges" | "fork" | "distro" | "market" | "achievements" | "stats";
@@ -27,6 +28,8 @@ interface Deps {
   mobile: () => boolean;
   /** True while a modal (settings, confirmations) is open: bubbles wait. */
   modalOpen: () => boolean;
+  /** This session follows a real absence (a returning player): the install tip may show. */
+  returning: () => boolean;
 }
 
 interface Step {
@@ -48,6 +51,10 @@ interface Tip {
   when: () => boolean;
   /** For short-lived anchors (an event): the tip closes itself when this becomes false. */
   live?: () => boolean;
+  /** Text other than `tip.<id>`. */
+  text?: () => string;
+  /** A main button (e.g. Install) next to "Later", instead of Got it / No more tips / Show. */
+  action?: () => { label: string; run: () => void } | null;
 }
 
 let deps: Deps;
@@ -72,6 +79,14 @@ const STEPS: Step[] = [
 const readyGen = () => GEN_KEYS.find(k => deps.engine().canGenerate(k) === "ok");
 const TIPS: Tip[] = [
   { id: "stars", anchor: () => "[data-r=tree]", panel: "side", tab: "release", when: () => S().releases >= 1 || S().forks >= 1 },
+  // v0.6.16 (Arthur: the installed app plays better): offered once, on a phone, to a player who is hooked:
+  // after the first release, or when they come back after an absence. Never at the very start.
+  {
+    id: "install", anchor: () => "[data-a=settings]", panel: "center",
+    when: () => deps.mobile() && installMode() !== "none" && (S().releases >= 1 || S().forks >= 1 || deps.returning()),
+    text: () => t(installMode() === "ios" ? "tip.install.ios" : "tip.install"),
+    action: () => installMode() === "prompt" ? { label: t("tip.install.btn"), run: () => { void promptInstall(); } } : null,
+  },
   { id: "event", anchor: () => "[data-r=evPill]", panel: "center", when: () => !!deps.engine().activeEvent, live: () => !!deps.engine().activeEvent },
   { id: "gen", anchor: () => `[data-hw=${readyGen() ?? "cpu"}] [data-f=gen]`, panel: "shop", when: () => gensRevealed(S()) && !!readyGen() },
   { id: "challenges", anchor: () => "[data-tab=challenges]", panel: "side", when: () => deps.engine().challengesUnlocked },
@@ -102,7 +117,8 @@ function adoptOldSave() {
   if (seen("tut:done") || seen("tut:off") || seen("tut:replay")) return;
   if (s.releases === 0 && s.forks === 0 && s.stats.playTime < 1800) return;
   mark("tut:done");
-  for (const tip of TIPS) if (tip.id !== "event" && tip.id !== "gen" && tip.when()) mark(`tip:${tip.id}`);
+  // install: old saves still get it once (their players are the most likely to want the app)
+  for (const tip of TIPS) if (tip.id !== "event" && tip.id !== "gen" && tip.id !== "install" && tip.when()) mark(`tip:${tip.id}`);
   if (s.stats.events > 0) mark("tip:event");
   if (s.stats.gensTotal > 0) mark("tip:gen");
 }
@@ -244,11 +260,19 @@ export function updateTutorial() {
   if (!tip) return;
   const id = `tip:${tip.id}`;
   const ok = btn(t("tut.ok"), "main", () => { mark(id); close(); });
-  const buttons = [btn(t("tut.mute"), "ghost", skip)];
-  // On a phone, a tip never switches tabs by itself: "Show" does it
-  if (deps.mobile()) buttons.push(btn(t("tut.show"), "ghost", () => deps.show(tip.panel, tip.tab)));
-  buttons.push(ok);
-  open(id, `[ ${t("tut.tip")} ]`, t(`tip.${tip.id}`), buttons);
+  let buttons: HTMLElement[];
+  if (tip.action) {
+    // "Later" closes it for good; the action does the thing
+    const act = tip.action();
+    buttons = [btn(t("tip.later"), "ghost", () => { mark(id); close(); })];
+    buttons.push(act ? btn(act.label, "main", () => { mark(id); close(); act.run(); }) : ok);
+  } else {
+    buttons = [btn(t("tut.mute"), "ghost", skip)];
+    // On a phone, a tip never switches tabs by itself: "Show" does it
+    if (deps.mobile()) buttons.push(btn(t("tut.show"), "ghost", () => deps.show(tip.panel, tip.tab)));
+    buttons.push(ok);
+  }
+  open(id, `[ ${t("tut.tip")} ]`, tip.text ? tip.text() : t(`tip.${tip.id}`), buttons);
   if (!deps.mobile()) deps.show(tip.panel, tip.tab);
   place(document.querySelector(tip.anchor()));
 }

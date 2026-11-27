@@ -1,6 +1,6 @@
 {
   "name": "overcompile",
-  "version": "0.6.15",
+  "version": "0.6.16",
   "description": "An incremental game about compiling stuff \u2014 a fork of Incrust",
   "scripts": {
     "dev": "vite",
