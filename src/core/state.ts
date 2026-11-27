@@ -33,6 +33,11 @@ export interface GameState {
   /** "Release candidate" event caught: the next release gives more stars. */
   rcPending: boolean;
   /**
+   * v0.6.21: the fraction of a star lost to rounding down at the last release, carried over to the next one
+   * (0 ≤ x < 1), so small % bonuses still count on small releases. Reset by a fork and a distro.
+   */
+  starFrac: number;
+  /**
    * `-j` talent: Auto-Scaling saves up for the next job slot when it costs at most this many
    * seconds of income (0 = never saves, -1 = always). Set by the player. Default 0: the sim shows
    * saving up never helps (each slot costs ×5 the previous one for a linear gain), it is a preference.
@@ -165,7 +170,7 @@ export const newOfflineRecord = (): OfflineRecord => ({
 export const FORK_BOT_DEFAULT = 50;
 export const CRON_DEFAULT = 30;
 
-export const SAVE_VERSION = 18;
+export const SAVE_VERSION = 19;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -193,6 +198,7 @@ export function newState(): GameState {
     hw: { cpu: 1, ram: 1, disk: 1, jobs: 1 },
     gens: { cpu: 0, ram: 0, disk: 0 },
     rcPending: false,
+    starFrac: 0,
     buffs: [],
     jobsPrio: 0,
     perks: { ci_cd: { unlocked: false, enabled: false }, auto_scaling: { unlocked: false, enabled: false } },
@@ -386,6 +392,10 @@ function migrate(s: GameState, from: number) {
     // v0.5.16 → v0.6.0: Market (chapter 1). Empty; it opens on its own if the four flavors are done
     s.market = newMarket();
     s.stats.modulesFound = 0;
+  }
+  if (from < 19) {
+    // v0.6.20 → v0.6.21: star fractions carried between releases (nothing carried yet)
+    s.starFrac = 0;
   }
   if (from < 18) {
     // v0.6.10 → v0.6.11: offline stats (nothing recorded before)

@@ -255,10 +255,19 @@ export function starsExact(s: GameState): Decimal {
   return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s)).add(awesomeStars(s));
 }
 
-export function starsOnRelease(s: GameState): Decimal {
+/**
+ * Stars before rounding, with the fraction carried from the last release (v0.6.21: a user thought the
+ * achievement star bonuses stopped working after a fork; on 2-star releases, +20 % was lost to the floor).
+ */
+export function starsWithCarry(s: GameState): Decimal {
   const base = releaseBase(s);
   if (s.challenge || s.runEarned.lt(base)) return new Decimal(0);
-  return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s)).floor().add(awesomeStars(s));
+  return starCurve(s.runEarned.div(base)).mul(starGainMultiplier(s)).add(s.starFrac);
+}
+
+export function starsOnRelease(s: GameState): Decimal {
+  const v = starsWithCarry(s);
+  return v.lte(0) ? v : v.floor().add(awesomeStars(s));
 }
 
 /** Fork talent "awe": flat stars on every release. */
@@ -266,7 +275,7 @@ const awesomeStars = (s: GameState) => (hasFork(s, "f_awesome") ? AWESOME_STARS 
 
 /** runEarned needed to reach `n` stars on release. */
 export function earnedForStars(s: GameState, n: Decimal | number): Decimal {
-  return ratioFor(new Decimal(n).sub(awesomeStars(s)).max(1).div(starGainMultiplier(s))).mul(releaseBase(s));
+  return ratioFor(new Decimal(n).sub(awesomeStars(s)).sub(s.starFrac).max(1).div(starGainMultiplier(s))).mul(releaseBase(s));
 }
 
 /** runEarned needed to get one more star than now. */
