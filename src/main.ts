@@ -40,7 +40,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.17";
+const GAME_VERSION = "0.6.18";
 initErrorLog(GAME_VERSION);
 
 /* ================= Boot ================= */
