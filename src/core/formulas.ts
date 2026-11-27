@@ -100,6 +100,7 @@ export const BAL = {
   genRam: 1.2,         // each RAM generation: rewards ×N
   genDisk: 1.08,       // each Disk generation: rewards ×N…
   genDiskFail: 0.88,   // …and failures ×N
+  fridayFail: 0.5,     // Friday deploy: extra failure share, on top of the normal rate
   // v0.4.7 "cache hits": below the 1 % failure floor, the extra reliability turns into rewards
   // (each Disk-level worth of surplus: rewards ×N), so Disk never becomes a pure malus.
   // Sim: 1.004 ≈ a player who stops buying Disk at the floor (forks +49/+79/+100…); 1.008 doubled late contributors.
@@ -176,7 +177,8 @@ export const diskCacheMult = (s: GameState) => Math.pow(BAL.diskCache, diskSurpl
 export function failProbability(s: GameState): number {
   let p = rawFail(s);
   p = Math.min(Math.max(p, FAIL_FLOOR), 0.9);
-  if (inChallenge(s, "friday")) p = Math.max(p, 0.5);
+  // Friday deploy: half the builds break on top of the normal rate (CPU still adds, Disk still helps)
+  if (inChallenge(s, "friday")) p = BAL.fridayFail + (1 - BAL.fridayFail) * p;
   if (eventNoFail(s)) p = 0;
   return p;
 }

@@ -11,7 +11,7 @@ export interface Challenge {
 export const CHALLENGES: Challenge[] = [
   { id: "single_core", goal: 0.02 }, // CPU and Jobs locked at 1          → builds ×1.5 faster
   { id: "debug_build", goal: 0.1 }, // builds 10× slower                → rewards ×2
-  { id: "friday", goal: 0.5 }, // ≥ 50% failures, rewards ×2        → failures ×0.75
+  { id: "friday", goal: 0.5 }, // +50% failures, rewards ×2         → failures ×0.75
   { id: "no_cache", goal: 0.2 }, // release tree disabled            → stars ×1.5
 ];
 
