@@ -40,7 +40,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.24";
+const GAME_VERSION = "0.6.25";
 initErrorLog(GAME_VERSION);
 
 /* ================= Boot ================= */
@@ -655,8 +655,12 @@ function render() {
     const cost = bulkPrice(k, lvl, n);
     setText($("[data-f=lvl]", card), `${lvl} ${t(`hw.${k}.unit`)}`);
     setText($("[data-f=price]", card), maxed ? t("hw.max") : `${n > 1 ? `+${n} · ` : ""}${fmt(cost)} cr`);
-    setText($("[data-f=effect]", card), hwEffect(k));
     const locked = engine.hwLocked(k);
+    const preview = maxed || locked ? 0 : n;
+    setEffect($("[data-f=effect]", card), hwEffect(k, preview));
+    const side = hwSideEffect(k, preview);
+    const tip = side ? `${t(`hw.${k}.desc`)}\n${side}` : t(`hw.${k}.desc`);
+    if (card.title !== tip) card.title = tip;
     if (locked) setText($("[data-f=price]", card), "🔒");
     toggleClass(card, "afford", !maxed && !locked && s.credits.gte(cost));
     toggleClass(card, "maxed", maxed || locked);
@@ -848,17 +852,59 @@ function renderGen(card: HTMLElement, k: HwKey) {
   row.title = s.gens[g] > 0 ? t("gen.now", { b: genBonusText(g, s.gens[g]) }) : t("gen.desc");
 }
 
-function hwEffect(k: HwKey): string {
+/** The numbers a hardware card shows, for the current level (or `extra` levels more, to preview a purchase). */
+function hwValues(k: HwKey, extra = 0) {
   const s = engine.s;
+  const was = s.hw[k];
+  s.hw[k] = was + extra;
+  try {
+    return {
+      time: fmtTime(buildTime(s)), reward: fmt(reward(s)),
+      fail: `${(failProbability(s) * 100).toFixed(1)}%`, cache: diskCacheMult(s), jobs: s.hw.jobs,
+    };
+  } finally { s.hw[k] = was; }
+}
+
+/**
+ * Main effect of a hardware card, as [current, next] (next null when there is nothing to preview).
+ * v0.6.25 (a tester, via Arthur: "voir la valeur cible si on améliore, pas juste la valeur actuelle"):
+ * the card shows what the next purchase (×1, ×10 or max) would give; the side effect goes in the tooltip.
+ */
+function hwEffect(k: HwKey, n: number): [string, string | null] {
+  const a = hwValues(k), b = n > 0 ? hwValues(k, n) : null;
+  const pair = (x: string, y: string | undefined, unit: string): [string, string | null] =>
+    y === undefined || y === x ? [`${x}${unit}`, null] : [x, `${y}${unit}`];
   switch (k) {
-    case "cpu": return `${fmtTime(buildTime(s))} / build`;
-    case "ram": return `${fmt(reward(s))} cr / build`;
+    case "cpu": return pair(a.time, b?.time, " / build");
+    case "ram": return pair(a.reward, b?.reward, " cr / build");
     case "disk": {
-      const cache = diskCacheMult(s);
-      return `${(failProbability(s) * 100).toFixed(1)}% fail` + (cache > 1.0005 ? ` · ${t("hw.disk.cache", { x: cache.toFixed(2) })}` : "");
+      if (a.cache > 1.0005) {
+        const [cur, next] = pair(a.cache.toFixed(2), b?.cache.toFixed(2), "");
+        return [`${a.fail} fail · ${t("hw.disk.cache", { x: cur })}`, next];
+      }
+      return pair(a.fail, b?.fail, " fail");
     }
-    case "jobs": return `make -j${s.hw.jobs}`;
+    case "jobs": return pair(`make -j${a.jobs}`, b ? `-j${b.jobs}` : undefined, "");
   }
+}
+
+/** Side effect of the next purchase, for the card's tooltip ("" when nothing changes). */
+function hwSideEffect(k: HwKey, n: number): string {
+  if (n <= 0 || k === "jobs") return "";
+  const a = hwValues(k), b = hwValues(k, n);
+  if (k === "cpu" && a.fail !== b.fail) return t("hw.side.fail", { a: a.fail, b: b.fail });
+  if (k === "ram" && a.time !== b.time) return t("hw.side.time", { a: a.time, b: b.time });
+  if (k === "disk" && a.reward !== b.reward) return t("hw.side.reward", { a: a.reward, b: b.reward });
+  return "";
+}
+
+/** Writes "current → next" in the effect line, rebuilding the nodes only when the text changes. */
+function setEffect(el: HTMLElement, [cur, next]: [string, string | null]) {
+  const key = `${cur}|${next ?? ""}`;
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  if (next === null) { el.textContent = cur; return; }
+  el.replaceChildren(document.createTextNode(`${cur} → `), h("span", { class: "hw-next" }, next));
 }
 
 function renderSlots(T: number) {
