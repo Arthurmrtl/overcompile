@@ -30,7 +30,7 @@ import { setLang, t } from "./i18n";
 import { AUTO, FAIL, INFO, OK, STAR, type Seg, Terminal, TOUCH } from "./ui/terminal";
 import { type Advice, type DistroAdvice, DistroAdvisor, type ForkAdvice, ForkAdvisor, ReleaseAdvisor } from "./core/advisor";
 import {
-  DISTRO_PCT, DISTRO_TALENTS, DISTRO_TALENT_BY_ID, FLAVORS, FLAVOR_DONE, type Flavor, distroRevealed, flavorDone, flavorOf, distroTalentVisibility,
+  DISTRO_PCT, DISTRO_TALENTS, DISTRO_TALENT_BY_ID, FLAVORS, FLAVOR_DONE, type Flavor, type FlavorId, activeFlavors, distroRevealed, flavorDone, flavorOf, distroTalentVisibility,
   forkTreeComplete, hasDistro, NEXT_DISTRO_TALENTS, NEXT_FORK_DISTRO_TALENTS, nextPackageAt, packagesExact, packagesGainsMult, packagesOnDistro, UPSTREAM_PACKAGES,
 } from "./core/distro";
 import {
@@ -40,7 +40,7 @@ import {
 } from "./core/fork";
 import { EVENT_BY_ID, EVENT_WINDOW, PAGER_WINDOW, RC_STARS_PCT } from "./core/events";
 
-const GAME_VERSION = "0.6.22";
+const GAME_VERSION = "0.6.23";
 initErrorLog(GAME_VERSION);
 
 /* ================= Boot ================= */
@@ -1584,7 +1584,7 @@ function renderDistroTab() {
   const pending = packagesOnDistro(s).toNumber();
   const done = forkTreeComplete(s);
   setText($("[data-r=dsDesc]"), done ? t("ds.desc") : t("ds.need_tree"));
-  setText($("[data-r=dsFlavor]"), s.flavor ? t("ds.current", { f: t(`fl.${s.flavor}`) }) : t("ds.no_flavor"));
+  setText($("[data-r=dsFlavor]"), s.flavor ? t(s.flavor2 ? "ds.current2" : "ds.current", { f: flavorNames(s.flavor, s.flavor2) }) : t("ds.no_flavor"));
   const btn = $<HTMLButtonElement>("[data-r=dsBtn]");
   setText(btn, pending >= 1 ? t("ds.btn", { n: fmtInt(pending) }) : t("ds.btn0"));
   btn.disabled = pending < 1 || !!s.challenge;
@@ -1622,7 +1622,7 @@ function renderDistroTab() {
     if (document.activeElement !== thr && thr.value !== String(c.threshold)) thr.value = String(c.threshold);
   }
   setText($("[data-r=dsSum]"), t("ds.sum", { p: fmtInt(s.packages), l: fmtInt(s.lifetimePackages), d: fmtInt(s.distros), g: `×${packagesGainsMult(s).toFixed(2)}` }));
-  const key = `${s.distroTalents.join(",")}|${s.packages}|${s.flavor}|${s.flavorsDone.join(",")}|${selectedDistro}|${s.settings.lang}`;
+  const key = `${s.distroTalents.join(",")}|${s.packages}|${s.flavor}|${s.flavor2}|${s.flavorsDone.join(",")}|${selectedDistro}|${s.settings.lang}`;
   if (key === distroTabKey) return;
   distroTabKey = key;
   const doneFl: Flavor[] = FLAVORS.filter(f => s.flavorsDone.includes(f.id));
@@ -1633,7 +1633,7 @@ function renderDistroTab() {
   perm.replaceChildren(h("div", { class: "ds-perm-h" }, t("ds.fl.summary", { n: doneFl.length, t: FLAVORS.length })),
     ...doneFl.map(f => h("div", { class: "ds-perm-l" }, h("span", { class: "ds-perm-ok" }, "[✓] "), t("ds.fl.permline", { n: t(`fl.${f.id}`), b: t(`fl.${f.id}.perm`) }))));
   $("[data-r=dsFlavors]").replaceChildren(...FLAVORS.map(f => {
-    const isDone = s.flavorsDone.includes(f.id), isCur = s.flavor === f.id;
+    const isDone = s.flavorsDone.includes(f.id), isCur = activeFlavors(s).includes(f.id);
     const badges: Node[] = [];
     if (isCur) badges.push(h("span", { class: "fl-badge cur" }, t("ds.fl.st.current")));
     if (isDone) badges.push(h("span", { class: "fl-badge done" }, t("ds.fl.st.done")));
@@ -1726,26 +1726,46 @@ function renderDistroTree() {
 }
 
 /** Publishing a distro: pick the flavor of the next cycle, then confirm. */
+/** "Rolling" or "Rolling + Stable" (Dual boot). */
+const flavorNames = (a: FlavorId, b?: FlavorId | null) => (b && b !== a ? `${t(`fl.${a}`)} + ${t(`fl.${b}`)}` : t(`fl.${a}`));
+
 function confirmDistro() {
   const s = engine.s;
   const n = packagesOnDistro(s).toNumber();
   const cancel = h("button", { class: "claim-btn" }, t("fk.cancel"));
   cancel.addEventListener("click", closeModal);
+  // Dual boot (Market 40 %, v0.6.23): pick two bases, then publish; before it, one click publishes
+  const dual = reached(s, "dualboot");
+  const picked: FlavorId[] = dual ? activeFlavors(s).slice(0, 2) : [];
+  const go = h("button", { class: "claim-btn distro-go" }) as HTMLButtonElement;
+  const syncDual = () => {
+    choices.forEach((b, i) => b.classList.toggle("on", picked.includes(FLAVORS[i].id)));
+    go.disabled = picked.length !== 2;
+    setText(go, picked.length === 2 ? t("ds.dual.go", { f: flavorNames(picked[0], picked[1]) }) : t("ds.dual.pick2"));
+  };
   const choices = FLAVORS.map(f => {
     const b = h("button", { class: "flavor-choice" },
       h("strong", {}, `${t(`fl.${f.id}`)} `), h("span", { class: "ft-tag" }, `[${f.tag}]`),
       h("div", { class: "small" }, t(`fl.${f.id}.desc`)),
       h("div", { class: "muted small" }, s.flavorsDone.includes(f.id) ? t("ds.fl.done") : t("ds.fl.bonus", { b: t(`fl.${f.id}.bonus`) })));
-    b.addEventListener("click", () => { closeModal(); cmd.run(`distro ${f.id} --yes`, true); });
+    b.addEventListener("click", () => {
+      if (!dual) { closeModal(); cmd.run(`distro ${f.id} --yes`, true); return; }
+      const i = picked.indexOf(f.id);
+      if (i >= 0) picked.splice(i, 1);
+      else { if (picked.length === 2) picked.shift(); picked.push(f.id); }
+      syncDual();
+    });
     return b;
   });
+  go.addEventListener("click", () => { if (picked.length !== 2) return; closeModal(); cmd.run(`distro ${picked[0]} ${picked[1]} --yes`, true); });
+  if (dual) syncDual();
   openModal(
     h("h2", {}, `▣ ${t("ds.title")}`),
     h("p", {}, t("ds.confirm", { n: fmtInt(n) })),
     h("ul", { class: "small" }, h("li", {}, t("ds.resets")), h("li", {}, t("ds.keeps"))),
-    h("p", { class: "small" }, t("ds.pick")),
+    h("p", { class: "small" }, dual ? t("ds.dual.pick") : t("ds.pick")),
     h("div", { class: "flavor-grid" }, ...choices),
-    h("div", { class: "modal-actions" }, cancel),
+    h("div", { class: "modal-actions" }, ...(dual ? [go] : []), cancel),
   );
 }
 
@@ -2044,7 +2064,7 @@ function feedbackReport(): string {
     `play time ${fmtTime(s.stats.playTime)} · run ${fmtTime(s.stats.runTime)}${s.challenge ? ` · challenge ${s.challenge}` : ""}`,
     `releases ${s.releases} (this fork) · stars ${fmt(s.stars)} · all stars ${fmt(new Decimal(s.stats.allStars))} · talents ${s.talents.length} · challenges ${s.challengesDone.length}/${CHALLENGES.length}`,
     `forks ${s.forks} · contributors ${fmtInt(s.contributors)} · fork talents ${s.forkTalents.length}`,
-    `distros ${s.distros} · packages ${fmtInt(s.packages)} · flavor ${s.flavor ?? "-"} · flavors done ${s.flavorsDone.join(",") || "-"} · distro talents ${s.distroTalents.length}`,
+    `distros ${s.distros} · packages ${fmtInt(s.packages)} · flavor ${s.flavor ?? "-"}${s.flavor2 ? `+${s.flavor2}` : ""} · flavors done ${s.flavorsDone.join(",") || "-"} · distro talents ${s.distroTalents.length}`,
     s.market.unlocked ? `market ${marketShare(s).pct.toFixed(2)} % · modules ${s.market.modules.length} (loaded ${s.market.loaded.length}) · crates ${s.market.crates.length}` : "market locked",
     `offline: ${offlineUnlocked(s) ? `${Math.round(offlineEfficiency(s) * 100)} % · ${offlineCapSeconds(s) / 3600} h` : "locked"}${s.offlineLast ? ` · last ${fmtTime(s.offlineLast.away)} ago ${fmtTime((Date.now() - s.offlineLast.at) / 1000)}` : ""}`,
   ];
@@ -2221,10 +2241,10 @@ engine.on((e: GameEvent) => {
       break;
     case "distro":
       // Distros published by crontab: one journal line, no banner or toast
-      if (e.auto) term.println(["[ CRON ]", "c-cyan"], " " + t("mk.cron.log", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`), d: fmtInt(engine.s.distros) }));
+      if (e.auto) term.println(["[ CRON ]", "c-cyan"], " " + t("mk.cron.log", { n: fmtInt(e.packages), f: flavorNames(e.flavor, e.flavor2), d: fmtInt(engine.s.distros) }));
       else {
-        term.banner(t("ds.banner", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`), d: fmtInt(engine.s.distros) }));
-        toast(`▣ ${t("ds.title")}`, t("ds.toast", { n: fmtInt(e.packages), f: t(`fl.${e.flavor}`) }));
+        term.banner(t("ds.banner", { n: fmtInt(e.packages), f: flavorNames(e.flavor, e.flavor2), d: fmtInt(engine.s.distros) }));
+        toast(`▣ ${t("ds.title")}`, t("ds.toast", { n: fmtInt(e.packages), f: flavorNames(e.flavor, e.flavor2) }));
       }
       buildTree();
       forkTabKey = distroTabKey = "";

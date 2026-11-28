@@ -13,7 +13,7 @@ import { ADV, ReleaseAdvisor } from "../src/core/advisor";
 import { GEN_KEYS } from "../src/core/state";
 import { DISTRO, DISTRO_TALENTS, FLAVORS, type FlavorId } from "../src/core/distro";
 import { DISTRO_ADV, DistroAdvisor } from "../src/core/advisor";
-import { EFFECT_BASE, MARKET, MILESTONES, canFuse, marketShare, moduleScore, moduleSlots } from "../src/core/market";
+import { EFFECT_BASE, MARKET, MILESTONES, canFuse, marketShare, moduleScore, moduleSlots, reached } from "../src/core/market";
 
 import { BAL } from "../src/core/formulas";
 for (const [k, v] of Object.entries(process.env)) if (k.startsWith("BAL_")) (BAL as any)[k.slice(4)] = Number(v);
@@ -214,7 +214,9 @@ while (t < H * 3600) {
       const from = s.flavor ?? "none";
       const flavor = pickFlavor();
       const pctBefore = s.market.unlocked ? marketShare(s).pct : 0;
-      const gain = e.distro(flavor);
+      // v0.6.23 Dual boot: a second base once the Market reaches 40 % (FLAVOR2=<id>, default source; NODUAL=1 to keep one)
+      const flavor2 = !process.env.NODUAL && reached(s, "dualboot") ? ((process.env.FLAVOR2 as FlavorId) ?? (flavor === "source" ? "stable" : "source")) : null;
+      const gain = e.distro(flavor, false, flavor2);
       if (gain !== null) {
         distroStart = t; cycleStart = t; forkAt = t; lastForksSeen = s.forks;
         s.market.cron.enabled = false;

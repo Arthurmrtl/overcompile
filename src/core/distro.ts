@@ -54,7 +54,27 @@ export const FLAVORS: Flavor[] = [
 ];
 export const FLAVOR_BY_ID = Object.fromEntries(FLAVORS.map(f => [f.id, f])) as Record<FlavorId, Flavor>;
 const NO_FLAVOR: Flavor = { id: "rolling", tag: "", growthDelta: 0, stars: 1, contributors: 1, genPow: 1, eventGap: 1, offlineEff: 0, offlineHours: 1 };
-export const flavorOf = (s: GameState): Flavor => (s.flavor ? FLAVOR_BY_ID[s.flavor] : NO_FLAVOR);
+/**
+ * The rules of the current cycle. v0.6.23, Dual boot: with a second base, both apply in full
+ * (threshold growth and offline points add up, the multipliers multiply; Rolling + Stable cancel out on the threshold).
+ */
+export function flavorOf(s: GameState): Flavor {
+  const a = s.flavor ? FLAVOR_BY_ID[s.flavor] : NO_FLAVOR;
+  const b = s.flavor2 && s.flavor2 !== s.flavor ? FLAVOR_BY_ID[s.flavor2] : null;
+  if (!b) return a;
+  return {
+    id: a.id, tag: `${a.tag}+${b.tag}`,
+    growthDelta: a.growthDelta + b.growthDelta,
+    stars: a.stars * b.stars,
+    contributors: a.contributors * b.contributors,
+    genPow: a.genPow * b.genPow,
+    eventGap: a.eventGap * b.eventGap,
+    offlineEff: a.offlineEff + b.offlineEff,
+    offlineHours: a.offlineHours * b.offlineHours,
+  };
+}
+/** The bases of the current cycle (0, 1 or 2). */
+export const activeFlavors = (s: GameState): FlavorId[] => [s.flavor, s.flavor2].filter((f, i, l): f is FlavorId => !!f && l.indexOf(f) === i);
 
 /** Permanent bonus for having finished a cycle in each flavor (published a distro while on it). */
 export const FLAVOR_DONE = {
