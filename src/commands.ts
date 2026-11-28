@@ -888,9 +888,68 @@ const CRATES = ["serde", "serde_json", "tokio", "anyhow", "clap", "rand", "rand_
   "break_eternity", "overcompile-core", "wasm-bindgen", "js-sys", "web-sys", "image", "flate2", "sha2", "uuid"];
 const WARNINGS = ["unused variable: `tmp`", "unused import: `std::fmt::Write`", "field `legacy` is never read",
   "function `old_compile` is never used", "variable does not need to be mutable", "unreachable pattern",
-  "this `if` has identical blocks", "you are compiling on a Friday"];
+  "this `if` has identical blocks"];
 const rnd = (n: number) => Math.floor(Math.random() * n);
-export function fakeCargoLine(): Seg[] {
-  if (Math.random() < 0.05) return [["warning", "c-amber c-bold"], ": " + WARNINGS[rnd(WARNINGS.length)]];
-  return [["   Compiling", "c-green c-bold"], ` ${CRATES[rnd(CRATES.length)]} v${rnd(3)}.${rnd(40)}.${rnd(25)}`];
+const pick = <T,>(l: T[]) => l[rnd(l.length)];
+
+/*
+ * v0.6.24 (Arthur: "ajoute des easter eggs dans les compilations"): rare jokes in the build stream,
+ * written as real cargo output (English, like the rest of the stream). About 1 line in 150;
+ * some only show on a Friday, at night, on 1 April or around Christmas.
+ */
+const C = (name: string, ver: string, note = ""): Seg[] => [["   Compiling", "c-green c-bold"], ` ${name} v${ver}`, ...(note ? [[` ${note}`, "c-dim"] as Seg] : [])];
+const W = (msg: string): Seg[] => [["warning", "c-amber c-bold"], ": " + msg];
+const N = (msg: string): Seg[] => [["note", "c-cyan c-bold"], ": " + msg];
+const H = (msg: string): Seg[] => [["help", "c-cyan c-bold"], ": " + msg];
+const ST = (verb: string, msg: string): Seg[] => [[verb.padStart(12), "c-green c-bold"], " " + msg];
+export const EGGS: (() => Seg[])[] = [
+  () => C("left-pad", "1.3.0", "(still holding the internet together)"),
+  () => C("is-even", "1.0.0", "(depends on is-odd)"),
+  () => C("blazingly-fast", "0.0.1"),
+  () => C("rewrite-it-in-rust", "∞.0.0"),
+  () => C("incrust", "0.1.0", "(where it all began)"),
+  () => C("ferris", "1.0.0", "(sideways)"),
+  () => C("coffee", "4.2.0"),
+  () => C("node_modules", "0.0.0", "(just kidding)"),
+  () => C("the-meaning-of-life", "42.0.0"),
+  () => C("hello-world", "0.1.0", "(for the 1000th time)"),
+  () => W("unused variable: `weekend`"),
+  () => W("variable `deadline` is assigned but never respected"),
+  () => W("function `write_tests` is never used"),
+  () => W("this crate was last updated by someone who left the company"),
+  () => W("`TODO: fix later` has been here since 2019"),
+  () => W("field `documentation` is never read"),
+  () => [["error[E0382]", "c-red c-bold"], ": borrow of moved value: `motivation`"],
+  () => [["error[E0499]", "c-red c-bold"], ": cannot borrow `coffee_machine` as mutable more than once at a time"],
+  () => N("it compiles, ship it"),
+  () => N("works on my machine"),
+  () => H("have you tried turning it off and on again?"),
+  () => H("consider adding `#[allow(chaos)]`"),
+  () => ST("Blocking", "waiting for file lock on the coffee machine"),
+  () => ST("Updating", "crates.io index (any minute now)"),
+  () => ST("Downloaded", "1 crate (it was serde, again)"),
+  () => ST("Finished", "`dev` profile [unoptimized + debuginfo] target(s) in 4 years"),
+  () => ST("Fixing", "1 typo in README.md (3 h)"),
+  () => ST("Linting", "the linter's own config"),
+];
+/** Eggs that only show at certain times (real clock of the player). */
+function timedEggs(d: Date): (() => Seg[])[] {
+  const out: (() => Seg[])[] = [];
+  const h = d.getHours(), day = d.getDay(), m = d.getMonth(), date = d.getDate();
+  if (day === 5) out.push(() => W("you are compiling on a Friday"), () => W("deploying to prod on a Friday afternoon is a bold strategy"));
+  if (h >= 0 && h < 5) out.push(() => W(`it is ${h} AM, the borrow checker went to bed`), () => N("nothing good gets merged after 2 AM"));
+  if (m === 3 && date === 1) out.push(() => C("serde", "2.0.0", "(rewritten in JavaScript)"), () => ST("Removing", "the borrow checker (April 1st)"));
+  if (m === 11 && date >= 20) out.push(() => C("santa-claus", "12.25.0"), () => W("unused gift: `socks`"));
+  if (m === 0 && date === 1) out.push(() => ST("Bumping", `year to ${d.getFullYear()} in 312 license headers`));
+  return out;
+}
+export const EGG_CHANCE = 1 / 150;
+export function fakeCargoLine(now = new Date()): Seg[] {
+  if (Math.random() < EGG_CHANCE) {
+    const timed = timedEggs(now);
+    // a timed egg, when there is one, half the time (they are the rare treats)
+    return (timed.length && Math.random() < 0.5 ? pick(timed) : pick(EGGS))();
+  }
+  if (Math.random() < 0.05) return [["warning", "c-amber c-bold"], ": " + pick(WARNINGS)];
+  return [["   Compiling", "c-green c-bold"], ` ${pick(CRATES)} v${rnd(3)}.${rnd(40)}.${rnd(25)}`];
 }
