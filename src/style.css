@@ -109,6 +109,8 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
 .hw-desc { color: var(--dim); font-size: 11px; margin: 2px 0 6px; }
 .hw-bottom { display: flex; justify-content: space-between; font-size: 12px; }
 .hw-effect { color: var(--dim); }
+/* v0.6.25: value after the next purchase */
+.hw-next { color: var(--green); }
 .hw-price { color: var(--fg); font-weight: 600; }
 .hw.afford .hw-price { color: var(--green); }
 .auto-pill {
