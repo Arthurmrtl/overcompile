@@ -8,7 +8,7 @@ import type { GameState } from "./state";
  * - **market share**: a gauge from 0 to 100 % that never goes down. Every distro published once
  *   the Market is open adds **installs** (packages of that distro × module bonuses); the gauge is
  *   cut into 10 slices of 10 %, each one costs more installs than the one before. At 100 %, the
- *   chapter ends (end screen in v0.6.23) and the game goes on.
+ *   chapter ends (end screen in v0.6.24) and the game goes on.
  * - **milestones** on the gauge unlock things (module slots, crontab, fusion, Dual boot…), with
  *   the same fog as the trees: only the next one is shown.
  * - **kernel modules**: loot. Every distro compiles a random module (rarity, 1–3 effects); only
@@ -53,7 +53,7 @@ export function marketShare(s: GameState): { pct: number; slice: number; inSlice
 /* ---------------- Milestones ---------------- */
 export type MilestoneId = "modules" | "crontab" | "slot2" | "fuse" | "slot3" | "dualboot" | "luck" | "slot4" | "nixos" | "slot5" | "press" | "end";
 export interface Milestone { id: MilestoneId; pct: number; ready: boolean }
-/** `ready: false` = announced on the gauge, delivered in a later version (Dual boot v0.6.22, NixOS and the end screen v0.6.23). */
+/** `ready: false` = announced on the gauge, delivered in a later version (Dual boot v0.6.23, NixOS and the end screen v0.6.24). */
 export const MILESTONES: Milestone[] = [
   { id: "modules", pct: 0, ready: true },
   { id: "crontab", pct: 5, ready: true },
