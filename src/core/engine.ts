@@ -16,7 +16,7 @@ import {
 } from "./events";
 import { UPGRADES, UPGRADE_BY_ID, optBootLevels, upgradeMaxed, upgradePrice } from "./upgrades";
 import {
-  DISTRO_TALENT_BY_ID, type FlavorId, FLAVOR_BY_ID, canDistro, flavorOf, forkTalentsKept, hasDistro, packagesOnDistro,
+  DISTRO_TALENT_BY_ID, type FlavorId, FLAVOR_BY_ID, activeFlavors, canDistro, flavorOf, forkTalentsKept, hasDistro, packagesOnDistro,
 } from "./distro";
 import {
   type KModule, FLAVOR_ORDER, canFuse, cratePrice, recompileCost, rerollEffects, installsFor, loadedModules, marketOpen, marketReady, marketShare, MILESTONES, moduleScore,
@@ -44,7 +44,7 @@ export type GameEvent =
   | { t: "event_missed"; id: string }
   | { t: "buff_end"; id: string }
   | { t: "fork"; contributors: number; auto?: boolean }
-  | { t: "distro"; packages: number; flavor: FlavorId; auto?: boolean }
+  | { t: "distro"; packages: number; flavor: FlavorId; flavor2?: FlavorId | null; auto?: boolean }
   | { t: "distro_talent"; id: string }
   | { t: "fork_talent"; id: string }
   | { t: "fork_upgrade"; id: string; level: number }
@@ -262,7 +262,7 @@ export class Engine {
     if (!s.market.unlocked && marketReady(s)) this.openMarket();
     // Milestone 5 % "crontab": distros publish themselves at a package threshold
     if (reached(s, "crontab") && s.market.cron.enabled && !s.challenge &&
-      packagesOnDistro(s).gte(Math.max(1, s.market.cron.threshold))) this.distro(this.cronFlavor(), true);
+      packagesOnDistro(s).gte(Math.max(1, s.market.cron.threshold))) { const [a, b] = this.cronFlavors(); this.distro(a, true, b); }
 
     this.checkAchievements();
   }
@@ -812,7 +812,7 @@ export class Engine {
 
   /* ---------------- Distro (v0.5, prestige layer 3) ---------------- */
   /** Publishes a distro: everything the Fork layer holds resets, packages are paid, the next cycle runs on `flavor`. */
-  distro(flavor: FlavorId, auto = false): number | null {
+  distro(flavor: FlavorId, auto = false, flavor2: FlavorId | null = null): number | null {
     const s = this.s;
     if (!canDistro(s) || !FLAVOR_BY_ID[flavor]) return null;
     this.matrixTried.clear();
@@ -831,8 +831,10 @@ export class Engine {
       for (const m of MILESTONES) if (m.pct > before && m.pct <= after) this.emit({ t: "milestone", id: m.id });
       this.dropCrate(rollModule(s), auto);
     }
-    if (s.flavor && !s.flavorsDone.includes(s.flavor)) s.flavorsDone.push(s.flavor); // finished a cycle in this flavor
+    for (const f of activeFlavors(s)) if (!s.flavorsDone.includes(f)) s.flavorsDone.push(f); // finished a cycle in this flavor
     s.flavor = flavor;
+    // Dual boot (Market 40 %, v0.6.23): a second, different base for the next cycle
+    s.flavor2 = flavor2 && flavor2 !== flavor && FLAVOR_BY_ID[flavor2] && reached(s, "dualboot") ? flavor2 : null;
     if (s.stats.fastestDistro === null || s.stats.distroTime < s.stats.fastestDistro) s.stats.fastestDistro = s.stats.distroTime;
     s.stats.distroTime = 0;
     // The Fork layer starts over, minus what the Distro talents keep
@@ -859,7 +861,7 @@ export class Engine {
     s.prBoost = { speed: 1, gains: 1, stars: 1 };
     this.activeEvent = null;
     this.resetRun();
-    this.emit({ t: "distro", packages: gain, flavor, auto });
+    this.emit({ t: "distro", packages: gain, flavor, flavor2: s.flavor2, auto });
     if (!marketWasOpen && marketReady(s)) this.openMarket();
     this.checkAchievements();
     return gain;
@@ -874,11 +876,15 @@ export class Engine {
     this.dropCrate(rollModule(s, 1), true); // the first module (rare) waits in a crate in the Market tab
   }
 
-  /** Flavor of the next distro published by crontab: same one, or the next in order (rotation). */
-  private cronFlavor(): FlavorId {
-    const cur = this.s.flavor ?? "stable";
-    if (!this.s.market.cron.rotate) return cur;
-    return FLAVOR_ORDER[(FLAVOR_ORDER.indexOf(cur) + 1) % FLAVOR_ORDER.length];
+  /** Bases of the next distro published by crontab: the same ones, or each moved to the next in order (rotation).
+   *  v0.6.23: once Dual boot is reached, crontab always runs two bases (the next in order is added if there was one). */
+  private cronFlavors(): [FlavorId, FlavorId | null] {
+    const s = this.s;
+    const next = (f: FlavorId) => FLAVOR_ORDER[(FLAVOR_ORDER.indexOf(f) + 1) % FLAVOR_ORDER.length] as FlavorId;
+    const a = s.flavor ?? "stable";
+    let b: FlavorId | null = reached(s, "dualboot") ? (s.flavor2 && s.flavor2 !== a ? s.flavor2 : next(a)) : null;
+    if (!s.market.cron.rotate) return [a, b];
+    return [next(a), b ? next(b) : null];
   }
 
   /** v0.6.4 (Arthur: "une roulette de loot, exactement comme sur CS quand on ouvre une caisse"): a new module

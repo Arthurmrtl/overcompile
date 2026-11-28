@@ -110,6 +110,8 @@ export interface GameState {
   distroTalents: string[];
   /** The base of the current Distro cycle (null before the first distro), and the ones finished at least once. */
   flavor: FlavorId | null;
+  /** v0.6.23, Dual boot (Market milestone 40 %): the second base of the cycle, both apply in full (null: one base). */
+  flavor2: FlavorId | null;
   flavorsDone: FlavorId[];
   /** Distro talent "Fork bot": fork on its own once the fork pays this many contributors (≥ 1). */
   autoFork: { enabled: boolean; threshold: number };
@@ -170,7 +172,7 @@ export const newOfflineRecord = (): OfflineRecord => ({
 export const FORK_BOT_DEFAULT = 50;
 export const CRON_DEFAULT = 30;
 
-export const SAVE_VERSION = 19;
+export const SAVE_VERSION = 20;
 export const SAVE_KEY = "overcompile-save";
 
 function browserLang(): Lang {
@@ -233,6 +235,7 @@ export function newState(): GameState {
     lifetimePackages: 0,
     distroTalents: [],
     flavor: null,
+    flavor2: null,
     flavorsDone: [],
     autoFork: { enabled: true, threshold: FORK_BOT_DEFAULT },
     autoStars: true,
@@ -392,6 +395,10 @@ function migrate(s: GameState, from: number) {
     // v0.5.16 → v0.6.0: Market (chapter 1). Empty; it opens on its own if the four flavors are done
     s.market = newMarket();
     s.stats.modulesFound = 0;
+  }
+  if (from < 20) {
+    // v0.6.22 → v0.6.23: Dual boot (second base); one base until the next distro
+    s.flavor2 = null;
   }
   if (from < 19) {
     // v0.6.20 → v0.6.21: star fractions carried between releases (nothing carried yet)

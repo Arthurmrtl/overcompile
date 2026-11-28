@@ -53,14 +53,14 @@ export function marketShare(s: GameState): { pct: number; slice: number; inSlice
 /* ---------------- Milestones ---------------- */
 export type MilestoneId = "modules" | "crontab" | "slot2" | "fuse" | "slot3" | "dualboot" | "luck" | "slot4" | "nixos" | "slot5" | "press" | "end";
 export interface Milestone { id: MilestoneId; pct: number; ready: boolean }
-/** `ready: false` = announced on the gauge, delivered in a later version (Dual boot v0.6.23, NixOS and the end screen v0.6.24). */
+/** `ready: false` = announced on the gauge, delivered in a later version (NixOS and the end screen v0.6.24). */
 export const MILESTONES: Milestone[] = [
   { id: "modules", pct: 0, ready: true },
   { id: "crontab", pct: 5, ready: true },
   { id: "slot2", pct: 10, ready: true },
   { id: "fuse", pct: 20, ready: true },
   { id: "slot3", pct: 30, ready: true },
-  { id: "dualboot", pct: 40, ready: false },
+  { id: "dualboot", pct: 40, ready: true },
   { id: "luck", pct: 50, ready: true },
   { id: "slot4", pct: 60, ready: true },
   { id: "nixos", pct: 70, ready: false },

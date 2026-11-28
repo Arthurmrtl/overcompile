@@ -614,6 +614,9 @@ html.resizing, html.resizing * { cursor: col-resize !important; user-select: non
   background: var(--panel-2); color: var(--fg); border: 1px solid var(--border-2); display: flex; flex-direction: column; gap: 3px;
 }
 .flavor-choice:hover { border-color: var(--cyan); }
+/* Dual boot (v0.6.23): the two picked bases */
+.flavor-choice.on { border-color: var(--cyan); background: #0e2128; box-shadow: inset 0 0 0 1px var(--cyan); }
+.distro-go:not(:disabled) { border-color: var(--cyan); color: var(--cyan); }
 @media (max-width: 600px) { .flavor-grid { grid-template-columns: 1fr; } }
 
 /* Narrow phones */

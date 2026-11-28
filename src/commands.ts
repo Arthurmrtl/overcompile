@@ -452,22 +452,29 @@ export function createCommands(c: GameCtx) {
         say(["  distro buy <tag>", "c-dim"]);
         return;
       }
-      const flavor = FLAVORS.find(f => f.id === sub || f.tag === sub);
+      const findFl = (x?: string) => FLAVORS.find(f => f.id === x || f.tag === x);
+      const flavor = findFl(sub);
       if (flavor) {
-        if (args[1] !== "--yes" && args[1] !== "-y") return void say(INFO, " " + t("ds.confirm_cmd", { f: flavor.id }));
+        // Dual boot (Market 40 %, v0.6.23): distro <base> <base2> --yes
+        const flavor2 = findFl(args[1]);
+        const yes = args.includes("--yes") || args.includes("-y");
+        const dual = reached(s, "dualboot");
+        if (flavor2 && !dual) return void say(t("ds.usage"));
+        if (flavor2 && flavor2.id === flavor.id) return void say(INFO, " " + t("ds.dual.same"));
+        if (!yes) return void say(INFO, " " + t("ds.confirm_cmd", { f: flavor2 ? `${flavor.id} ${flavor2.id}` : flavor.id }));
         if (s.challenge) return void say(INFO, " " + t("fk.in_challenge"));
         if (!forkTreeComplete(s)) return void say(INFO, " " + t("ds.need_tree"));
-        if (en.distro(flavor.id as FlavorId) === null) say(INFO, " " + t("ds.need_contrib", { c: fmtInt(nextPackageAt(s)) }));
+        if (en.distro(flavor.id as FlavorId, false, (flavor2?.id ?? null) as FlavorId | null) === null) say(INFO, " " + t("ds.need_contrib", { c: fmtInt(nextPackageAt(s)) }));
         return;
       }
       if (sub && sub !== "status") return void say(t("ds.usage"));
       // Status
-      say(["[DISTRO]", "c-bold"], s.flavor ? `  ${t("ds.current", { f: t(`fl.${s.flavor}`) })}` : "");
+      say(["[DISTRO]", "c-bold"], s.flavor ? `  ${t(s.flavor2 ? "ds.current2" : "ds.current", { f: s.flavor2 ? `${t(`fl.${s.flavor}`)} + ${t(`fl.${s.flavor2}`)}` : t(`fl.${s.flavor}`) })}` : "");
       if (!forkTreeComplete(s)) return void say("  " + t("ds.need_tree"));
       const n = packagesOnDistro(s).toNumber();
       say("  " + (n >= 1 ? t("ds.status", { n: fmtInt(n) }) : t("ds.need_contrib", { c: fmtInt(nextPackageAt(s)) })));
       for (const f of FLAVORS) say("  ", [pad(f.id, 9), "c-violet"], pad(`[${f.tag}]`, 10), [t(`fl.${f.id}.desc`), "c-dim"], s.flavorsDone.includes(f.id) ? [" ✓", "c-green"] : "");
-      if (n >= 1) say(["  distro <rolling|stable|source|desktop> --yes", "c-green"]);
+      if (n >= 1) say(["  " + (reached(s, "dualboot") ? "distro <base> <base2> --yes" : "distro <rolling|stable|source|desktop> --yes"), "c-green"]);
     },
     market() {
       const s = e().s;
